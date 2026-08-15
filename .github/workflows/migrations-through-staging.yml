@@ -1,0 +1,21 @@
+name: Migrations through staging
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+
+jobs:
+  from-staging:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require migration PRs into main to come from staging
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          if [ "$HEAD_REF" != "staging" ]; then
+            echo "supabase/migrations changes must merge to main from staging (got head '$HEAD_REF')."
+            echo "Land the migration on Git staging first so the persistent Supabase staging branch applies it."
+            exit 1
+          fi
