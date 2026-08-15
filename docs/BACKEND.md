@@ -47,14 +47,14 @@ Persistent branches may be plan-gated (Pro). If create returns 402, upgrade or c
 
 ### 3. App env (local / staging builds)
 
-Use the **staging** branch URL + anon key, not production:
+Use the **staging** branch URL + **publishable** key (`sb_publishable_...`), not production and not a secret key:
 
 ```
 EXPO_PUBLIC_SUPABASE_URL=https://<staging-ref>.supabase.co
-EXPO_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 ```
 
-Restart Expo after changing `EXPO_PUBLIC_*`. Never put the service-role key in the app.
+Dashboard: **Settings → API Keys** (new keys tab). If you only see legacy `anon` / `service_role`, click **Create new API Keys**. Restart Expo after changing `EXPO_PUBLIC_*`. Never put `sb_secret_...` or `service_role` in the app.
 
 ## Connect (first migration)
 

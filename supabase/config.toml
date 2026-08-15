@@ -413,9 +413,7 @@ enabled = true
 # JSON string passed through to pg-delta SQL formatting.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
 
-# Persistent Git staging ↔ Supabase staging.
-# Create the branch first (dashboard or `npx supabase branches create staging --persistent`),
-# then paste the BRANCH PROJECT ID from `npx supabase branches list`.
-# [remotes.staging]
-# project_id = "xxxxxxxxxxxxxxxxxxxx"
+# Persistent Git staging ↔ Supabase staging (not production fmcezwyfinzasmgxanxv).
+[remotes.staging]
+project_id = "sjtkzihmxrxgidflxeqq"
 
