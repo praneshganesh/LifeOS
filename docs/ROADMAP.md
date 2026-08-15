@@ -11,7 +11,7 @@ Status key: `todo` · `doing` · `done` · `later`
 | ID | Item | Status |
 |----|------|--------|
 | B0 | Hosted chat-api (Render **or** Fly — decide at deploy) | later — local `npm run chat-api` is enough now |
-| B1 | Auth / accounts | later |
+| B1 | Auth / accounts | doing — Supabase profiles (uid only) on `staging`; Sign in with Apple later |
 | B2 | Encrypted multi-device sync | later |
 | B3 | Billing / Family plan metering | later |
 | B4 | FinanceKit entitlement + App Store Finance category | later |
@@ -163,8 +163,9 @@ Status key: `todo` · `doing` · `done` · `later`
 - **Blocked:** iOS device / TestFlight until Apple Developer account  
 - **Q1 prep shipped:** durable capture photos · notif deep-link dedupe · app-lock flash · vault biometrics deny · share unavailable alert · Android notif channel · loopback chat URL guard · spoken Talk replies (`expo-speech` + mute)  
 - **Client gaps closed:** expense/subscription/habit/family edit · plan limit enforcement · Talk expense/sub dedupe · Spaces/LastDone versioned storage · applyActions tests  
-- **Deferred:** **B0 host chat-api** (stay on local proxy) · B1–B5 · Apple Pay / FinanceKit · live invites (FP5) · neural TTS  
-- **Ops:** `npm run chat-api` + LAN/`localhost` URL · `npm test`
+- **Deferred:** **B0 host chat-api** (stay on local proxy) · B2–B5 · Apple Pay / FinanceKit · live invites (FP5) · neural TTS  
+- **Ops:** `npm run chat-api` + LAN/`localhost` URL · `npm test` · GitHub `main` + persistent `staging`  
+- **Backend:** see `docs/BACKEND.md` — connect Supabase with anon key; do not upload household PII yet
 
 ### B0 — host later (local is enough)
 
