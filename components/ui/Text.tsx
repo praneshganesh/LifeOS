@@ -1,0 +1,89 @@
+import { Text as RNText, type TextProps, type TextStyle } from 'react-native';
+import { fonts } from '@/constants/theme';
+import { useTheme } from '@/lib/ThemeContext';
+
+type Variant =
+  | 'brand'
+  | 'hero'
+  | 'title'
+  | 'headline'
+  | 'body'
+  | 'bodyMedium'
+  | 'caption'
+  | 'label'
+  | 'score';
+
+/** Prefer Medium over heavy Bold — keeps the UI modern, not shouty. */
+export function Text({
+  variant = 'body',
+  style,
+  ...props
+}: TextProps & { variant?: Variant }) {
+  const { colors } = useTheme();
+
+  const variantStyle: Record<Variant, TextStyle> = {
+    brand: {
+      fontFamily: fonts.sansMedium,
+      fontSize: 20,
+      lineHeight: 24,
+      color: colors.ink,
+      letterSpacing: -0.4,
+    },
+    hero: {
+      fontFamily: fonts.sansSemi,
+      fontSize: 34,
+      lineHeight: 40,
+      color: colors.ink,
+      letterSpacing: -1,
+    },
+    title: {
+      fontFamily: fonts.sansSemi,
+      fontSize: 26,
+      lineHeight: 32,
+      color: colors.ink,
+      letterSpacing: -0.5,
+    },
+    headline: {
+      fontFamily: fonts.sansMedium,
+      fontSize: 15,
+      lineHeight: 20,
+      color: colors.ink,
+      letterSpacing: -0.15,
+    },
+    body: {
+      fontFamily: fonts.sans,
+      fontSize: 15,
+      lineHeight: 22,
+      color: colors.slate,
+    },
+    bodyMedium: {
+      fontFamily: fonts.sansMedium,
+      fontSize: 15,
+      lineHeight: 22,
+      color: colors.ink,
+    },
+    caption: {
+      fontFamily: fonts.sans,
+      fontSize: 12,
+      lineHeight: 16,
+      color: colors.mute,
+    },
+    label: {
+      fontFamily: fonts.sansMedium,
+      fontSize: 11,
+      lineHeight: 14,
+      color: colors.mute,
+      letterSpacing: 0.4,
+      textTransform: 'uppercase',
+    },
+    score: {
+      fontFamily: fonts.sansSemi,
+      fontSize: 40,
+      lineHeight: 44,
+      color: colors.ink,
+      letterSpacing: -1,
+    },
+  };
+
+  return <RNText style={[variantStyle[variant], style]} {...props} />;
+}

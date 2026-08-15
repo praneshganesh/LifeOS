@@ -1,0 +1,106 @@
+import { StyleSheet, View, Pressable } from 'react-native';
+import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
+import { ModuleScreen } from '@/components/ui/ModuleScreen';
+import { ListCard, ListRow } from '@/components/ui/ListKit';
+import { Text } from '@/components/ui/Text';
+import { useExpenses } from '@/lib/ExpensesContext';
+import {
+  formatAmount,
+  labelForCategory,
+} from '@/lib/expenses';
+import { confirmDelete } from '@/lib/confirmDelete';
+import { colors, fonts, spacing } from '@/constants/theme';
+import CreateScreen from './create';
+
+export default function ExpenseDetailScreen() {
+  const { id: idParam } = useLocalSearchParams<{ id: string }>();
+  const id = Array.isArray(idParam) ? idParam[0] : idParam;
+  const router = useRouter();
+  const { getById, removeExpense } = useExpenses();
+
+  if (id === 'new') {
+    return <CreateScreen />;
+  }
+  const expense = id ? getById(id) : undefined;
+
+  async function onDelete() {
+    if (!expense) return;
+    const ok = await confirmDelete(expense.title);
+    if (!ok) return;
+    await removeExpense(expense.id);
+    if (router.canGoBack()) router.back();
+    else router.replace('/expenses' as Href);
+  }
+
+  if (!expense) {
+    return (
+      <ModuleScreen title="Not found">
+        <Text variant="body">Expense not found.</Text>
+      </ModuleScreen>
+    );
+  }
+
+  return (
+    <ModuleScreen
+      title={expense.title}
+      subtitle={formatAmount(expense.amount, expense.currency)}
+    >
+      <Stack.Screen options={{ title: '' }} />
+      <ListCard>
+        <ListRow title="Amount" meta={formatAmount(expense.amount, expense.currency)} />
+        <ListRow title="Date" meta={expense.date} />
+        <ListRow title="Category" meta={labelForCategory(expense.category)} />
+        {expense.merchant ? (
+          <ListRow title="Merchant" meta={expense.merchant} />
+        ) : null}
+        <ListRow title="Source" meta={expense.source || 'manual'} last />
+      </ListCard>
+
+      <Pressable
+        onPress={() =>
+          router.push(`/expenses/create?editId=${encodeURIComponent(expense.id)}` as Href)
+        }
+        style={styles.edit}
+      >
+        <Text style={styles.editText}>Edit expense</Text>
+      </Pressable>
+
+      {expense.note ? (
+        <Text variant="body" style={styles.note}>
+          {expense.note}
+        </Text>
+      ) : null}
+
+      <Pressable onPress={() => void onDelete()} style={styles.remove}>
+        <Text style={styles.removeText}>Delete expense</Text>
+      </Pressable>
+    </ModuleScreen>
+  );
+}
+
+const styles = StyleSheet.create({
+  note: {
+    marginTop: spacing.lg,
+    color: colors.mute,
+  },
+  edit: {
+    marginTop: spacing.md,
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+  },
+  editText: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 15,
+    color: colors.forest,
+  },
+  remove: {
+    marginTop: spacing.md,
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+  },
+  removeText: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 14,
+    color: colors.coral,
+  },
+});

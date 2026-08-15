@@ -1,0 +1,1346 @@
+import { useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  CameraView,
+  useCameraPermissions,
+  type CameraType,
+} from 'expo-camera';
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
+import { FileText, Image as ImageIcon, RefreshCw, X } from 'lucide-react-native';
+import { Text } from '@/components/ui/Text';
+import { blurActiveElement } from '@/lib/a11y';
+import { localDayKey } from '@/lib/dates';
+import { recognizeImage } from '@/lib/ocr/recognize';
+import {
+  extractReceiptHints,
+  suggestReceiptDestination,
+  type ReceiptSaveDestination,
+} from '@/lib/ocr/receiptHints';
+import { useInventory } from '@/lib/InventoryContext';
+import { useExpenses } from '@/lib/ExpensesContext';
+import { messageForPlanLimit } from '@/lib/planLimits';
+import { persistLocalMediaUri } from '@/lib/mediaPersist';
+import { guessExpenseCategory, parseAmount } from '@/lib/expenses';
+import { resolveCapturePreset } from '@/lib/captureContext';
+import {
+  findTalkMatches,
+  listIncompleteTalkStubs,
+  mergeCaptureIntoStub,
+  type TalkMatch,
+} from '@/lib/matchTalkStubs';
+import { colors, fonts, radius, spacing } from '@/constants/theme';
+import type { Icon3DName } from '@/components/ui/Icon3D';
+
+type Phase = 'camera' | 'reading' | 'review';
+
+const SAVE_DESTINATIONS: {
+  id: ReceiptSaveDestination;
+  title: string;
+  hint: string;
+}[] = [
+  { id: 'thing', title: 'Thing', hint: 'Add to inventory' },
+  { id: 'expense', title: 'Expense', hint: 'Log spend only' },
+  { id: 'both', title: 'Both', hint: 'Thing + expense' },
+  { id: 'document', title: 'Document', hint: 'File in Documents' },
+];
+
+/**
+ * Capture opens the camera immediately.
+ * After OCR, incomplete Talk stubs can be linked on-device (no cloud AI).
+ */
+export default function CaptureModal() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{
+    context?: string;
+    spaceId?: string;
+    room?: string;
+    linkItemId?: string;
+    attach?: string;
+  }>();
+  const preset = resolveCapturePreset(params);
+  const linkItemId = Array.isArray(params.linkItemId)
+    ? params.linkItemId[0]
+    : params.linkItemId;
+  const attachKind =
+    (Array.isArray(params.attach) ? params.attach[0] : params.attach) === 'receipt'
+      ? 'receipt'
+      : 'photo';
+  const forcedLink = Boolean(linkItemId);
+  const { addItem, updateItem, items, getById } = useInventory();
+  const { addExpense } = useExpenses();
+  const linkedItem = linkItemId ? getById(linkItemId) : undefined;
+  const cameraRef = useRef<CameraView>(null);
+  const [permission, requestPermission] = useCameraPermissions();
+  const [facing, setFacing] = useState<CameraType>('back');
+  const [ready, setReady] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [phase, setPhase] = useState<Phase>('camera');
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [status, setStatus] = useState('Reading text on your device…');
+
+  const [name, setName] = useState('');
+  const [brand, setBrand] = useState('');
+  const [serial, setSerial] = useState('');
+  const [price, setPrice] = useState('');
+  const [purchasedFrom, setPurchasedFrom] = useState('');
+  const [purchaseDate, setPurchaseDate] = useState('');
+  const [expiry, setExpiry] = useState('');
+  const [docNumber, setDocNumber] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [nationality, setNationality] = useState('');
+  const [dob, setDob] = useState('');
+  const [isDocument, setIsDocument] = useState(preset.preferDocument);
+  const [docKind, setDocKind] = useState<'passport' | 'emirates_id' | 'unknown'>('unknown');
+  const [ocrNote, setOcrNote] = useState('');
+  const [saveDestination, setSaveDestination] =
+    useState<ReceiptSaveDestination>('thing');
+  const [receiptLooksLike, setReceiptLooksLike] = useState(false);
+  const [ocrText, setOcrText] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [matchCandidates, setMatchCandidates] = useState<TalkMatch[]>([]);
+  const [linkedStubId, setLinkedStubId] = useState<string | null>(null);
+  const [browseStubs, setBrowseStubs] = useState(false);
+
+  useEffect(() => {
+    blurActiveElement();
+  }, []);
+
+  // Opened from an item screen — lock attach target and prefill fields
+  useEffect(() => {
+    if (!linkItemId) return;
+    const item = items.find((i) => i.id === linkItemId);
+    if (!item) return;
+    setLinkedStubId(item.id);
+    setName(item.name);
+    setBrand(item.brand === 'Unknown' ? '' : item.brand);
+    setSerial(item.serial === '—' ? '' : item.serial);
+    setPrice(item.price === '—' ? '' : item.price);
+    setPurchasedFrom(item.purchasedFrom || '');
+    setPurchaseDate(item.purchaseDate || '');
+    if (item.warrantyExpiry && item.warrantyExpiry !== '—') {
+      setExpiry(item.warrantyExpiry);
+    }
+  }, [linkItemId, items]);
+
+  useEffect(() => {
+    if (permission && !permission.granted && permission.canAskAgain) {
+      void requestPermission();
+    }
+  }, [permission, requestPermission]);
+
+  function close() {
+    blurActiveElement();
+    if (router.canGoBack()) router.back();
+  }
+
+  function resetToCamera() {
+    setPhase('camera');
+    setPhotoUri(null);
+    setBusy(false);
+    setMatchCandidates([]);
+    setLinkedStubId(linkItemId ?? null);
+    setOcrText('');
+    setPrice('');
+    setPurchasedFrom('');
+    setPurchaseDate('');
+    setSaveDestination('thing');
+    setReceiptLooksLike(false);
+    setBrowseStubs(false);
+  }
+
+  function applyContextDefaults(asDocument: boolean) {
+    setIsDocument(asDocument);
+    if (!asDocument && !forcedLink) {
+      setName(preset.defaultName);
+      setBrand('');
+    }
+  }
+
+  function proposeTalkLinks(nextName: string, nextBrand: string, text: string) {
+    if (forcedLink && linkItemId) {
+      setLinkedStubId(linkItemId);
+      setMatchCandidates([]);
+      return;
+    }
+    const matches = findTalkMatches(items, {
+      name: nextName,
+      brand: nextBrand,
+      ocrText: text,
+      category: preset.category,
+    });
+    setMatchCandidates(matches);
+    // High confidence only — avoid wrong-merging mid-score stubs
+    if (matches[0] && matches[0].score >= 0.82) {
+      setLinkedStubId(matches[0].item.id);
+    } else {
+      setLinkedStubId(null);
+    }
+  }
+
+  async function processUri(uri: string) {
+    const durable = await persistLocalMediaUri(uri, 'photo');
+    setPhotoUri(durable);
+    setPhase('reading');
+    setStatus('Reading text on your device…');
+    setOcrNote('On-device text recognition — nothing is sent to AI or the cloud.');
+    setMatchCandidates([]);
+    setLinkedStubId(forcedLink && linkItemId ? linkItemId : null);
+
+    const result = await recognizeImage(uri);
+    setOcrText(result.text || '');
+
+    if (forcedLink && linkedItem) {
+      // Attach to existing item — keep identity, enrich from OCR when useful
+      setIsDocument(Boolean(linkedItem.isDocument));
+      setName(linkedItem.name);
+      setBrand(linkedItem.brand === 'Unknown' ? '' : linkedItem.brand);
+      setSerial(linkedItem.serial === '—' ? '' : linkedItem.serial);
+      setPrice(linkedItem.price === '—' ? '' : linkedItem.price);
+      setPurchasedFrom(linkedItem.purchasedFrom || '');
+      if (result.text?.trim()) {
+        const hints = extractReceiptHints(result.text);
+        if (hints.price && (!linkedItem.price || linkedItem.price === '—')) {
+          setPrice(hints.price);
+        }
+        if (hints.serial && (!linkedItem.serial || linkedItem.serial === '—')) {
+          setSerial(hints.serial);
+        }
+        if (hints.purchaseDate) setPurchaseDate(hints.purchaseDate);
+        if (hints.brand && (!linkedItem.brand || linkedItem.brand === 'Unknown')) {
+          setBrand(hints.brand);
+        }
+      }
+      setOcrNote(
+        `Attaching ${attachKind === 'receipt' ? 'receipt' : 'photo'} to ${linkedItem.name}. Text stays on this device.`
+      );
+      setStatus(`Ready to attach to ${linkedItem.name}`);
+      setPhase('review');
+      return;
+    }
+
+    if (result.identity) {
+      setIsDocument(true);
+      setDocKind(result.identity.kind);
+      setFullName(result.identity.fullName);
+      setDocNumber(result.identity.documentNumber);
+      setNationality(result.identity.nationality);
+      setDob(result.identity.dateOfBirth);
+      setExpiry(result.identity.expiryDate);
+      setSerial(result.identity.documentNumber);
+      setBrand(result.identity.issuingCountry || '');
+      let nextName = 'Identity document';
+      if (result.identity.kind === 'passport') {
+        nextName = `${result.identity.fullName || 'Passport'} · Passport`;
+      } else if (result.identity.kind === 'emirates_id') {
+        nextName = `${result.identity.fullName || 'Emirates ID'} · Emirates ID`;
+      } else if (result.identity.fullName) {
+        nextName = result.identity.fullName;
+      }
+      setName(nextName);
+      setStatus('Document fields filled from the MRZ on your device.');
+      proposeTalkLinks(nextName, result.identity.issuingCountry || '', result.text);
+    } else if (result.kind === 'passport' || result.kind === 'emirates_id') {
+      setIsDocument(true);
+      setDocKind(result.kind);
+      const nextName = result.kind === 'passport' ? 'Passport' : 'Emirates ID';
+      setName(nextName);
+      setStatus('Document type detected. Fill in any missing fields.');
+      proposeTalkLinks(nextName, '', result.text);
+    } else if (preset.preferDocument) {
+      applyContextDefaults(true);
+      setDocKind('unknown');
+      setName(preset.defaultName);
+      setStatus(`No MRZ found — save as a ${preset.label.toLowerCase()} document.`);
+      proposeTalkLinks(preset.defaultName, '', result.text);
+    } else {
+      applyContextDefaults(false);
+      setDocKind('unknown');
+      const hints = extractReceiptHints(result.text);
+      let nextName = preset.defaultName;
+      let nextBrand = '';
+      if (hints.name) {
+        nextName = hints.name;
+        setName(hints.name);
+      }
+      if (hints.brand) {
+        nextBrand = hints.brand;
+        setBrand(hints.brand);
+      }
+      if (hints.serial) setSerial(hints.serial);
+      if (hints.price) setPrice(hints.price);
+      if (hints.purchaseDate) setPurchaseDate(hints.purchaseDate);
+      if (hints.merchant) setPurchasedFrom(hints.merchant);
+      if (hints.looksLikeReceipt || attachKind === 'receipt') {
+        setReceiptLooksLike(true);
+        const dest =
+          attachKind === 'receipt' && hints.price
+            ? suggestReceiptDestination({ ...hints, looksLikeReceipt: true })
+            : attachKind === 'receipt'
+              ? 'both'
+              : suggestReceiptDestination(hints);
+        setSaveDestination(dest);
+        if (dest === 'document') setIsDocument(true);
+        setStatus('Receipt text read on device — choose how to file it.');
+        setOcrNote(
+          'On-device OCR. Pick Thing, Expense, both, or Document — then save.'
+        );
+      } else {
+        setReceiptLooksLike(false);
+        setSaveDestination('thing');
+        setStatus(`No document MRZ found — saving to ${preset.label}.`);
+      }
+      proposeTalkLinks(nextName, nextBrand, result.text);
+    }
+
+    setPhase('review');
+  }
+
+  async function snap() {
+    if (!cameraRef.current || busy || !ready) return;
+    setBusy(true);
+    try {
+      const photo = await cameraRef.current.takePictureAsync({
+        quality: 0.85,
+        skipProcessing: Platform.OS === 'android',
+      });
+      if (photo?.uri) await processUri(photo.uri);
+      else Alert.alert('Capture failed', 'No photo was returned. Try again.');
+    } catch (err) {
+      console.error('Capture failed', err);
+      Alert.alert('Capture failed', 'Couldn’t take a photo. Try again or pick from library.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function pickImage() {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert(
+          'Photos access needed',
+          'Allow photo library access in Settings to attach images.'
+        );
+        return;
+      }
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.9,
+      });
+      if (!res.canceled && res.assets[0]?.uri) {
+        await processUri(res.assets[0].uri);
+      }
+    } catch (err) {
+      console.error('Library pick failed', err);
+      Alert.alert('Couldn’t open library', 'Try again in a moment.');
+    }
+  }
+
+  async function pickDocument() {
+    try {
+      const res = await DocumentPicker.getDocumentAsync({
+        type: ['image/*', 'application/pdf'],
+        copyToCacheDirectory: true,
+      });
+      if (res.canceled || !res.assets?.[0]) return;
+      const asset = res.assets[0];
+      if (asset.mimeType?.includes('pdf')) {
+        const durable = await persistLocalMediaUri(asset.uri, 'doc');
+        setPhotoUri(durable);
+        setIsDocument(true);
+        setDocKind('unknown');
+        setName(asset.name?.replace(/\.pdf$/i, '') || preset.defaultName);
+        setOcrNote('PDF stored on device. Open a photo of the ID page for MRZ reading.');
+        setPhase('review');
+        return;
+      }
+      await processUri(asset.uri);
+    } catch (err) {
+      console.error('Document pick failed', err);
+      Alert.alert('Couldn’t open file', 'Try another file or take a photo.');
+    }
+  }
+
+  async function save() {
+    if (saving) return;
+    setSaving(true);
+    try {
+      const asDocument =
+        isDocument || (!forcedLink && saveDestination === 'document');
+      const expenseOnly =
+        !forcedLink && !asDocument && saveDestination === 'expense';
+      const wantsExpense =
+        !asDocument &&
+        (saveDestination === 'expense' || saveDestination === 'both');
+
+      // Forced attach always updates the linked Thing; destination only controls expense.
+      const saveThing = forcedLink || !expenseOnly;
+
+      const identityDoc =
+        asDocument && (docKind === 'passport' || docKind === 'emirates_id');
+      const icon: Icon3DName = identityDoc
+        ? docKind === 'passport'
+          ? 'passport'
+          : 'id'
+        : asDocument
+          ? preset.preferDocument
+            ? preset.icon
+            : 'document'
+          : preset.icon;
+
+      const spaceId = identityDoc || asDocument ? 's5' : preset.spaceId;
+      const room =
+        identityDoc || asDocument ? 'Personal Documents' : preset.room;
+      const category = identityDoc
+        ? 'Documents'
+        : asDocument && preset.preferDocument
+          ? preset.category
+          : asDocument
+            ? 'Documents'
+            : preset.category;
+
+      const fields = {
+        name: name.trim() || preset.defaultName,
+        brand: brand.trim() || (asDocument ? 'Document' : 'Unknown'),
+        serial: serial.trim() || docNumber.trim() || '—',
+        price: price.trim() || '—',
+        purchasedFrom: purchasedFrom.trim() || undefined,
+        purchaseDate: purchaseDate.trim() || localDayKey(),
+        warrantyExpiry: expiry || '—',
+        imageUri: photoUri ?? undefined,
+        ocrText: ocrText || undefined,
+        category,
+        room,
+        spaceId,
+      };
+
+      let savedId: string | null = null;
+      let expenseId: string | null = null;
+
+      if (saveThing) {
+        if (linkedStubId) {
+          const stub = items.find((i) => i.id === linkedStubId);
+          if (stub) {
+            await updateItem(stub.id, mergeCaptureIntoStub(stub, fields));
+            savedId = stub.id;
+          } else {
+            throw new Error('Linked item missing');
+          }
+        } else {
+          const item = await addItem({
+            ...fields,
+            icon,
+            warrantyActive: Boolean(expiry),
+            condition: '—',
+            estimatedValue: '—',
+            timeline: [
+              {
+                date: new Date().toLocaleDateString(undefined, {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric',
+                }),
+                event: asDocument
+                  ? preset.preferDocument
+                    ? preset.saveEvent
+                    : 'Document captured · text read on device'
+                  : preset.saveEvent,
+              },
+            ],
+            isDocument: asDocument,
+            documentKind: asDocument ? docKind : undefined,
+            documentNumber: docNumber || undefined,
+            fullName: fullName || undefined,
+            nationality: nationality || undefined,
+            dateOfBirth: dob || undefined,
+            expiryDate: expiry || undefined,
+            ocrOnDevice: true,
+            source: 'capture',
+            insight: asDocument
+              ? 'Text was read on your device. Nothing was sent to AI.'
+              : `Captured for ${preset.label}.`,
+          });
+          savedId = item.id;
+        }
+      }
+
+      const amountNum = parseAmount(fields.price);
+      const shouldExpense =
+        wantsExpense &&
+        !identityDoc &&
+        Number.isFinite(amountNum) &&
+        amountNum > 0;
+
+      if (shouldExpense) {
+        const expense = await addExpense({
+          title: fields.name,
+          amount: amountNum,
+          currency: /\bUSD\b/i.test(fields.price) ? 'USD' : 'AED',
+          category: guessExpenseCategory(
+            `${fields.name} ${fields.purchasedFrom || ''} ${fields.category}`
+          ),
+          date: fields.purchaseDate,
+          merchant: fields.purchasedFrom,
+          receiptUri: fields.imageUri,
+          inventoryItemId: savedId ?? undefined,
+          source: 'capture',
+        });
+        expenseId = expense.id;
+      } else if (expenseOnly) {
+        Alert.alert('Add a price', 'Expense-only save needs an amount.');
+        return;
+      }
+
+      blurActiveElement();
+      if (forcedLink && savedId) {
+        Alert.alert(
+          attachKind === 'receipt' ? 'Receipt attached' : 'Photo attached',
+          fields.name,
+          [
+            {
+              text: 'View item',
+              onPress: () => router.replace(`/asset/${savedId}` as Href),
+            },
+            {
+              text: 'Done',
+              style: 'cancel',
+              onPress: () => {
+                if (router.canGoBack()) router.back();
+                else router.replace(`/asset/${savedId}` as Href);
+              },
+            },
+          ]
+        );
+      } else if (expenseOnly && expenseId) {
+        Alert.alert('Expense logged', fields.name, [
+          {
+            text: 'Capture another',
+            onPress: () => resetToCamera(),
+          },
+          {
+            text: 'View expense',
+            onPress: () => router.replace(`/expenses/${expenseId}` as Href),
+          },
+          {
+            text: 'Done',
+            style: 'cancel',
+            onPress: () => {
+              if (router.canGoBack()) router.back();
+              else router.replace('/expenses' as Href);
+            },
+          },
+        ]);
+      } else if (savedId) {
+        Alert.alert('Saved on this device', fields.name, [
+          {
+            text: 'Capture another',
+            onPress: () => resetToCamera(),
+          },
+          {
+            text: 'View item',
+            onPress: () => router.replace(`/asset/${savedId}` as Href),
+          },
+          {
+            text: 'Done',
+            style: 'cancel',
+            onPress: () => {
+              if (router.canGoBack()) router.back();
+              else router.replace('/(tabs)' as Href);
+            },
+          },
+        ]);
+      }
+    } catch (err) {
+      console.error('Save failed', err);
+      Alert.alert('Couldn’t save', messageForPlanLimit(err) || 'Try again in a moment.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!permission) {
+    return <View style={styles.black} />;
+  }
+
+  if (!permission.granted && phase === 'camera') {
+    return (
+      <View style={[styles.black, styles.centered, { paddingTop: insets.top }]}>
+        <Text style={styles.permTitle}>Camera access needed</Text>
+        <Text style={styles.permBody}>
+          Capture for {preset.label}. You can also upload a photo or PDF — text stays on
+          this device.
+        </Text>
+        <Pressable
+          onPress={() => void requestPermission()}
+          style={({ pressed }) => [styles.permBtn, pressed && { opacity: 0.9 }]}
+        >
+          <Text style={styles.permBtnText}>Allow camera</Text>
+        </Pressable>
+        <Pressable onPress={() => void pickImage()} style={{ marginTop: 14 }}>
+          <Text style={styles.link}>Choose from library</Text>
+        </Pressable>
+        <Pressable onPress={() => void pickDocument()} style={{ marginTop: 10 }}>
+          <Text style={styles.link}>Upload a file</Text>
+        </Pressable>
+        <Pressable onPress={close} style={{ marginTop: 20 }}>
+          <Text style={styles.linkMuted}>Not now</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  if (phase === 'reading') {
+    return (
+      <View style={[styles.black, styles.centered]}>
+        <ActivityIndicator size="large" color={colors.forestBright} />
+        <Text style={[styles.permTitle, { marginTop: 20 }]}>{status}</Text>
+        <Text style={styles.permBody}>{ocrNote}</Text>
+      </View>
+    );
+  }
+
+  if (phase === 'review' && photoUri) {
+    return (
+      <View style={[styles.reviewRoot, { paddingTop: insets.top + 8 }]}>
+        <View style={styles.reviewTop}>
+          <Pressable onPress={resetToCamera} hitSlop={8}>
+            <Text style={styles.reviewLink}>Retake</Text>
+          </Pressable>
+          <Text style={styles.reviewTitle}>Looks good?</Text>
+          <Pressable onPress={close} hitSlop={8}>
+            <X size={20} color={colors.ink} strokeWidth={2} />
+          </Pressable>
+        </View>
+
+        <ScrollView
+          contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Image source={{ uri: photoUri }} style={styles.preview} />
+
+          <View style={styles.contextChip}>
+            <Text style={styles.contextChipText}>
+              {forcedLink && linkedItem
+                ? `Attach to ${linkedItem.name}`
+                : `Saving to ${preset.label}`}
+            </Text>
+            <Text style={styles.contextChipMeta}>
+              {forcedLink
+                ? attachKind === 'receipt'
+                  ? 'Receipt · stays on this device'
+                  : 'Photo · stays on this device'
+                : `${preset.room}${preset.category ? ` · ${preset.category}` : ''}`}
+            </Text>
+          </View>
+
+          <View style={styles.privacyBanner}>
+            <Text style={styles.privacyText}>
+              {ocrNote ||
+                'Check the fields, then save. Text stays on this device.'}
+            </Text>
+          </View>
+
+          {matchCandidates.length > 0 && !forcedLink ? (
+            <View style={styles.matchCard}>
+              <Text style={styles.matchTitle}>Link to a Talk item?</Text>
+              <Text style={styles.matchLead}>
+                Added on the go earlier — confirm to attach this receipt. Matched on-device.
+              </Text>
+              {matchCandidates.map((m) => {
+                const on = linkedStubId === m.item.id;
+                return (
+                  <Pressable
+                    key={m.item.id}
+                    onPress={() => setLinkedStubId(on ? null : m.item.id)}
+                    style={[styles.matchRow, on && styles.matchRowOn]}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.matchName}>{m.item.name}</Text>
+                      <Text style={styles.matchMeta}>
+                        {m.item.room} · {m.item.category}
+                        {m.reasons.length ? ` · ${m.reasons.slice(0, 2).join(', ')}` : ''}
+                      </Text>
+                    </View>
+                    <Text style={[styles.matchAction, on && { color: colors.forest }]}>
+                      {on ? 'Linked' : 'Link'}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+              {linkedStubId ? (
+                <Pressable onPress={() => setLinkedStubId(null)} style={{ marginTop: 8 }}>
+                  <Text style={styles.matchSkip}>Save as a new item instead</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : !forcedLink && listIncompleteTalkStubs(items).length > 0 ? (
+            <View style={styles.matchCard}>
+              <Text style={styles.matchTitle}>Link to a Talk item?</Text>
+              <Text style={styles.matchLead}>
+                No strong OCR match. Browse incomplete Talk stubs if this is one of them.
+              </Text>
+              {!browseStubs ? (
+                <Pressable onPress={() => setBrowseStubs(true)} style={{ marginTop: 4 }}>
+                  <Text style={[styles.matchAction, { color: colors.forest }]}>
+                    Browse Talk stubs
+                  </Text>
+                </Pressable>
+              ) : (
+                <>
+                  {listIncompleteTalkStubs(items)
+                    .slice(0, 8)
+                    .map((stub) => {
+                      const on = linkedStubId === stub.id;
+                      return (
+                        <Pressable
+                          key={stub.id}
+                          onPress={() => setLinkedStubId(on ? null : stub.id)}
+                          style={[styles.matchRow, on && styles.matchRowOn]}
+                        >
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.matchName}>{stub.name}</Text>
+                            <Text style={styles.matchMeta}>
+                              {stub.room} · {stub.category}
+                            </Text>
+                          </View>
+                          <Text style={[styles.matchAction, on && { color: colors.forest }]}>
+                            {on ? 'Linked' : 'Link'}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  {linkedStubId ? (
+                    <Pressable onPress={() => setLinkedStubId(null)} style={{ marginTop: 8 }}>
+                      <Text style={styles.matchSkip}>Save as a new item instead</Text>
+                    </Pressable>
+                  ) : null}
+                </>
+              )}
+            </View>
+          ) : null}
+
+          {forcedLink ? (
+            // Keep attach flow light — no enterprise form dump
+            <>
+              {(!price || price === '—') && attachKind === 'receipt' ? (
+                <Field label="Price (optional)" value={price} onChange={setPrice} placeholder="AED 0" />
+              ) : null}
+              {attachKind === 'receipt' && (!purchasedFrom || purchasedFrom === '') ? (
+                <Field
+                  label="Bought from (optional)"
+                  value={purchasedFrom}
+                  onChange={setPurchasedFrom}
+                  placeholder="Amazon, Sharaf DG…"
+                />
+              ) : null}
+            </>
+          ) : (
+            <>
+              <Field label="Name" value={name} onChange={setName} />
+              {isDocument ? (
+                <>
+                  <Field label="Full name" value={fullName} onChange={setFullName} />
+                  <Field label="Document number" value={docNumber} onChange={setDocNumber} />
+                  <Field label="Nationality" value={nationality} onChange={setNationality} />
+                  <Field label="Date of birth" value={dob} onChange={setDob} placeholder="YYYY-MM-DD" />
+                  <Field label="Expiry" value={expiry} onChange={setExpiry} placeholder="YYYY-MM-DD" />
+                </>
+              ) : (
+                <>
+                  <Field label="Brand" value={brand} onChange={setBrand} />
+                  <Field label="Serial" value={serial} onChange={setSerial} />
+                  <Field label="Price" value={price} onChange={setPrice} placeholder="AED 0" />
+                  <Field
+                    label="Bought from"
+                    value={purchasedFrom}
+                    onChange={setPurchasedFrom}
+                    placeholder="Amazon, Sharaf DG…"
+                  />
+                  <Field
+                    label="Purchase date"
+                    value={purchaseDate}
+                    onChange={setPurchaseDate}
+                    placeholder="YYYY-MM-DD"
+                  />
+                </>
+              )}
+            </>
+          )}
+
+          {(receiptLooksLike || attachKind === 'receipt') && !forcedLink ? (
+            <View style={styles.routerCard}>
+              <Text style={styles.routerTitle}>Save as</Text>
+              <Text style={styles.routerLead}>
+                Choose where this receipt goes. You can change it before saving.
+              </Text>
+              <View style={styles.routerGrid}>
+                {SAVE_DESTINATIONS.map((opt) => {
+                  const on = saveDestination === opt.id;
+                  return (
+                    <Pressable
+                      key={opt.id}
+                      onPress={() => {
+                        setSaveDestination(opt.id);
+                        if (opt.id === 'document') setIsDocument(true);
+                        else if (!preset.preferDocument) setIsDocument(false);
+                      }}
+                      style={[styles.routerChip, on && styles.routerChipOn]}
+                    >
+                      <Text style={[styles.routerChipTitle, on && styles.routerChipTitleOn]}>
+                        {opt.title}
+                      </Text>
+                      <Text style={styles.routerChipHint}>{opt.hint}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          ) : (receiptLooksLike || attachKind === 'receipt') && forcedLink ? (
+            <Pressable
+              onPress={() =>
+                setSaveDestination((d) => (d === 'both' || d === 'expense' ? 'thing' : 'both'))
+              }
+              style={styles.expenseToggle}
+            >
+              <View
+                style={[
+                  styles.expenseCheck,
+                  (saveDestination === 'both' || saveDestination === 'expense') &&
+                    styles.expenseCheckOn,
+                ]}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.expenseTitle}>Also log as expense</Text>
+                <Text style={styles.expenseHint}>
+                  Keeps spend in Expenses when there’s a price — on this device.
+                </Text>
+              </View>
+            </Pressable>
+          ) : null}
+
+        </ScrollView>
+
+        <View style={[styles.saveBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+          <Pressable
+            onPress={() => void save()}
+            disabled={saving}
+            style={({ pressed }) => [
+              styles.saveBtn,
+              pressed && { opacity: 0.92 },
+              saving && { opacity: 0.7 },
+            ]}
+          >
+            <Text style={styles.saveBtnText}>
+              {saving
+                ? 'Saving…'
+                : forcedLink
+                  ? attachKind === 'receipt'
+                    ? 'Attach receipt'
+                    : 'Attach photo'
+                  : linkedStubId
+                    ? 'Link & save'
+                    : saveDestination === 'expense'
+                      ? 'Log expense'
+                      : saveDestination === 'both'
+                        ? 'Save Thing & expense'
+                        : saveDestination === 'document'
+                          ? 'Save document'
+                          : 'Save'}
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.black}>
+      <CameraView
+        ref={cameraRef}
+        style={StyleSheet.absoluteFill}
+        facing={facing}
+        onCameraReady={() => setReady(true)}
+      />
+
+      <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
+        <Pressable onPress={close} style={styles.roundBtn} hitSlop={8}>
+          <X size={20} color={colors.pure} strokeWidth={2.2} />
+        </Pressable>
+        <View style={styles.hintWrap}>
+          {forcedLink && linkedItem ? (
+            <Text style={styles.contextBadge}>
+              {attachKind === 'receipt' ? 'Receipt' : 'Photo'}
+            </Text>
+          ) : preset.kind !== 'general' ? (
+            <Text style={styles.contextBadge}>{preset.label}</Text>
+          ) : null}
+          <Text style={styles.hint}>
+            {forcedLink && linkedItem
+              ? attachKind === 'receipt'
+                ? `Snap the receipt for ${linkedItem.name}`
+                : `Snap a photo of ${linkedItem.name}`
+              : preset.hint}
+          </Text>
+        </View>
+        <Pressable
+          onPress={() => setFacing((f) => (f === 'back' ? 'front' : 'back'))}
+          style={styles.roundBtn}
+          hitSlop={8}
+        >
+          <RefreshCw size={18} color={colors.pure} strokeWidth={2.2} />
+        </Pressable>
+      </View>
+
+      <View style={[styles.shutterWrap, { paddingBottom: insets.bottom + 20 }]}>
+        <View style={styles.altRow}>
+          <Pressable onPress={() => void pickImage()} style={styles.altBtn}>
+            <ImageIcon size={18} color={colors.pure} strokeWidth={2} />
+            <Text style={styles.altLabel}>Library</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => void snap()}
+            disabled={busy || !ready}
+            style={({ pressed }) => [
+              styles.shutterOuter,
+              pressed && { opacity: 0.9, transform: [{ scale: 0.96 }] },
+              (busy || !ready) && { opacity: 0.5 },
+            ]}
+            accessibilityLabel="Take photo"
+          >
+            {busy ? (
+              <ActivityIndicator color={colors.forest} />
+            ) : (
+              <View style={styles.shutterInner} />
+            )}
+          </Pressable>
+          <Pressable onPress={() => void pickDocument()} style={styles.altBtn}>
+            <FileText size={18} color={colors.pure} strokeWidth={2} />
+            <Text style={styles.altLabel}>File</Text>
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <View style={styles.field}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <TextInput
+        value={value}
+        onChangeText={onChange}
+        placeholder={placeholder}
+        placeholderTextColor={colors.faint}
+        style={styles.input}
+      />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  black: { flex: 1, backgroundColor: '#000' },
+  centered: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+  },
+  permTitle: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 22,
+    color: colors.pure,
+    textAlign: 'center',
+  },
+  permBody: {
+    fontFamily: fonts.sans,
+    fontSize: 15,
+    lineHeight: 22,
+    color: 'rgba(255,255,255,0.7)',
+    textAlign: 'center',
+    marginTop: 10,
+    marginBottom: 28,
+  },
+  permBtn: {
+    backgroundColor: colors.forest,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: radius.sm,
+  },
+  permBtnText: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 15,
+    color: colors.forestOn,
+  },
+  link: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 14,
+    color: colors.forestBright,
+  },
+  linkMuted: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.55)',
+  },
+  topBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    zIndex: 2,
+  },
+  hintWrap: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: 8,
+  },
+  contextBadge: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 11,
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+    color: colors.forestBright,
+    marginBottom: 2,
+  },
+  hint: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.85)',
+    textAlign: 'center',
+  },
+  roundBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shutterWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+  },
+  altRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingHorizontal: 28,
+  },
+  altBtn: {
+    width: 64,
+    alignItems: 'center',
+    gap: 4,
+  },
+  altLabel: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.8)',
+  },
+  shutterOuter: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    borderWidth: 4,
+    borderColor: colors.pure,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shutterInner: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: colors.pure,
+  },
+  reviewRoot: {
+    flex: 1,
+    backgroundColor: colors.bg,
+  },
+  reviewTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  reviewTitle: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 17,
+    color: colors.ink,
+  },
+  reviewLink: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 15,
+    color: colors.forest,
+  },
+  preview: {
+    height: 200,
+    marginHorizontal: spacing.lg,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceSoft,
+  },
+  contextChip: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+    borderRadius: radius.sm,
+    backgroundColor: colors.white,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+  },
+  contextChipText: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 14,
+    color: colors.ink,
+  },
+  contextChipMeta: {
+    fontFamily: fonts.sans,
+    fontSize: 12,
+    color: colors.mute,
+    marginTop: 2,
+  },
+  privacyBanner: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.sm,
+    backgroundColor: colors.forestWash,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.forestSoft,
+  },
+  privacyText: {
+    fontFamily: fonts.sans,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.forest,
+  },
+  matchCard: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.sm,
+    backgroundColor: colors.white,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+  },
+  matchTitle: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 15,
+    color: colors.ink,
+  },
+  matchLead: {
+    marginTop: 4,
+    marginBottom: spacing.sm,
+    fontFamily: fonts.sans,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.mute,
+  },
+  matchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    marginTop: 6,
+  },
+  matchRowOn: {
+    borderColor: colors.forest,
+    backgroundColor: colors.forestWash,
+  },
+  matchName: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 15,
+    color: colors.ink,
+  },
+  matchMeta: {
+    marginTop: 2,
+    fontFamily: fonts.sans,
+    fontSize: 12,
+    color: colors.mute,
+  },
+  matchAction: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 13,
+    color: colors.slate,
+  },
+  matchSkip: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 13,
+    color: colors.mute,
+  },
+  routerCard: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.white,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+  },
+  routerTitle: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 15,
+    color: colors.ink,
+  },
+  routerLead: {
+    fontFamily: fonts.sans,
+    fontSize: 12,
+    color: colors.mute,
+    marginTop: 4,
+    marginBottom: spacing.md,
+  },
+  routerGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  routerChip: {
+    width: '48%',
+    flexGrow: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: radius.sm,
+    backgroundColor: colors.bg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+  },
+  routerChipOn: {
+    backgroundColor: colors.forestWash,
+    borderColor: colors.forest,
+  },
+  routerChipTitle: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 14,
+    color: colors.ink,
+  },
+  routerChipTitleOn: {
+    color: colors.forest,
+  },
+  routerChipHint: {
+    fontFamily: fonts.sans,
+    fontSize: 11,
+    color: colors.mute,
+    marginTop: 2,
+  },
+  expenseToggle: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.white,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+  },
+  expenseCheck: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: colors.lineStrong,
+    marginTop: 2,
+  },
+  expenseCheckOn: {
+    backgroundColor: colors.forest,
+    borderColor: colors.forest,
+  },
+  expenseTitle: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 15,
+    color: colors.ink,
+  },
+  expenseHint: {
+    fontFamily: fonts.sans,
+    fontSize: 12,
+    color: colors.mute,
+    marginTop: 2,
+  },
+  field: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+  },
+  fieldLabel: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 11,
+    color: colors.mute,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginBottom: 6,
+  },
+  input: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 16,
+    color: colors.ink,
+    backgroundColor: colors.white,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
+  },
+  saveBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingTop: 10,
+    paddingHorizontal: spacing.lg,
+    backgroundColor: colors.bgElevated,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.line,
+  },
+  saveBtn: {
+    marginHorizontal: 0,
+    marginTop: spacing.xl,
+    height: 50,
+    borderRadius: radius.sm,
+    backgroundColor: colors.forest,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveBtnText: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 16,
+    color: colors.forestOn,
+  },
+});
