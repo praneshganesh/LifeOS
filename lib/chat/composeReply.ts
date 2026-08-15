@@ -1,5 +1,17 @@
 import type { ChatAction } from '@/lib/chat/types';
 import { displayWarrantyExpiry } from '@/lib/dates';
+import { parseDateInput } from '@/lib/lastDone';
+
+function formatRemindDay(iso?: string | null): string | undefined {
+  if (!iso?.trim()) return undefined;
+  const d = parseDateInput(iso);
+  if (!d) return iso;
+  return d.toLocaleDateString(undefined, {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  });
+}
 
 function habitAppliedReply(
   title: string,
@@ -34,6 +46,12 @@ export function composeAppliedReply(params: {
   habitCheckInTitle?: string | null;
   habitStreak?: number | null;
   habitCheckInDays?: number | null;
+  classPackTitle?: string | null;
+  classPackRemaining?: number | null;
+  classPackTotal?: number | null;
+  classLoggedTitle?: string | null;
+  reminderLabel?: string | null;
+  reminderAt?: string | null;
 }): string {
   const actions = params.actions ?? [];
   const removed = params.removedNames ?? [];
@@ -94,6 +112,52 @@ export function composeAppliedReply(params: {
     const fromActions = actions.filter((a) => a?.type === 'habit_check_in').length;
     const days = Math.max(1, params.habitCheckInDays || fromActions || 1);
     return habitAppliedReply(habitTitle, days, params.habitStreak);
+  }
+
+  if (params.reminderLabel) {
+    const when = formatRemindDay(params.reminderAt);
+    return when
+      ? `Reminder set: ${params.reminderLabel} — ${when}.`
+      : `Reminder set: ${params.reminderLabel}.`;
+  }
+
+  if (actions.some((a) => a?.type === 'set_reminder')) {
+    return 'When should I remind you?';
+  }
+
+  if (params.classLoggedTitle) {
+    const left = params.classPackRemaining;
+    const total = params.classPackTotal;
+    const who = params.assignedTo ? ` for ${params.assignedTo}` : '';
+    if (left != null && total != null && total > 0) {
+      return `Logged ${params.classLoggedTitle}${who} — ${total - left} of ${total} used, ${left} left.`;
+    }
+    return `Logged ${params.classLoggedTitle}${who}.`;
+  }
+
+  const triedLog = actions.some((a) => a?.type === 'log_class');
+  if (triedLog) {
+    const fromAction = actions.find((a) => a?.type === 'log_class');
+    const title =
+      fromAction && fromAction.type === 'log_class' ? fromAction.title : undefined;
+    return title
+      ? `There's no ${title} pack yet. Enroll first, then I can log attendance.`
+      : `There's no class pack to log against yet.`;
+  }
+
+  if (
+    /^logged\b/i.test(params.modelReply || '') &&
+    /\b(class|swimming|skating|lesson|session)\b/i.test(params.modelReply || '')
+  ) {
+    return `There's no class pack to log against yet.`;
+  }
+
+  if (params.classPackTitle) {
+    const who = params.assignedTo ? ` for ${params.assignedTo}` : '';
+    const total = params.classPackTotal;
+    return total && total > 0
+      ? `Added ${params.classPackTitle}${who} — ${total} classes.`
+      : `Added ${params.classPackTitle}${who}.`;
   }
 
   const doneLabel =

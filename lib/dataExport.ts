@@ -8,6 +8,7 @@ export const LIFEOS_STORAGE_KEYS = [
   'lifeos:inventory:v1',
   'lifeos:expenses:v1',
   'lifeos:habits:v1',
+  'lifeos:classes:v1',
   'lifeos:subscriptions:v1',
   'lifeos:last-done:v2',
   'lifeos:last-done:v1',

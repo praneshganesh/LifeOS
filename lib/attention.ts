@@ -12,6 +12,12 @@ import {
   iconForSubscriptionCategory,
   type Subscription,
 } from '@/lib/subscriptions';
+import type { ClassPack } from '@/lib/classes';
+import {
+  daysLeftInWindow,
+  packStatus,
+  remainingCount,
+} from '@/lib/classes';
 
 export type AttentionUrgency = 'urgent' | 'soon' | 'info' | 'ok';
 
@@ -87,7 +93,8 @@ function docExpiryStatus(item: InventoryItem): {
 export function buildAttentionItems(
   inventory: InventoryItem[],
   lastDone: LastDoneItem[] = [],
-  subscriptions: Subscription[] = []
+  subscriptions: Subscription[] = [],
+  classPacks: ClassPack[] = []
 ): AttentionItem[] {
   const out: AttentionItem[] = [];
 
@@ -142,7 +149,9 @@ export function buildAttentionItems(
       daysLeft < 0 ? 'urgent' : daysLeft <= 3 ? 'urgent' : 'soon';
     const when =
       daysLeft < 0
-        ? `Overdue · last ${formatRelativeDone(getLastDoneAt(activity)).toLowerCase()}`
+        ? activity.logs?.length
+          ? `Overdue · last ${formatRelativeDone(getLastDoneAt(activity)).toLowerCase()}`
+          : 'Overdue'
         : daysLeft === 0
           ? 'Due today'
           : `Due in ${daysLeft} days`;
@@ -181,6 +190,42 @@ export function buildAttentionItems(
     });
   }
 
+  for (const pack of classPacks) {
+    const remaining = remainingCount(pack);
+    if (remaining === 0) continue;
+    const status = packStatus(pack);
+    const daysLeft = daysLeftInWindow(pack);
+    if (status === 'active') continue;
+    const who = pack.assignedTo ? `${pack.assignedTo} · ` : '';
+    if (status === 'expired') {
+      out.push({
+        id: `cls-${pack.id}`,
+        title: remaining == null
+          ? `${pack.title} pack ended`
+          : `${pack.title} pack ended with ${remaining} left`,
+        subtitle: who + (remaining == null ? 'window ended' : `${remaining} of ${pack.total} unused`),
+        urgency: 'urgent',
+        category: 'Classes',
+        icon: 'today',
+        daysLeft,
+        href: `/classes/${pack.id}`,
+      });
+      continue;
+    }
+    if (status === 'ending-soon') {
+      out.push({
+        id: `cls-${pack.id}`,
+        title: `${pack.title} — ${remaining == null ? 'pack' : `${remaining} classes left`}`,
+        subtitle: who + `window ends in ${daysLeft} days`,
+        urgency: daysLeft <= 7 ? 'urgent' : 'soon',
+        category: 'Classes',
+        icon: 'today',
+        daysLeft,
+        href: `/classes/${pack.id}`,
+      });
+    }
+  }
+
   const rank = { urgent: 0, soon: 1, info: 2, ok: 3 } as const;
   return out.sort(
     (a, b) =>
@@ -194,9 +239,10 @@ export function dueSoonForHome(
   inventory: InventoryItem[],
   lastDone: LastDoneItem[] = [],
   subscriptions: Subscription[] = [],
+  classPacks: ClassPack[] = [],
   limit = 3
 ): AttentionItem[] {
-  return buildAttentionItems(inventory, lastDone, subscriptions)
+  return buildAttentionItems(inventory, lastDone, subscriptions, classPacks)
     .filter((a) => a.urgency === 'urgent' || a.urgency === 'soon')
     .slice(0, limit);
 }

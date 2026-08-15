@@ -44,6 +44,12 @@ type LastDoneContextValue = {
    * Optional doneAt / remind fields layer on when provided.
    */
   logDone: (input: LogDoneInput) => Promise<LastDoneItem>;
+  /** One-off future reminder — does not mark the activity done. */
+  setReminder: (input: {
+    label: string;
+    remindAt: string;
+    inventoryItemId?: string | null;
+  }) => Promise<LastDoneItem>;
   /** Delete the whole activity (all logs). */
   remove: (id: string) => Promise<void>;
   /** Delete one mistaken log. Removes the activity if no logs remain. */
@@ -230,6 +236,54 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
     [persist]
   );
 
+  const setReminder = useCallback(
+    async (input: {
+      label: string;
+      remindAt: string;
+      inventoryItemId?: string | null;
+    }) => {
+      const list = itemsRef.current;
+      const label = normalizeLabel(input.label ?? '');
+      if (!label) throw new Error('Label required');
+      const remindFields = resolveRemindAt(new Date(), { remindAt: input.remindAt });
+      if (!remindFields.remindAt) throw new Error('Invalid reminder date');
+      const linkId =
+        typeof input.inventoryItemId === 'string' && input.inventoryItemId
+          ? input.inventoryItemId
+          : undefined;
+
+      const match =
+        (linkId
+          ? list.find(
+              (i) =>
+                labelsMatch(i.label, label) && i.inventoryItemId === linkId
+            )
+          : undefined) ||
+        list.find((i) => labelsMatch(i.label, label));
+
+      if (match) {
+        const updated: LastDoneItem = {
+          ...match,
+          ...remindFields,
+          ...(linkId ? { inventoryItemId: linkId } : {}),
+        };
+        await persist(list.map((i) => (i.id === updated.id ? updated : i)));
+        void scheduleLastDoneReminder(updated);
+        return updated;
+      }
+
+      const created = createLastDoneItem(label, {
+        doneAt: null,
+        remindAt: remindFields.remindAt,
+        inventoryItemId: linkId,
+      });
+      await persist([created, ...list]);
+      void scheduleLastDoneReminder(created);
+      return created;
+    },
+    [persist]
+  );
+
   const remove = useCallback(
     async (id: string) => {
       await persist(itemsRef.current.filter((i) => i.id !== id));
@@ -259,8 +313,8 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ items, ready, logDone, remove, removeLog }),
-    [items, ready, logDone, remove, removeLog]
+    () => ({ items, ready, logDone, setReminder, remove, removeLog }),
+    [items, ready, logDone, setReminder, remove, removeLog]
   );
 
   return (

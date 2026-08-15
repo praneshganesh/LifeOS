@@ -165,7 +165,7 @@ export function normalizeItem(raw: unknown): LastDoneItem | null {
     logs = [{ id: `log-migrated-${r.id}`, doneAt: r.lastDoneAt }];
   }
 
-  if (!logs.length) {
+  if (!logs.length && !(typeof r.remindAt === 'string' && r.remindAt.trim())) {
     logs = [createLogEntry(createdAt)];
   }
 
@@ -314,19 +314,18 @@ export function resolveRemindAt(
 export function createLastDoneItem(
   label: string,
   opts: {
-    doneAt?: Date;
+    doneAt?: Date | null;
     remindAt?: string;
     remindInterval?: RemindInterval;
     inventoryItemId?: string;
   } = {}
 ): LastDoneItem {
-  const doneAt = opts.doneAt ?? new Date();
   const createdAt = new Date().toISOString();
   const item: LastDoneItem = {
     id: `ld-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     label: normalizeLabel(label),
     createdAt,
-    logs: [createLogEntry(doneAt)],
+    logs: opts.doneAt === null ? [] : [createLogEntry(opts.doneAt ?? new Date())],
   };
   if (opts.remindAt) item.remindAt = opts.remindAt;
   if (opts.remindInterval) item.remindInterval = opts.remindInterval;
@@ -402,9 +401,8 @@ export function forInventoryItem(items: LastDoneItem[], inventoryItemId: string)
 
 export function itemSubtitle(item: LastDoneItem): string {
   const logs = item.logs ?? [];
-  if (!logs.length) return '';
-
   const remind = item.remindAt ? formatRemindStatus(item.remindAt) : null;
+  if (!logs.length) return remind || '';
   const entries = logs
     .slice(0, 5)
     .map((l) => formatRelativeDone(l.doneAt).toLowerCase());

@@ -12,6 +12,16 @@ import {
 import type { Habit, NewHabitInput } from '@/lib/habits';
 import { currentStreak, dayKey, loggedOn, shouldSyncLastDone } from '@/lib/habits';
 import {
+  classPackFromUtterance,
+  classTitleFromUtterance,
+  looksLikeClassAttendance,
+  looksLikeClassEnrollment,
+  remainingCount,
+  usedCount,
+  type ClassPack,
+  type NewClassPackInput,
+} from '@/lib/classes';
+import {
   normalizeSubscriptionCategory,
   normalizeSubscriptionCycle,
   type NewSubscriptionInput,
@@ -19,7 +29,10 @@ import {
 import { resolveAssignment } from '@/lib/people';
 import type { ChatAction, ChatAddAction, ChatAgentResponse } from '@/lib/chat/types';
 import {
+  looksLikeReminder,
   normalizeWarrantyExpiry,
+  remindAtFromUtterance,
+  reminderLabelFromUtterance,
   warrantyExpiryFromUtterance,
 } from '@/lib/dates';
 
@@ -38,6 +51,11 @@ type LastDoneApi = {
     doneAt?: string;
     inventoryItemId?: string | null;
   }) => Promise<{ label: string; inventoryItemId?: string; logs?: { doneAt: string }[] }>;
+  setReminder?: (input: {
+    label: string;
+    remindAt: string;
+    inventoryItemId?: string | null;
+  }) => Promise<{ label: string; remindAt?: string; inventoryItemId?: string }>;
 };
 
 type ExpensesApi = {
@@ -56,6 +74,14 @@ type HabitsApi = {
   checkIn: (id: string, date?: string) => Promise<Habit | null>;
   findByTitle: (title: string) => Habit | undefined;
   getById: (id: string) => Habit | undefined;
+};
+
+type ClassesApi = {
+  addPack: (input: NewClassPackInput) => Promise<ClassPack>;
+  logClass: (id: string, date?: string) => Promise<ClassPack | null>;
+  findPack: (title: string, personId?: string) => ClassPack | undefined;
+  getById: (id: string) => ClassPack | undefined;
+  newestPack?: () => ClassPack | undefined;
 };
 
 const EXPENSE_CATEGORIES: ExpenseCategory[] = [
@@ -294,6 +320,12 @@ export type ApplyActionsResult = {
   habitStreak: number | null;
   /** Distinct days marked in this turn (for natural multi-day replies). */
   habitCheckInDays: number;
+  classPackTitle: string | null;
+  classPackRemaining: number | null;
+  classPackTotal: number | null;
+  classLoggedTitle: string | null;
+  reminderLabel: string | null;
+  reminderAt: string | null;
 };
 
 /**
@@ -313,6 +345,8 @@ export async function applyChatActions(
     expenses?: ExpensesApi;
     subscriptions?: SubscriptionsApi;
     habits?: HabitsApi;
+    classes?: ClassesApi;
+    inventoryList?: { id: string; name: string }[];
   }
 ): Promise<ApplyActionsResult> {
   let lastAddedId: string | null = null;
@@ -332,11 +366,17 @@ export async function applyChatActions(
   let habitCheckInTitle: string | null = null;
   let habitStreak: number | null = null;
   const habitCheckInDateSet = new Set<string>();
-  const list = Array.isArray(actions) ? actions : [];
+  let classPackTitle: string | null = null;
+  let classPackRemaining: number | null = null;
+  let classPackTotal: number | null = null;
+  let classLoggedTitle: string | null = null;
+  let reminderLabel: string | null = null;
+  let reminderAt: string | null = null;
   const fallback = options?.fallbackFocusId ?? null;
   const seenRemove = new Set<string>();
   const lastUserText = options?.lastUserText;
   const household = options?.household ?? [];
+  const list = ensureTalkActions(Array.isArray(actions) ? actions : [], lastUserText);
 
   for (const action of list) {
     if (!action || action.type === 'none') continue;
@@ -470,6 +510,30 @@ export async function applyChatActions(
       );
       continue;
     }
+    if (action.type === 'set_reminder' && action.label?.trim() && options?.lastDone?.setReminder) {
+      const spokenAt = remindAtFromUtterance(lastUserText);
+      const remindAt =
+        (action.remindAt ? normalizeDateField(action.remindAt) : undefined) || spokenAt;
+      if (!remindAt) {
+        console.log('[LifeOS chat] skip set_reminder — no date', action.label);
+        continue;
+      }
+      const spokenLabel = reminderLabelFromUtterance(lastUserText);
+      const label = (spokenLabel || action.label).trim();
+      const inventoryItemId =
+        action.inventoryItemId?.trim() ||
+        inventoryIdFromUtterance(lastUserText, options.inventoryList);
+      const saved = await options.lastDone.setReminder({
+        label,
+        remindAt,
+        inventoryItemId: inventoryItemId ?? null,
+      });
+      reminderLabel = saved.label;
+      reminderAt = saved.remindAt || remindAt;
+      if (inventoryItemId) focusItemId = inventoryItemId;
+      console.log('[LifeOS chat] applied set_reminder', saved.label, remindAt);
+      continue;
+    }
     if (action.type === 'add_expense' && action.title?.trim() && options?.expenses) {
       const amount = parseAmount(action.amount);
       if (!Number.isFinite(amount) || amount <= 0) {
@@ -598,6 +662,79 @@ export async function applyChatActions(
         `streak ${habitStreak}`
       );
     }
+
+    if (action.type === 'add_class_pack' && action.title?.trim() && options?.classes) {
+      const spoken = classPackFromUtterance(lastUserText);
+      const title = titleCase(action.title.trim());
+      const totalRaw = spoken.total ?? action.total;
+      const totalN = Math.round(Number(totalRaw));
+      const total = Number.isFinite(totalN) && totalN > 0 ? totalN : 0;
+      const monthsRaw = spoken.months ?? action.months;
+      const months = monthsRaw != null ? Math.round(Number(monthsRaw)) : undefined;
+      const person = resolveAssignment({
+        assignedTo: action.assignedTo,
+        personId: action.personId,
+        utterance: lastUserText,
+        members: household,
+      });
+      const pack = await options.classes.addPack({
+        title,
+        total: total || undefined,
+        months: months && months > 0 ? months : undefined,
+        startsOn: action.startsOn ? normalizeDateField(String(action.startsOn)) : undefined,
+        endsOn: action.endsOn ? normalizeDateField(String(action.endsOn)) : undefined,
+        personId: person?.personId,
+        assignedTo: person?.assignedTo,
+      });
+      classPackTitle = pack.title;
+      classPackRemaining = remainingCount(pack);
+      classPackTotal = pack.total;
+      lastAssignedTo = pack.assignedTo ?? lastAssignedTo;
+      console.log(
+        '[LifeOS chat] applied add_class_pack',
+        pack.id,
+        pack.title,
+        `${pack.total} until ${pack.endsOn}`,
+        pack.assignedTo ? `→ ${pack.assignedTo}` : ''
+      );
+      continue;
+    }
+
+    if (action.type === 'log_class' && options?.classes) {
+      const person = resolveAssignment({
+        assignedTo: action.assignedTo,
+        personId: action.personId,
+        utterance: lastUserText,
+        members: household,
+      });
+      const named =
+        classTitleFromUtterance(lastUserText) || action.title?.trim() || undefined;
+      const byId = action.id ? options.classes.getById(action.id) : undefined;
+      const titled = named
+        ? options.classes.findPack(named, person?.personId)
+        : undefined;
+      const pack =
+        byId || titled || (!named ? options.classes.newestPack?.() : undefined);
+      if (!pack) {
+        console.log('[LifeOS chat] skip log_class — pack not found', action.title);
+        continue;
+      }
+      const date = action.date ? normalizeDateField(action.date) : dayKey();
+      const updated = await options.classes.logClass(pack.id, date);
+      if (updated) {
+        classLoggedTitle = updated.title;
+        classPackRemaining = remainingCount(updated);
+        classPackTotal = updated.total;
+        lastAssignedTo = updated.assignedTo ?? lastAssignedTo;
+        console.log(
+          '[LifeOS chat] applied log_class',
+          updated.id,
+          updated.title,
+          date,
+          `${usedCount(updated)}/${updated.total}`
+        );
+      }
+    }
   }
 
   if (fallback && removedIds.includes(fallback)) {
@@ -623,7 +760,59 @@ export async function applyChatActions(
     habitCheckInTitle,
     habitStreak,
     habitCheckInDays: habitCheckInDateSet.size,
+    classPackTitle,
+    classPackRemaining,
+    classPackTotal,
+    classLoggedTitle,
+    reminderLabel,
+    reminderAt,
   };
+}
+
+function inventoryIdFromUtterance(
+  text: string | undefined,
+  list?: { id: string; name: string }[]
+): string | undefined {
+  if (!text?.trim() || !list?.length) return undefined;
+  const t = text.toLowerCase();
+  const hit = list.find((i) => {
+    const name = i.name.toLowerCase();
+    if (!name) return false;
+    return t.includes(name) || (name.includes('passport') && t.includes('passport'));
+  });
+  return hit?.id;
+}
+
+function ensureTalkActions(
+  actions: ChatAction[],
+  lastUserText?: string
+): ChatAction[] {
+  const list = actions.filter((a) => a && a.type !== 'none');
+  const types = new Set(list.map((a) => a.type));
+  if (looksLikeClassEnrollment(lastUserText) && !types.has('add_class_pack')) {
+    const title = classTitleFromUtterance(lastUserText) || 'Class';
+    const spoken = classPackFromUtterance(lastUserText);
+    list.push({
+      type: 'add_class_pack',
+      title,
+      total: spoken.total,
+      months: spoken.months,
+    });
+  }
+  if (looksLikeClassAttendance(lastUserText) && !types.has('log_class')) {
+    list.push({
+      type: 'log_class',
+      title: classTitleFromUtterance(lastUserText),
+    });
+  }
+  if (looksLikeReminder(lastUserText) && !types.has('set_reminder')) {
+    const remindAt = remindAtFromUtterance(lastUserText);
+    const label = reminderLabelFromUtterance(lastUserText) || 'Reminder';
+    if (remindAt) {
+      list.push({ type: 'set_reminder', label, remindAt });
+    }
+  }
+  return list.length ? list : actions;
 }
 
 function sanitizeReply(reply: string, actions: ChatAction[]) {
@@ -637,8 +826,11 @@ function sanitizeReply(reply: string, actions: ChatAction[]) {
   if (types.includes('add_expense')) return 'Saved that expense.';
   if (types.includes('add_subscription')) return 'Added that subscription.';
   if (types.includes('habit_check_in')) return 'Got it.';
+  if (types.includes('add_class_pack')) return 'Added that class pack.';
+  if (types.includes('log_class')) return 'Logged that class.';
   if (types.includes('update_item')) return 'Updated.';
   if (types.includes('log_done')) return 'Marked that as done.';
+  if (types.includes('set_reminder')) return 'Reminder set.';
   if (types.includes('remove_item')) return 'Removed from your inventory.';
   return 'Anything else?';
 }

@@ -7,6 +7,8 @@ import {
   displayWarrantyExpiry,
   localDayKey,
   normalizeWarrantyExpiry,
+  remindAtFromUtterance,
+  reminderLabelFromUtterance,
   warrantyExpiryFromUtterance,
 } from '../dates';
 
@@ -18,6 +20,7 @@ const APP_DIR = path.resolve(
 /** Modules that must use /create next to [id] — never /new (Expo swallows "new" as an id). */
 const CREATE_MODULES = [
   'habits',
+  'classes',
   'expenses',
   'family',
   'subscriptions',
@@ -41,7 +44,7 @@ describe('create vs [id] routes', () => {
   it('app source does not link to /module/new create paths', () => {
     const roots = [APP_DIR, path.join(APP_DIR, '..', 'lib')];
     const banned =
-      /['"`]\/(habits|expenses|family|subscriptions|space)\/new(?:['"`?/]|$)/;
+      /['"`]\/(habits|classes|expenses|family|subscriptions|space)\/new(?:['"`?/]|$)/;
     const offenders: string[] = [];
 
     function walk(dir: string) {
@@ -90,5 +93,24 @@ describe('localDayKey', () => {
     } else {
       assert.equal(localDayKey(new Date(2026, 7, 13, 8, 0, 0)), '2026-08-13');
     }
+  });
+});
+
+describe('reminder speech', () => {
+  it('maps next Tuesday from Saturday 15 Aug 2026 to 18 Aug', () => {
+    const sat = new Date(2026, 7, 15);
+    assert.equal(
+      remindAtFromUtterance(
+        'Log a reminder to apply for renewed passport next Tuesday',
+        sat
+      ),
+      '2026-08-18'
+    );
+    assert.equal(
+      reminderLabelFromUtterance(
+        'Log a reminder to apply for renewed passport next Tuesday'
+      ),
+      'Apply for renewed passport'
+    );
   });
 });

@@ -43,12 +43,20 @@ export function resolvePersonMention(
       pick: (m) => /partner|husband|spouse/i.test(m.relation) || m.id.includes('partner'),
     },
     {
-      re: /\b(for|to)\s+(my\s+)?(son|boy|kid|child)\b/,
-      pick: (m) => m.role === 'child' && /son|boy/i.test(m.relation + m.name),
+      re: /\bmy\s+son\b|\b(for|to)\s+(my\s+)?(son|boy)\b|\benrolled\s+(my\s+)?(son|boy)\b/,
+      pick: (m) => {
+        const kids = members.filter((x) => x.role === 'child');
+        if (kids.length === 1) return m.id === kids[0]!.id;
+        return m.role === 'child' && /son|boy/i.test(`${m.relation} ${m.name}`);
+      },
     },
     {
-      re: /\b(for|to)\s+(my\s+)?(daughter|girl|kid|child)\b/,
-      pick: (m) => m.role === 'child',
+      re: /\bmy\s+(daughter|kid|child)\b|\b(for|to)\s+(my\s+)?(daughter|girl|kid|child)\b|\benrolled\s+(my\s+)?(daughter|girl|kid|child)\b/,
+      pick: (m) => {
+        const kids = members.filter((x) => x.role === 'child');
+        if (kids.length === 1) return m.id === kids[0]!.id;
+        return m.role === 'child';
+      },
     },
     {
       re: /\b(for|to)\s+(my\s+)?(dog|pet)\b/,

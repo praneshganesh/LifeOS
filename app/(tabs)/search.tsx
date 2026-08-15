@@ -19,6 +19,7 @@ import { useInventory } from '@/lib/InventoryContext';
 import { useSpaces } from '@/lib/SpacesContext';
 import { useExpenses } from '@/lib/ExpensesContext';
 import { useHabits } from '@/lib/HabitsContext';
+import { useClasses } from '@/lib/ClassesContext';
 import { useHousehold } from '@/lib/HouseholdContext';
 import { useSubscriptions } from '@/lib/SubscriptionsContext';
 import { useLastDone } from '@/lib/LastDoneContext';
@@ -37,6 +38,7 @@ export default function SearchScreen() {
   const { spaces } = useSpaces();
   const { expenses } = useExpenses();
   const { habits } = useHabits();
+  const { packs: classPacks } = useClasses();
   const { members } = useHousehold();
   const { subscriptions } = useSubscriptions();
   const { items: lastDone } = useLastDone();
@@ -70,6 +72,7 @@ export default function SearchScreen() {
         spaceNameById,
         expenses,
         habits,
+        classPacks,
         people: members,
         subscriptions,
         lastDone,
@@ -81,6 +84,7 @@ export default function SearchScreen() {
       spaceNameById,
       expenses,
       habits,
+      classPacks,
       members,
       subscriptions,
       lastDone,
@@ -94,6 +98,7 @@ export default function SearchScreen() {
     { label: 'Expenses', hits: result.expenses },
     { label: 'Subscriptions', hits: result.subscriptions },
     { label: 'Habits', hits: result.habits },
+    { label: 'Classes', hits: result.classes },
     { label: 'People', hits: result.people },
     { label: 'Maintenance', hits: result.maintenance },
   ].filter((s) => s.hits.length > 0);
@@ -111,7 +116,7 @@ export default function SearchScreen() {
       >
         <Text variant="title">Search</Text>
         <Text variant="body" style={styles.lead}>
-          Things, docs, spend, habits, people — on this device.
+          Things, docs, spend, habits, classes, people — on this device.
         </Text>
 
         <View style={styles.inputCard}>

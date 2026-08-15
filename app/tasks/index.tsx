@@ -7,6 +7,7 @@ import { Text } from '@/components/ui/Text';
 import { useInventory } from '@/lib/InventoryContext';
 import { useLastDone } from '@/lib/LastDoneContext';
 import { useSubscriptions } from '@/lib/SubscriptionsContext';
+import { useClasses } from '@/lib/ClassesContext';
 import { buildAttentionItems } from '@/lib/attention';
 import { colors } from '@/constants/theme';
 
@@ -25,14 +26,15 @@ export default function TasksScreen() {
   const { items } = useInventory();
   const { items: lastDone } = useLastDone();
   const { subscriptions } = useSubscriptions();
+  const { packs: classPacks } = useClasses();
   const [filter, setFilter] = useState('open');
 
   const queue = useMemo(
     () =>
-      buildAttentionItems(items, lastDone, subscriptions).filter(
+      buildAttentionItems(items, lastDone, subscriptions, classPacks).filter(
         (a) => a.urgency === 'urgent' || a.urgency === 'soon'
       ),
-    [items, lastDone, subscriptions]
+    [items, lastDone, subscriptions, classPacks]
   );
 
   const list = useMemo(() => {

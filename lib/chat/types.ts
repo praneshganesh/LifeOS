@@ -15,6 +15,7 @@ export type InventorySummaryItem = {
   purchasedFrom?: string;
   purchaseDate?: string;
   warrantyExpiry?: string;
+  expiryDate?: string;
   warrantyActive?: boolean;
   serial?: string;
   assignedTo?: string;
@@ -91,6 +92,15 @@ export type ChatLogDoneAction = {
   doneAt?: string;
 };
 
+/** One-off future reminder (Last Done remindAt) — not a completed activity. */
+export type ChatSetReminderAction = {
+  type: 'set_reminder';
+  label: string;
+  /** YYYY-MM-DD */
+  remindAt: string;
+  inventoryItemId?: string;
+};
+
 /** Log a spend entry (not a durable Thing). */
 export type ChatAddExpenseAction = {
   type: 'add_expense';
@@ -135,6 +145,28 @@ export type ChatHabitCheckInAction = {
   inventoryItemId?: string;
 };
 
+/** Enroll a finite class pack (24 sessions in 3 months). */
+export type ChatAddClassPackAction = {
+  type: 'add_class_pack';
+  title: string;
+  total?: number | string;
+  months?: number | string;
+  startsOn?: string;
+  endsOn?: string;
+  assignedTo?: string;
+  personId?: string;
+};
+
+/** Log attendance against an existing class pack. */
+export type ChatLogClassAction = {
+  type: 'log_class';
+  title?: string;
+  id?: string;
+  date?: string;
+  assignedTo?: string;
+  personId?: string;
+};
+
 export type ChatNoneAction = { type: 'none' };
 
 export type ChatAction =
@@ -143,9 +175,12 @@ export type ChatAction =
   | ChatRemoveAction
   | ChatOpenAction
   | ChatLogDoneAction
+  | ChatSetReminderAction
   | ChatAddExpenseAction
   | ChatAddSubscriptionAction
   | ChatHabitCheckInAction
+  | ChatAddClassPackAction
+  | ChatLogClassAction
   | ChatNoneAction;
 
 export type ChatAgentResponse = {

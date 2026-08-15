@@ -20,6 +20,8 @@ import {
   tokenOk,
 } from './guard.mjs';
 import { repairHeardBrand } from './brands.mjs';
+import { ensureClassActions, classTitleFromUtterance, looksLikeClassAttendance } from './classes.mjs';
+import { ensureReminderActions } from './reminders.mjs';
 
 const PORT = Number(process.env.PORT || process.env.CHAT_API_PORT || 8787);
 const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
@@ -74,28 +76,36 @@ On add_item for appliances/electronics: include "manualUrl" when you know a real
 
 Facts (critical):
 - Answer ONLY from Inventory + LastDone + Expenses + Habits + Subscriptions JSON in this request.
-- Inventory fields may include price, purchasedFrom, purchaseDate, addedAt, warrantyExpiry, serial, assignedTo, recentEvents.
+- Inventory fields may include price, purchasedFrom, purchaseDate, addedAt, warrantyExpiry, expiryDate, serial, assignedTo, room, recentEvents.
 - Expenses fields: title, amount, currency, category, date, merchant.
 - Habits fields: title, category, streak, doneToday, rate30.
+- Class packs fields: title, assignedTo, total, used, remaining, startsOn, endsOn.
 - Subscriptions fields: title, amount, currency, cycle, renewsOn, category, provider.
-- If a field is missing, say it isn’t recorded — NEVER invent dates, prices, stores, warranty lengths, serials, service history, spend totals, streaks, or renewals.
+- If a field is missing, say it isn’t recorded — NEVER invent dates, prices, stores, warranty lengths, serials, service history, spend totals, streaks, remaining classes, or renewals.
 - Spend questions ("how much did I spend", "food this month") → sum/filter Expenses only; if empty, say nothing is logged yet.
 - Recurring / "what do I pay for Netflix" / monthly subscriptions → Subscriptions JSON only.
 - Habit streak / "did I walk" → Habits JSON only.
+- Class packs / "how many skating classes left" / remaining sessions → Classes JSON only.
 - Optional insight: if they ask about unnecessary spend, compare recent Expenses to owned Inventory cautiously — never invent.
 - "when did I add it" → use addedAt (LifeOS add date), not a made-up purchase date.
 - "where did I buy it" → purchasedFrom only.
-- "how long is the warranty" / expiry → warrantyExpiry only.
+- "where is X" → room only.
+- "how long is the warranty" → warrantyExpiry only.
+- passport / document expiry → expiryDate, else warrantyExpiry. Never invent.
 - "when did I last service/maintain X" → LastDone rows with matching itemId/itemName, or recentEvents on the item; if neither matches, say you don’t have a service log.
 - User says they serviced/maintained/descaled something → log_done { label, inventoryItemId?, doneAt? } (prefer inventory id from Inventory JSON).
+- reminder / "remind me" / "log a reminder" → set_reminder { label, remindAt, inventoryItemId? }. remindAt YYYY-MM-DD ("next Tuesday" → that date). Not log_done. Link Inventory id when they name a Thing (passport).
 
 Actions:
 - durable goods (laptop, machine, headphones, passport) → add_item (name, brand?, room?, category?, price?, purchasedFrom?, warrantyExpiry?, manualUrl?, assignedTo?, personId?). warrantyExpiry YYYY-MM-DD; year-only "until 2028" → 2028-12-31. Omit condition unless they said used/refurbished/etc — never invent Good. "I got a new X" is not a condition.
 - spent/paid/coffee run/groceries/bill (one-off consumable spend, not a Thing) → add_expense { title, amount, currency?, category?, date?, merchant? } categories: food|transport|home|shopping|health|travel|bills|entertainment|other
 - recurring subscription ("I pay for Netflix", "Spotify is AED 22/month") → add_subscription { title, amount, currency?, cycle?, renewsOn?, category?, provider? } cycle: weekly|monthly|yearly; categories: streaming|software|fitness|cloud|news|other
 - habit check-in ("I walked", "mark gym done", "did meditation") → habit_check_in { title, date?, why?, createIfMissing?, inventoryItemId? } (default createIfMissing true; inventoryItemId links a Thing and logs Last Done)
+- enrolled in a class pack ("I enrolled for swimming", "24 skating classes in 3 months") → add_class_pack { title, total?, months?, endsOn?, assignedTo?, personId? }. Create even if they omit the count. ASR "12th classes" → total 12. Not a habit. Not a lookup.
+- attended a class ("I attended", "went to skating") → log_class { title?, id?, date? } only if Classes JSON has a matching pack (or one pack). If Classes JSON is empty, do not log_class — say there isn’t a pack yet. Never invent a pack from attendance.
 - refine Thing (store/price/warranty/date/serial/name) → update_item { id, patch } (patch may include purchaseDate, warrantyExpiry, serial, purchasedFrom, price). If user gives price → "AED 800" for dirhams; Sharafdg→Sharaf DG.
 - service/maintain/descale/filter change → log_done { label, inventoryItemId?, doneAt? }
+- reminder ("remind me next Tuesday", "log a reminder to renew passport") → set_reminder { label, remindAt, inventoryItemId? }. remindAt YYYY-MM-DD. Do not refuse — LifeOS stores this on Last Done.
 - delete/sold → remove_item { id } (reply with count). "Did you delete?" → none only, do not remove again.
 - show/open item → open_item { id } (use focus id; never omit id)
 - questions → none
@@ -178,8 +188,11 @@ function sanitizeReply(reply, actions) {
   if (types.includes('add_expense')) return 'Logged that expense.';
   if (types.includes('add_subscription')) return 'Added that subscription.';
   if (types.includes('habit_check_in')) return 'Checked in.';
+  if (types.includes('add_class_pack')) return 'Added that class pack.';
+  if (types.includes('log_class')) return 'Logged that class.';
   if (types.includes('update_item')) return 'Updated.';
   if (types.includes('log_done')) return 'Logged that.';
+  if (types.includes('set_reminder')) return 'Reminder set.';
   if (types.includes('remove_item')) return 'Removed from your inventory.';
   return 'Anything else?';
 }
@@ -213,6 +226,21 @@ function alignReplyWithActions(reply, actions) {
   }
   const habit = list.find((a) => a?.type === 'habit_check_in' && a.title);
   if (habit) return `Checked in ${habit.title}.`;
+  const pack = list.find((a) => a?.type === 'add_class_pack' && a.title);
+  if (pack) {
+    const bits = [`Added ${pack.title}`];
+    if (pack.assignedTo) bits.push(`for ${pack.assignedTo}`);
+    if (pack.total) bits.push(`${pack.total} classes`);
+    return `${bits.join(' — ')}.`;
+  }
+  const logged = list.find((a) => a?.type === 'log_class');
+  if (logged) return logged.title ? `Logged ${logged.title}.` : 'Logged that class.';
+  const reminder = list.find((a) => a?.type === 'set_reminder' && a.label);
+  if (reminder) {
+    return reminder.remindAt
+      ? `Reminder set: ${reminder.label} — ${reminder.remindAt}.`
+      : `Reminder set: ${reminder.label}.`;
+  }
   const removes = list.filter((a) => a?.type === 'remove_item' && a.id);
   if (removes.length === 1) return 'Deleted 1 item from your inventory.';
   if (removes.length > 1) {
@@ -257,14 +285,19 @@ function statedCondition(raw, utterance) {
   return c;
 }
 
-function repairActions(actions, { focusItemId, inventorySummary, household, lastUserText }) {
+function repairActions(actions, { focusItemId, inventorySummary, household, lastUserText, classPacksSummary }) {
   const ids = inventoryIds(inventorySummary);
   const newestId =
     typeof inventorySummary?.[0]?.id === 'string' ? inventorySummary[0].id : null;
   const focus = focusItemId || newestId;
   const people = Array.isArray(household) ? household : [];
+  const repaired = ensureReminderActions(
+    ensureClassActions(actions, lastUserText, classPacksSummary),
+    lastUserText,
+    inventorySummary
+  );
 
-  return (Array.isArray(actions) ? actions : []).map((a) => {
+  return repaired.map((a) => {
     if (!a) return a;
     if (a.type === 'add_item') {
       const next = repairHeardBrand({
@@ -297,6 +330,23 @@ function repairActions(actions, { focusItemId, inventorySummary, household, last
       }
       return { ...merged, assignedTo: hit.name, personId: hit.id };
     }
+    if (a.type === 'add_class_pack' || a.type === 'log_class') {
+      const assigned = String(a.assignedTo || '').trim();
+      const personId = String(a.personId || '').trim();
+      const hit = people.find(
+        (p) =>
+          (personId && p.id === personId) ||
+          (assigned &&
+            String(p.name || '').toLowerCase() === assigned.toLowerCase())
+      );
+      if (!hit) {
+        const next = { ...a };
+        delete next.assignedTo;
+        delete next.personId;
+        return next;
+      }
+      return { ...a, assignedTo: hit.name, personId: hit.id };
+    }
     if (a.type === 'open_item') {
       let id = typeof a.id === 'string' ? a.id.trim() : '';
       if (id === 'FOCUS_ITEM_ID') id = focus || '';
@@ -327,6 +377,7 @@ function slimInventory(summary) {
     keep('purchaseDate');
     keep('addedAt');
     keep('warrantyExpiry');
+    keep('expiryDate');
     keep('serial');
     keep('assignedTo');
     if (typeof i.warrantyActive === 'boolean' && row.warrantyExpiry) {
@@ -382,6 +433,30 @@ function slimHabits(summary) {
       doneToday: Boolean(h.doneToday),
       rate30: Number(h.rate30) || 0,
     }));
+}
+
+function slimClassPacks(summary) {
+  return (Array.isArray(summary) ? summary : [])
+    .filter((p) => p && p.title)
+    .slice(0, 20)
+    .map((p) => {
+      const total = Number(p.total) || 0;
+      const used = Number(p.used) || 0;
+      const row = {
+        id: p.id,
+        title: p.title,
+        total,
+        used,
+        startsOn: p.startsOn,
+        endsOn: p.endsOn,
+      };
+      if (total > 0) {
+        row.remaining =
+          p.remaining != null ? Number(p.remaining) : Math.max(0, total - used);
+      }
+      if (p.assignedTo) row.assignedTo = p.assignedTo;
+      return row;
+    });
 }
 
 function slimSubscriptions(summary) {
@@ -477,6 +552,7 @@ const server = createServer(async (req, res) => {
   const lastDoneSummary = slimLastDone(body.lastDoneSummary);
   const expensesSummary = slimExpenses(body.expensesSummary);
   const habitsSummary = slimHabits(body.habitsSummary);
+  const classPacksSummary = slimClassPacks(body.classPacksSummary);
   const subscriptionsSummary = slimSubscriptions(body.subscriptionsSummary);
   const household = Array.isArray(body.household) ? body.household.slice(0, 12) : [];
   const focusItemId =
@@ -498,7 +574,7 @@ const server = createServer(async (req, res) => {
     ...FEW_SHOT,
     {
       role: 'system',
-      content: `${focusLine}\nHousehold people (use id + name for assignedTo/personId):\n${JSON.stringify(household)}\nInventory (newest first):\n${JSON.stringify(inventorySummary)}\nLastDone activities (maintenance/service logs):\n${JSON.stringify(lastDoneSummary)}\nExpenses (newest first):\n${JSON.stringify(expensesSummary)}\nSubscriptions:\n${JSON.stringify(subscriptionsSummary)}\nHabits:\n${JSON.stringify(habitsSummary)}`,
+      content: `${focusLine}\nHousehold people (use id + name for assignedTo/personId):\n${JSON.stringify(household)}\nInventory (newest first):\n${JSON.stringify(inventorySummary)}\nLastDone activities (maintenance/service logs):\n${JSON.stringify(lastDoneSummary)}\nExpenses (newest first):\n${JSON.stringify(expensesSummary)}\nSubscriptions:\n${JSON.stringify(subscriptionsSummary)}\nHabits:\n${JSON.stringify(habitsSummary)}\nClasses (session packs):\n${JSON.stringify(classPacksSummary)}`,
     },
     ...messages.map((m) => ({
       role: m.role === 'assistant' ? 'assistant' : 'user',
@@ -550,13 +626,24 @@ const server = createServer(async (req, res) => {
 
     if (!Array.isArray(parsed.actions)) parsed.actions = [{ type: 'none' }];
     const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+    const lastUserText = String(lastUser?.content ?? lastUser?.text ?? '');
     parsed.actions = repairActions(parsed.actions, {
       focusItemId,
       inventorySummary,
       household,
-      lastUserText: String(lastUser?.content ?? lastUser?.text ?? ''),
+      lastUserText,
+      classPacksSummary,
     });
     parsed.reply = alignReplyWithActions(parsed.reply, parsed.actions);
+    if (
+      looksLikeClassAttendance(lastUserText) &&
+      !parsed.actions.some((a) => a?.type === 'log_class' || a?.type === 'add_class_pack')
+    ) {
+      const title = classTitleFromUtterance(lastUserText);
+      parsed.reply = title
+        ? `There's no ${title} pack yet. Enroll first, then I can log attendance.`
+        : `There's no class pack to log against yet.`;
+    }
 
     const cost = estimateCostUsd(data?.usage);
     sessionSpendUsd += cost;

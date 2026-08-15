@@ -4,6 +4,8 @@ import type { Expense } from '@/lib/expenses';
 import { formatAmount, labelForCategory } from '@/lib/expenses';
 import type { Habit } from '@/lib/habits';
 import { HABIT_CATEGORIES } from '@/lib/habits';
+import type { ClassPack } from '@/lib/classes';
+import { remainingCount, usedCount } from '@/lib/classes';
 import type { HouseholdMember } from '@/lib/household';
 import type { ManagedSpace } from '@/lib/SpacesContext';
 import type { Subscription } from '@/lib/subscriptions';
@@ -20,6 +22,7 @@ export type SearchHitKind =
   | 'document'
   | 'expense'
   | 'habit'
+  | 'class'
   | 'person'
   | 'subscription'
   | 'maintenance';
@@ -52,6 +55,7 @@ export type CrossSearchInput = {
   spaceNameById: Record<string, string>;
   expenses: Expense[];
   habits: Habit[];
+  classPacks?: ClassPack[];
   people: HouseholdMember[];
   subscriptions?: Subscription[];
   lastDone?: LastDoneItem[];
@@ -63,6 +67,7 @@ export type CrossSearchResult = {
   documents: SearchHit[];
   expenses: SearchHit[];
   habits: SearchHit[];
+  classes: SearchHit[];
   people: SearchHit[];
   subscriptions: SearchHit[];
   maintenance: SearchHit[];
@@ -80,6 +85,7 @@ export function crossSearch(input: CrossSearchInput): CrossSearchResult {
     documents: [],
     expenses: [],
     habits: [],
+    classes: [],
     people: [],
     subscriptions: [],
     maintenance: [],
@@ -164,6 +170,22 @@ export function crossSearch(input: CrossSearchInput): CrossSearchResult {
       icon: 'check' as Icon3DName,
     }));
 
+  const classes: SearchHit[] = (input.classPacks || [])
+    .filter((p) => anyMatch(q, [p.title, p.assignedTo, p.notes]))
+    .map((p) => ({
+      kind: 'class' as const,
+      id: p.id,
+      title: p.title,
+      subtitle: [
+        p.assignedTo,
+        `${remainingCount(p) == null ? `${usedCount(p)} logged` : `${remainingCount(p)} of ${p.total} left`}`,
+      ]
+        .filter(Boolean)
+        .join(' · '),
+      href: `/classes/${p.id}`,
+      icon: 'today' as Icon3DName,
+    }));
+
   const people: SearchHit[] = input.people
     .filter((p) => anyMatch(q, [p.name, p.relation, p.role, p.medicalNotes]))
     .map((p) => ({
@@ -213,6 +235,7 @@ export function crossSearch(input: CrossSearchInput): CrossSearchResult {
     documents.length +
     expenses.length +
     habits.length +
+    classes.length +
     people.length +
     subscriptions.length +
     maintenance.length;
@@ -223,6 +246,7 @@ export function crossSearch(input: CrossSearchInput): CrossSearchResult {
     documents,
     expenses,
     habits,
+    classes,
     people,
     subscriptions,
     maintenance,
@@ -245,6 +269,7 @@ function suggestChips(input: CrossSearchInput): string[] {
     if (word) chips.push(word);
   }
   if (input.habits[0]) chips.push(input.habits[0].title);
+  if (input.classPacks?.[0]) chips.push(input.classPacks[0].title);
   if (input.people[0]) {
     const word = input.people[0].name.split(/\s+/)[0];
     if (word) chips.push(word);

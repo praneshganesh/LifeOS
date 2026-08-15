@@ -88,7 +88,7 @@ export const recentSearches: string[] = [];
 
 export const aiSuggestions = [
   'Do I still have warranty on my TV?',
-  'Find my passport.',
+  'When does my passport expire?',
   'What did I spend on food?',
   'When did I last service the coffee machine?',
 ];

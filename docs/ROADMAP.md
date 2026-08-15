@@ -89,6 +89,7 @@ Status key: `todo` · `doing` · `done` · `later`
 | M6 | Insurance policies | done |
 | M7 | Tasks + notifications inbox | done |
 | M8 | Reports from real data | done |
+| M9 | Class packs (finite sessions in a window, e.g. 24 skating classes / 3 months) | done |
 
 ---
 

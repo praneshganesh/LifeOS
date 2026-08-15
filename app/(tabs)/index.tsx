@@ -21,6 +21,7 @@ import { useLastDone } from '@/lib/LastDoneContext';
 import { useHousehold } from '@/lib/HouseholdContext';
 import { useExpenses } from '@/lib/ExpensesContext';
 import { useHabits } from '@/lib/HabitsContext';
+import { useClasses } from '@/lib/ClassesContext';
 import { useSubscriptions } from '@/lib/SubscriptionsContext';
 import {
   HABIT_CATEGORIES,
@@ -30,6 +31,7 @@ import {
   loggedOn,
 } from '@/lib/habits';
 import { getLastDoneAt } from '@/lib/lastDone';
+import { remainingCount, usedCount } from '@/lib/classes';
 import { ChatAgentError, runChatAgent } from '@/lib/chat/agent';
 import { applyChatActions } from '@/lib/chat/applyActions';
 import { composeAppliedReply } from '@/lib/chat/composeReply';
@@ -53,9 +55,9 @@ const DOCK_CLEARANCE = 88;
 
 const STARTER_PROMPTS = [
   'I got a coffee machine',
-  'I bought headphones',
-  'What’s in my kitchen?',
-  'Where’s my passport?',
+  'I walked today',
+  'I enrolled for swimming',
+  'When does my passport expire?',
 ];
 
 export default function ChatScreen() {
@@ -66,10 +68,11 @@ export default function ChatScreen() {
   const focusItemIdRef = useRef<string | null>(focusItemId);
   focusItemIdRef.current = focusItemId;
   const { items, addItem, updateItem, removeItem, getById } = useInventory();
-  const { items: lastDoneItems, logDone } = useLastDone();
+  const { items: lastDoneItems, logDone, setReminder } = useLastDone();
   const { members: householdMembers } = useHousehold();
   const { expenses, addExpense } = useExpenses();
   const { habits, addHabit, checkIn, findByTitle, getById: getHabitById, updateHabit } = useHabits();
+  const { packs: classPacks, addPack, logClass, findPack, getById: getClassPack, newestPack } = useClasses();
   const { subscriptions, addSubscription } = useSubscriptions();
   const householdPeople = useMemo(
     () => getHouseholdPeople(householdMembers),
@@ -100,6 +103,22 @@ export default function ChatScreen() {
       })),
     [habits]
   );
+  const classPackSummary = useMemo(
+    () =>
+      [...classPacks]
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .map((p) => ({
+        id: p.id,
+        title: p.title,
+        assignedTo: p.assignedTo,
+        total: p.total,
+        used: usedCount(p),
+        remaining: remainingCount(p) ?? undefined,
+        startsOn: p.startsOn,
+        endsOn: p.endsOn,
+      })),
+    [classPacks]
+  );
   const subscriptionSummary = useMemo(
     () =>
       subscriptions.map((s) => ({
@@ -120,7 +139,7 @@ export default function ChatScreen() {
     {
       id: 'welcome',
       role: 'assistant',
-      text: `${greetingForNow()}. Tell me what you got, or ask about something you own — I’ll keep the conversation going.`,
+      text: `${greetingForNow()}. Add a thing, check in a habit, log a class, or ask about a document.`,
     },
   ]);
 
@@ -136,6 +155,7 @@ export default function ChatScreen() {
         purchasedFrom: i.purchasedFrom,
         purchaseDate: i.purchaseDate,
         warrantyExpiry: i.warrantyExpiry,
+        expiryDate: i.expiryDate,
         warrantyActive: i.warrantyActive,
         serial: i.serial,
         assignedTo: i.assignedTo,
@@ -160,8 +180,8 @@ export default function ChatScreen() {
   );
 
   const topAttention = useMemo(() => {
-    return dueSoonForHome(items, lastDoneItems, subscriptions);
-  }, [items, lastDoneItems, subscriptions]);
+    return dueSoonForHome(items, lastDoneItems, subscriptions, classPacks);
+  }, [items, lastDoneItems, subscriptions, classPacks]);
 
   async function ask(q: string) {
     const question = q.trim();
@@ -196,6 +216,7 @@ export default function ChatScreen() {
               lastDone,
               expenses: expenseSummary,
               habits: habitSummary,
+              classPacks: classPackSummary,
               subscriptions: subscriptionSummary,
               session: { focusItemId: focusItemIdRef.current },
               household: householdPeople,
@@ -208,7 +229,7 @@ export default function ChatScreen() {
           fallbackFocusId: focusItemIdRef.current || newestId,
           resolveItem: (id) => getById(id),
           lastUserText: question,
-          lastDone: { logDone },
+          lastDone: { logDone, setReminder },
           household: householdMembers,
           expenses: { addExpense },
           subscriptions: { addSubscription },
@@ -219,6 +240,14 @@ export default function ChatScreen() {
             findByTitle,
             getById: getHabitById,
           },
+          classes: {
+            addPack,
+            logClass,
+            findPack,
+            getById: getClassPack,
+            newestPack,
+          },
+          inventoryList: items.map((i) => ({ id: i.id, name: i.name })),
         }
       );
       if (applied.clearedFocus) setFocusItemId(null);
@@ -240,6 +269,12 @@ export default function ChatScreen() {
         habitCheckInTitle: applied.habitCheckInTitle,
         habitStreak: applied.habitStreak,
         habitCheckInDays: applied.habitCheckInDays,
+        classPackTitle: applied.classPackTitle,
+        classPackRemaining: applied.classPackRemaining,
+        classPackTotal: applied.classPackTotal,
+        classLoggedTitle: applied.classLoggedTitle,
+        reminderLabel: applied.reminderLabel,
+        reminderAt: applied.reminderAt,
       });
 
       const openId = resolveOpenItemId({
@@ -284,7 +319,7 @@ export default function ChatScreen() {
   return (
     <Screen>
       <KeyboardAvoidingView
-        style={{ flex: 1 }}
+        style={{ flex: 1, width: '100%' }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={8}
       >
@@ -331,6 +366,7 @@ export default function ChatScreen() {
           ref={listRef}
           data={messages}
           keyExtractor={(m) => m.id}
+          style={styles.list}
           contentContainerStyle={styles.thread}
           showsVerticalScrollIndicator={false}
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
@@ -387,27 +423,34 @@ export default function ChatScreen() {
           renderItem={({ item: m }) => (
             <View
               style={[
-                styles.bubble,
-                m.role === 'user' ? styles.bubbleUser : styles.bubbleAssistant,
+                styles.bubbleRow,
+                m.role === 'user' ? styles.bubbleRowUser : styles.bubbleRowAssistant,
               ]}
             >
-              <Text
+              <View
                 style={[
-                  styles.bubbleText,
-                  m.role === 'user' && { color: colors.forestOn },
+                  styles.bubble,
+                  m.role === 'user' ? styles.bubbleUser : styles.bubbleAssistant,
                 ]}
               >
-                {m.text}
-              </Text>
-              {m.itemId ? (
-                <Pressable
-                  onPress={() => router.push(`/asset/${m.itemId}` as Href)}
-                  style={styles.openItem}
-                  hitSlop={6}
+                <Text
+                  style={[
+                    styles.bubbleText,
+                    m.role === 'user' && { color: colors.forestOn },
+                  ]}
                 >
-                  <Text style={styles.openItemText}>Open item</Text>
-                </Pressable>
-              ) : null}
+                  {m.text}
+                </Text>
+                {m.itemId ? (
+                  <Pressable
+                    onPress={() => router.push(`/asset/${m.itemId}` as Href)}
+                    style={styles.openItem}
+                    hitSlop={6}
+                  >
+                    <Text style={styles.openItemText}>Open item</Text>
+                  </Pressable>
+                ) : null}
+              </View>
             </View>
           )}
         />
@@ -451,7 +494,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    paddingHorizontal: spacing.xl,
+    paddingHorizontal: spacing.lg,
     paddingBottom: spacing.sm,
   },
   brand: {
@@ -525,25 +568,39 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.mute,
   },
+  list: {
+    flex: 1,
+    width: '100%',
+  },
   thread: {
-    paddingHorizontal: spacing.xl,
+    paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     paddingBottom: spacing.lg,
     flexGrow: 1,
+    width: '100%',
+    alignSelf: 'stretch',
+  },
+  bubbleRow: {
+    width: '100%',
+    marginBottom: spacing.sm,
+  },
+  bubbleRowUser: {
+    alignItems: 'flex-end',
+  },
+  bubbleRowAssistant: {
+    alignItems: 'stretch',
   },
   bubble: {
-    maxWidth: '88%',
     paddingHorizontal: spacing.md,
     paddingVertical: 12,
     borderRadius: radius.md,
-    marginBottom: spacing.sm,
   },
   bubbleUser: {
-    alignSelf: 'flex-end',
+    maxWidth: '88%',
     backgroundColor: colors.forest,
   },
   bubbleAssistant: {
-    alignSelf: 'flex-start',
+    width: '100%',
     backgroundColor: colors.white,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.line,
@@ -580,8 +637,12 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
     marginTop: spacing.lg,
+    width: '100%',
   },
   chip: {
+    flexGrow: 1,
+    flexBasis: '46%',
+    justifyContent: 'center',
     borderRadius: radius.full,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -598,7 +659,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    paddingHorizontal: spacing.xl,
+    paddingHorizontal: spacing.lg,
     paddingTop: 10,
   },
   input: {

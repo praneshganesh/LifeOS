@@ -31,6 +31,7 @@ import { useLastDone } from '@/lib/LastDoneContext';
 import { useHousehold } from '@/lib/HouseholdContext';
 import { useExpenses } from '@/lib/ExpensesContext';
 import { useHabits } from '@/lib/HabitsContext';
+import { useClasses } from '@/lib/ClassesContext';
 import { useSubscriptions } from '@/lib/SubscriptionsContext';
 import {
   HABIT_CATEGORIES,
@@ -40,6 +41,7 @@ import {
   loggedOn,
 } from '@/lib/habits';
 import { getLastDoneAt } from '@/lib/lastDone';
+import { remainingCount, usedCount } from '@/lib/classes';
 import { useTalkOverlay } from '@/lib/TalkOverlayContext';
 import { ChatAgentError, runChatAgent } from '@/lib/chat/agent';
 import { applyChatActions } from '@/lib/chat/applyActions';
@@ -168,10 +170,11 @@ export function TalkOrb() {
   const router = useRouter();
   const pathname = usePathname();
   const { items, addItem, updateItem, removeItem, getById } = useInventory();
-  const { items: lastDoneItems, logDone } = useLastDone();
+  const { items: lastDoneItems, logDone, setReminder } = useLastDone();
   const { members: householdMembers } = useHousehold();
   const { expenses, addExpense } = useExpenses();
   const { habits, addHabit, checkIn, findByTitle, getById: getHabitById, updateHabit } = useHabits();
+  const { packs: classPacks, addPack, logClass, findPack, getById: getClassPack, newestPack } = useClasses();
   const { subscriptions, addSubscription } = useSubscriptions();
   const householdPeople = useMemo(
     () => getHouseholdPeople(householdMembers),
@@ -202,6 +205,22 @@ export function TalkOrb() {
       })),
     [habits]
   );
+  const classPackSummary = useMemo(
+    () =>
+      [...classPacks]
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .map((p) => ({
+        id: p.id,
+        title: p.title,
+        assignedTo: p.assignedTo,
+        total: p.total,
+        used: usedCount(p),
+        remaining: remainingCount(p) ?? undefined,
+        startsOn: p.startsOn,
+        endsOn: p.endsOn,
+      })),
+    [classPacks]
+  );
   const subscriptionSummary = useMemo(
     () =>
       subscriptions.map((s) => ({
@@ -228,6 +247,7 @@ export function TalkOrb() {
         purchasedFrom: i.purchasedFrom,
         purchaseDate: i.purchaseDate,
         warrantyExpiry: i.warrantyExpiry,
+        expiryDate: i.expiryDate,
         warrantyActive: i.warrantyActive,
         serial: i.serial,
         assignedTo: i.assignedTo,
@@ -272,6 +292,8 @@ export function TalkOrb() {
   expensesRef.current = expenseSummary;
   const habitsRef = useRef(habitSummary);
   habitsRef.current = habitSummary;
+  const classPacksRef = useRef(classPackSummary);
+  classPacksRef.current = classPackSummary;
   const subscriptionsRef = useRef(subscriptionSummary);
   subscriptionsRef.current = subscriptionSummary;
   const focusItemIdRef = useRef<string | null>(focusItemId);
@@ -460,6 +482,7 @@ export function TalkOrb() {
           lastDone: lastDoneRef.current,
           expenses: expensesRef.current,
           habits: habitsRef.current,
+          classPacks: classPacksRef.current,
           subscriptions: subscriptionsRef.current,
           session: { focusItemId: focusItemIdRef.current },
           household: householdPeople,
@@ -473,7 +496,7 @@ export function TalkOrb() {
             fallbackFocusId: focusItemIdRef.current || newestId,
             resolveItem: (id) => getById(id),
             lastUserText: text,
-            lastDone: { logDone },
+            lastDone: { logDone, setReminder },
             household: householdMembers,
             expenses: { addExpense },
             subscriptions: { addSubscription },
@@ -484,6 +507,14 @@ export function TalkOrb() {
               findByTitle,
               getById: getHabitById,
             },
+            classes: {
+              addPack,
+              logClass,
+              findPack,
+              getById: getClassPack,
+              newestPack,
+            },
+            inventoryList: items.map((i) => ({ id: i.id, name: i.name })),
           }
         );
         if (applied.clearedFocus) setFocusItemId(null);
@@ -504,6 +535,12 @@ export function TalkOrb() {
           habitCheckInTitle: applied.habitCheckInTitle,
           habitStreak: applied.habitStreak,
           habitCheckInDays: applied.habitCheckInDays,
+          classPackTitle: applied.classPackTitle,
+          classPackRemaining: applied.classPackRemaining,
+          classPackTotal: applied.classPackTotal,
+          classLoggedTitle: applied.classLoggedTitle,
+          reminderLabel: applied.reminderLabel,
+          reminderAt: applied.reminderAt,
         });
         console.log(
           '[Talk] ← actions',

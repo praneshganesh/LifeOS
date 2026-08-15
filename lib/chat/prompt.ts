@@ -1,7 +1,7 @@
 import { localDayKey } from '@/lib/dates';
 
 /** Shared LifeOS chat system rules (mirrored on the server). */
-export const CHAT_SYSTEM_BRIEF = `LifeOS assistant. Conversational, concise. Never invent purchase dates, prices, stores, warranty, serials, service history, or spend totals — if a field is missing, say it isn’t recorded.`;
+export const CHAT_SYSTEM_BRIEF = `LifeOS assistant. Conversational, concise. Never invent purchase dates, prices, stores, warranty, serials, service history, spend totals, or remaining class counts — if a field is missing, say it isn’t recorded.`;
 
 function meaningful(value?: string | null) {
   if (!value?.trim()) return false;
@@ -29,6 +29,7 @@ export type InventorySummaryInput = {
   purchasedFrom?: string;
   purchaseDate?: string;
   warrantyExpiry?: string;
+  expiryDate?: string;
   warrantyActive?: boolean;
   serial?: string;
   assignedTo?: string;
@@ -81,6 +82,8 @@ export function buildInventorySummary(
       row.warrantyExpiry = warranty;
       if (typeof i.warrantyActive === 'boolean') row.warrantyActive = i.warrantyActive;
     }
+    const expires = dayOnly(i.expiryDate);
+    if (expires) row.expiryDate = expires;
     if (meaningful(i.serial)) row.serial = i.serial!.trim();
     if (meaningful(i.assignedTo)) row.assignedTo = i.assignedTo!.trim();
 
@@ -151,6 +154,36 @@ export function buildHabitSummary(items: HabitSummaryInput[], limit = 30) {
     doneToday: h.doneToday,
     rate30: h.rate30,
   }));
+}
+
+export type ClassPackSummaryInput = {
+  id: string;
+  title: string;
+  assignedTo?: string;
+  total: number;
+  used: number;
+  remaining?: number;
+  startsOn: string;
+  endsOn: string;
+};
+
+export function buildClassPackSummary(
+  items: ClassPackSummaryInput[],
+  limit = 20
+) {
+  return items.slice(0, limit).map((p) => {
+    const row: Record<string, unknown> = {
+      id: p.id,
+      title: p.title,
+      total: p.total,
+      used: p.used,
+      startsOn: dayOnly(p.startsOn) || p.startsOn,
+      endsOn: dayOnly(p.endsOn) || p.endsOn,
+    };
+    if (typeof p.remaining === 'number') row.remaining = p.remaining;
+    if (meaningful(p.assignedTo)) row.assignedTo = p.assignedTo!.trim();
+    return row;
+  });
 }
 
 export type SubscriptionSummaryInput = {

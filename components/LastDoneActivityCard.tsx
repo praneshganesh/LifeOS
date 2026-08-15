@@ -4,6 +4,7 @@ import { Check } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import {
   formatRelativeDone,
+  formatRemindStatus,
   getLastDoneAt,
   toDateInputValue,
   type LastDoneItem,
@@ -93,7 +94,11 @@ export function LastDoneActivityCard({
   const [gridWidth, setGridWidth] = useState(0);
   const weeks = weeksForWidth(gridWidth);
   const { columns, monthMarks } = useContribution(item.logs, weeks);
-  const last = formatRelativeDone(getLastDoneAt(item));
+  const last = item.logs?.length
+    ? formatRelativeDone(getLastDoneAt(item))
+    : item.remindAt
+      ? formatRemindStatus(item.remindAt)
+      : 'Not yet';
   const gridH = 7 * CELL + 6 * GAP;
   const gridPixelW = weeks > 0 ? weeks * CELL + (weeks - 1) * GAP : 0;
 

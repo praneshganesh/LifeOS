@@ -3,6 +3,7 @@ import Constants from 'expo-constants';
 import {
   buildExpenseSummary,
   buildHabitSummary,
+  buildClassPackSummary,
   buildInventorySummary,
   buildLastDoneSummary,
   buildSubscriptionSummary,
@@ -87,6 +88,7 @@ export async function runChatAgent(params: {
     purchasedFrom?: string;
     purchaseDate?: string;
     warrantyExpiry?: string;
+    expiryDate?: string;
     warrantyActive?: boolean;
     serial?: string;
     assignedTo?: string;
@@ -117,6 +119,16 @@ export async function runChatAgent(params: {
     doneToday: boolean;
     rate30: number;
   }>;
+  classPacks?: Array<{
+    id: string;
+    title: string;
+    assignedTo?: string;
+    total: number;
+    used: number;
+    remaining?: number;
+    startsOn: string;
+    endsOn: string;
+  }>;
   subscriptions?: Array<{
     id: string;
     title: string;
@@ -135,6 +147,7 @@ export async function runChatAgent(params: {
   const lastDoneSummary = buildLastDoneSummary(params.lastDone ?? []);
   const expensesSummary = buildExpenseSummary(params.expenses ?? []);
   const habitsSummary = buildHabitSummary(params.habits ?? []);
+  const classPacksSummary = buildClassPackSummary(params.classPacks ?? []);
   const subscriptionsSummary = buildSubscriptionSummary(params.subscriptions ?? []);
   const messages = params.messages.slice(-12).map((m) => ({
     role: m.role,
@@ -168,6 +181,7 @@ export async function runChatAgent(params: {
         lastDoneSummary,
         expensesSummary,
         habitsSummary,
+        classPacksSummary,
         subscriptionsSummary,
         session: params.session ?? {},
         household: params.household ?? [],

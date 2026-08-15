@@ -7,6 +7,8 @@ import { Text } from '@/components/ui/Text';
 import { SwipeableThingRow } from '@/components/SwipeableThingRow';
 import { useHousehold } from '@/lib/HouseholdContext';
 import { useInventory } from '@/lib/InventoryContext';
+import { useClasses } from '@/lib/ClassesContext';
+import { remainingCount, usedCount } from '@/lib/classes';
 import {
   labelForPermission,
   type HouseholdRole,
@@ -29,6 +31,7 @@ export default function FamilyMemberScreen() {
   const router = useRouter();
   const { getById, removeMember, updateMember } = useHousehold();
   const { items, removeItem } = useInventory();
+  const { packs: classPacks } = useClasses();
 
   const memberEarly = id && id !== 'new' ? getById(id) : undefined;
   const [name, setName] = useState('');
@@ -63,6 +66,11 @@ export default function FamilyMemberScreen() {
       (member && i.assignedTo?.toLowerCase() === member.name.toLowerCase())
   );
   const docs = devices.filter((i) => i.isDocument);
+  const theirClasses = classPacks.filter(
+    (p) =>
+      p.personId === id ||
+      (member && p.assignedTo?.toLowerCase() === member.name.toLowerCase())
+  );
 
   async function onDeleteThing(assetId: string, thingName: string) {
     const ok = await confirmDelete(thingName);
@@ -198,6 +206,30 @@ export default function FamilyMemberScreen() {
           );
         })}
       </View>
+
+      {theirClasses.length ? (
+        <>
+          <Text variant="label" style={styles.label}>
+            Classes
+          </Text>
+          {theirClasses.map((p) => (
+            <ListCard key={p.id} style={{ marginBottom: spacing.sm }}>
+              <ListRow
+                icon="today"
+                title={p.title}
+                subtitle={
+                  remainingCount(p) == null
+                    ? `${usedCount(p)} logged`
+                    : `${remainingCount(p)} of ${p.total} left`
+                }
+                meta="Open"
+                onPress={() => router.push(`/classes/${p.id}` as Href)}
+                last
+              />
+            </ListCard>
+          ))}
+        </>
+      ) : null}
 
       {devices.length ? (
         <>

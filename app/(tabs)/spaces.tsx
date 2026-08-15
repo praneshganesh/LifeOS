@@ -19,6 +19,7 @@ import { useSpaces } from '@/lib/SpacesContext';
 import { useInventory } from '@/lib/InventoryContext';
 import { useExpenses } from '@/lib/ExpensesContext';
 import { useHabits } from '@/lib/HabitsContext';
+import { useClasses } from '@/lib/ClassesContext';
 import { useHousehold } from '@/lib/HouseholdContext';
 import { useLastDone } from '@/lib/LastDoneContext';
 import { useSubscriptions } from '@/lib/SubscriptionsContext';
@@ -65,6 +66,7 @@ export default function SpacesScreen() {
   const { items } = useInventory();
   const { expenses } = useExpenses();
   const { habits } = useHabits();
+  const { packs: classPacks } = useClasses();
   const { members } = useHousehold();
   const { items: lastDoneItems } = useLastDone();
   const { subscriptions } = useSubscriptions();
@@ -132,6 +134,12 @@ export default function SpacesScreen() {
             subtitle: 'Track a streak',
             icon: 'check',
             href: '/habits/create' as Href,
+          },
+          {
+            title: 'Class pack',
+            subtitle: '24 sessions in a window',
+            icon: 'today',
+            href: '/classes/create' as Href,
           },
           {
             title: 'Person',
@@ -203,6 +211,7 @@ export default function SpacesScreen() {
       title: 'Routines',
       rows: [
         { title: 'Habits', subtitle: 'Streaks & check-ins', icon: 'check', href: '/habits', count: habits.length },
+        { title: 'Classes', subtitle: 'Packs & remaining sessions', icon: 'today', href: '/classes', count: classPacks.length },
       ],
     },
     {

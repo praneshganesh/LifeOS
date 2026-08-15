@@ -23,6 +23,7 @@ import { SpacesProvider } from '@/lib/SpacesContext';
 import { HouseholdProvider } from '@/lib/HouseholdContext';
 import { ExpensesProvider } from '@/lib/ExpensesContext';
 import { HabitsProvider } from '@/lib/HabitsContext';
+import { ClassesProvider } from '@/lib/ClassesContext';
 import { SubscriptionsProvider } from '@/lib/SubscriptionsContext';
 import { TalkOverlayProvider } from '@/lib/TalkOverlayContext';
 import { FloatingNav, TalkOrb } from '@/components/TalkOverlay';
@@ -106,6 +107,7 @@ function RootNavigation({
         <Stack.Screen name="family" options={{ headerShown: false }} />
         <Stack.Screen name="expenses" options={{ headerShown: false }} />
         <Stack.Screen name="habits" options={{ headerShown: false }} />
+        <Stack.Screen name="classes" options={{ headerShown: false }} />
         <Stack.Screen name="purchases/index" options={{ title: '', headerBackTitle: 'Back' }} />
         <Stack.Screen name="purchases/[id]" options={{ title: '', headerBackTitle: 'Back' }} />
         <Stack.Screen name="documents/index" options={{ title: '', headerBackTitle: 'Back' }} />
@@ -156,18 +158,20 @@ export default function RootLayout() {
               <HouseholdProvider>
                 <ExpensesProvider>
                   <HabitsProvider>
-                    <SubscriptionsProvider>
-                      <TalkOverlayProvider>
-                        <AppLockGate>
-                          <OnboardingGate>
-                            <RootNavigation
-                              showBrandSplash={showBrandSplash}
-                              onBrandSplashFinished={finishBrandSplash}
-                            />
-                          </OnboardingGate>
-                        </AppLockGate>
-                      </TalkOverlayProvider>
-                    </SubscriptionsProvider>
+                    <ClassesProvider>
+                      <SubscriptionsProvider>
+                        <TalkOverlayProvider>
+                          <AppLockGate>
+                            <OnboardingGate>
+                              <RootNavigation
+                                showBrandSplash={showBrandSplash}
+                                onBrandSplashFinished={finishBrandSplash}
+                              />
+                            </OnboardingGate>
+                          </AppLockGate>
+                        </TalkOverlayProvider>
+                      </SubscriptionsProvider>
+                    </ClassesProvider>
                   </HabitsProvider>
                 </ExpensesProvider>
               </HouseholdProvider>

@@ -1,9 +1,18 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { applyChatActions } from '../chat/applyActions';
+import { composeAppliedReply } from '../chat/composeReply';
 import type { ChatAction } from '../chat/types';
 import { findDuplicateExpense } from '../expenses';
 import { findDuplicateSubscription } from '../subscriptions';
+import {
+  createClassPack,
+  findClassPack,
+  mergeClassPackUpdate,
+  toggleLogForDay,
+  type ClassPack,
+  type NewClassPackInput,
+} from '../classes';
 import {
   PlanLimitError,
   planById,
@@ -256,4 +265,223 @@ describe('applyChatActions', () => {
     );
     assert.equal(expiry, '2028-12-31');
   });
+
+  it('creates a class pack from talk and logs attendance', async () => {
+    const packs: { title: string; total: number; assignedTo?: string; logs: string[] }[] = [];
+    const result = await applyChatActions(
+      [
+        {
+          type: 'add_class_pack',
+          title: 'Skating',
+          total: 24,
+          months: 3,
+          assignedTo: 'Aarav',
+        },
+      ] as ChatAction[],
+      {
+        addItem: async () => {
+          throw new Error('unused');
+        },
+        updateItem: async () => {},
+        removeItem: async () => {},
+      },
+      'talk',
+      {
+        lastUserText:
+          'I enrolled my son for skating class. He has 24 classes within 3 months.',
+        household: [
+          {
+            id: 'fm-son',
+            name: 'Aarav',
+            role: 'child',
+            relation: 'Son',
+            avatarLetter: 'AA',
+            icon: 'school',
+            permission: 'viewer',
+            createdAt: new Date().toISOString(),
+          },
+        ],
+        classes: {
+          addPack: async (input) => {
+            packs.push({
+              title: input.title,
+              total: input.total ?? 0,
+              assignedTo: input.assignedTo,
+              logs: [],
+            });
+            return {
+              id: 'cls-1',
+              title: input.title,
+              total: input.total ?? 0,
+              assignedTo: input.assignedTo,
+              personId: input.personId,
+              startsOn: '2026-08-15',
+              endsOn: '2026-11-15',
+              logs: [],
+              createdAt: new Date().toISOString(),
+            };
+          },
+          logClass: async () => null,
+          findPack: () => undefined,
+          getById: () => undefined,
+        },
+      }
+    );
+    assert.equal(packs[0]?.title, 'Skating');
+    assert.equal(packs[0]?.total, 24);
+    assert.equal(packs[0]?.assignedTo, 'Aarav');
+    assert.equal(result.classPackTitle, 'Skating');
+    assert.equal(result.classPackRemaining, 24);
+  });
+
+  it('creates a swimming pack when enroll has no session count', async () => {
+    const { packs, api } = memoryClasses();
+    const result = await applyChatActions(
+      [{ type: 'none' }] as ChatAction[],
+      unusedInv,
+      'talk',
+      {
+        lastUserText: 'I enrolled for a swimming class',
+        classes: api,
+      }
+    );
+    assert.equal(packs[0]?.title, 'Swimming');
+    assert.equal(packs[0]?.total, 0);
+    assert.equal(result.classPackTitle, 'Swimming');
+    assert.equal(result.classPackRemaining, null);
+  });
+
+  it('merges 12th / two months onto the pack just enrolled', async () => {
+    const { packs, api } = memoryClasses();
+    await applyChatActions([{ type: 'none' }] as ChatAction[], unusedInv, 'talk', {
+      lastUserText: 'I enrolled for a swimming class',
+      classes: api,
+    });
+    const result = await applyChatActions(
+      [
+        {
+          type: 'add_class_pack',
+          title: 'Swimming Classes',
+        },
+      ] as ChatAction[],
+      unusedInv,
+      'talk',
+      {
+        lastUserText:
+          'for a swimming class I have 12th classes to take in the next two months',
+        classes: api,
+      }
+    );
+    assert.equal(packs.length, 1);
+    assert.equal(packs[0]?.total, 12);
+    assert.equal(result.classPackTitle, 'Swimming');
+  });
+
+  it('logs I attended against the newest pack', async () => {
+    const { packs, api } = memoryClasses();
+    await api.addPack({ title: 'Swimming', total: 12, months: 2 });
+    const result = await applyChatActions(
+      [{ type: 'none' }] as ChatAction[],
+      unusedInv,
+      'talk',
+      {
+        lastUserText: 'I attended',
+        classes: api,
+      }
+    );
+    assert.equal(packs[0]?.logs.length, 1);
+    assert.equal(result.classLoggedTitle, 'Swimming');
+  });
+
+  it('does not invent a swimming log when no pack exists', async () => {
+    const { packs, api } = memoryClasses();
+    const result = await applyChatActions(
+      [{ type: 'log_class', title: 'swimming' }] as ChatAction[],
+      unusedInv,
+      'talk',
+      {
+        lastUserText: 'I attended my second swimming class today',
+        classes: api,
+      }
+    );
+    assert.equal(packs.length, 0);
+    assert.equal(result.classLoggedTitle, null);
+  });
+
+  it('sets a Last Done reminder from talk without marking done', async () => {
+    const saved: { label: string; remindAt: string; logs: unknown[] }[] = [];
+    const result = await applyChatActions(
+      [{ type: 'none' }] as ChatAction[],
+      unusedInv,
+      'talk',
+      {
+        lastUserText: 'Log a reminder to apply for renewed passport next Tuesday',
+        lastDone: {
+          logDone: async () => {
+            throw new Error('should not mark done');
+          },
+          setReminder: async (input) => {
+            saved.push({ label: input.label, remindAt: input.remindAt, logs: [] });
+            return { label: input.label, remindAt: input.remindAt };
+          },
+        },
+        inventoryList: [{ id: 'inv-pp', name: 'Passport' }],
+      }
+    );
+    assert.equal(saved[0]?.label, 'Apply for renewed passport');
+    assert.match(saved[0]?.remindAt ?? '', /^\d{4}-\d{2}-\d{2}$/);
+    assert.equal(result.reminderLabel, 'Apply for renewed passport');
+  });
 });
+
+describe('composeAppliedReply class log', () => {
+  it('does not keep Logged swimming when nothing was applied', () => {
+    const reply = composeAppliedReply({
+      actions: [{ type: 'log_class', title: 'swimming' }],
+      modelReply: 'Logged swimming.',
+      classLoggedTitle: null,
+    });
+    assert.match(reply, /no swimming pack/i);
+  });
+});
+
+const unusedInv = {
+  addItem: async () => {
+    throw new Error('unused');
+  },
+  updateItem: async () => {},
+  removeItem: async () => {},
+};
+
+function memoryClasses() {
+  const packs: ClassPack[] = [];
+  return {
+    packs,
+    api: {
+      addPack: async (input: NewClassPackInput) => {
+        const existing = findClassPack(packs, input.title, input.personId);
+        if (existing && (!input.personId || existing.personId === input.personId)) {
+          const merged = mergeClassPackUpdate(existing, input);
+          if (!merged) return existing;
+          const i = packs.findIndex((p) => p.id === existing.id);
+          packs[i] = merged;
+          return merged;
+        }
+        const pack = createClassPack(input);
+        packs.unshift(pack);
+        return pack;
+      },
+      logClass: async (id: string, date?: string) => {
+        const i = packs.findIndex((p) => p.id === id);
+        if (i < 0) return null;
+        packs[i] = toggleLogForDay(packs[i], date);
+        return packs[i];
+      },
+      findPack: (title: string, personId?: string) =>
+        findClassPack(packs, title, personId),
+      getById: (id: string) => packs.find((p) => p.id === id),
+      newestPack: () =>
+        [...packs].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0],
+    },
+  };
+}
