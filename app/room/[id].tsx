@@ -1,3 +1,4 @@
+import { useTheme } from '@/lib/ThemeContext';
 import { useCallback, useMemo, useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
@@ -13,10 +14,12 @@ import { inventoryToAsset } from '@/lib/mergeAssets';
 import { confirmDelete } from '@/lib/confirmDelete';
 import { captureHref } from '@/lib/captureContext';
 import { blurActiveElement } from '@/lib/a11y';
-import { colors, spacing } from '@/constants/theme';
+import { type ThemeColors,  colors, spacing  } from '@/constants/theme';
 import { useRememberCaptureContext } from '@/components/CaptureContextButton';
 
 export default function RoomDetailScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -129,7 +132,8 @@ export default function RoomDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   content: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
@@ -157,3 +161,4 @@ const styles = StyleSheet.create({
     color: colors.mute,
   },
 });
+}

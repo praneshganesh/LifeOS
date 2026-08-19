@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useTheme } from '@/lib/ThemeContext';
+import { useMemo, useEffect, useState } from 'react';
 import { Alert, Platform, StyleSheet, Switch, View } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
@@ -10,7 +11,7 @@ import {
   saveSecurityPrefs,
   type SecurityPrefs,
 } from '@/lib/securityPrefs';
-import { colors, spacing } from '@/constants/theme';
+import { type ThemeColors,  colors, spacing  } from '@/constants/theme';
 
 function ToggleRow({
   title,
@@ -27,10 +28,12 @@ function ToggleRow({
   last?: boolean;
   disabled?: boolean;
 }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={[styles.row, !last && styles.border, disabled && { opacity: 0.5 }]}>
       <View style={{ flex: 1 }}>
-        <Text variant="headline" style={{ fontSize: 15 }}>
+        <Text variant="headline" style={{ fontSize: 16 }}>
           {title}
         </Text>
         {subtitle ? (
@@ -119,12 +122,6 @@ export default function SecuritySettingsScreen() {
             disabled={Platform.OS === 'web'}
           />
           <ToggleRow
-            title="Lock emergency vault"
-            subtitle="Require biometrics each time you open Vault"
-            value={prefs.vaultLock}
-            onChange={(v) => void update({ vaultLock: v })}
-          />
-          <ToggleRow
             title="Auto-lock"
             subtitle="After 5 minutes in background"
             value={prefs.autoLock}
@@ -137,7 +134,8 @@ export default function SecuritySettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -150,3 +148,4 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.line,
   },
 });
+}

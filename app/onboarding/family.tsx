@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useTheme } from '@/lib/ThemeContext';
+import { useMemo, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -11,9 +12,12 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/components/ui/Text';
 import { useHousehold } from '@/lib/HouseholdContext';
-import { colors, fonts, radius, spacing } from '@/constants/theme';
+import { loadLocalProfile, saveLocalProfile } from '@/lib/profile';
+import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
 
 export default function OnboardingFamily() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { members, addMember } = useHousehold();
@@ -32,6 +36,8 @@ export default function OnboardingFamily() {
           role: 'adult',
           relation: 'You',
         });
+        const existing = await loadLocalProfile();
+        await saveLocalProfile({ ...existing, displayName: trimmed });
       }
       router.push('/onboarding/capture');
     } finally {
@@ -61,6 +67,11 @@ export default function OnboardingFamily() {
           placeholderTextColor={colors.faint}
           style={styles.input}
           autoFocus={!alreadyHavePeople}
+          autoCorrect={false}
+          spellCheck={false}
+          autoComplete="off"
+          textContentType="none"
+          autoCapitalize="words"
           returnKeyType="next"
           onSubmitEditing={() => void continueNext(true)}
         />
@@ -88,7 +99,8 @@ export default function OnboardingFamily() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   body: {
     flex: 1,
@@ -97,7 +109,7 @@ const styles = StyleSheet.create({
   },
   step: {
     fontFamily: fonts.sansMedium,
-    fontSize: 12,
+    fontSize: 16,
     color: colors.forest,
     letterSpacing: 0.4,
     textTransform: 'uppercase',
@@ -112,14 +124,14 @@ const styles = StyleSheet.create({
   },
   lead: {
     fontFamily: fonts.sans,
-    fontSize: 15,
+    fontSize: 16,
     lineHeight: 22,
     color: colors.mute,
     marginBottom: spacing.xxl,
   },
   label: {
     fontFamily: fonts.sansMedium,
-    fontSize: 11,
+    fontSize: 16,
     color: colors.mute,
     textTransform: 'uppercase',
     letterSpacing: 0.4,
@@ -155,8 +167,9 @@ const styles = StyleSheet.create({
   },
   skip: {
     fontFamily: fonts.sansMedium,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.mute,
     textAlign: 'center',
   },
 });
+}

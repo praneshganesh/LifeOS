@@ -29,11 +29,26 @@ export default function Root({ children }: { children: ReactNode }) {
 }
 
 const responsiveBackground = `
-body {
-  background-color: #fff;
+html {
+  color-scheme: dark;
 }
-@media (prefers-color-scheme: dark) {
+body {
+  background-color: #0B0B0C;
+}
+input, textarea {
+  outline: none !important;
+  box-shadow: none !important;
+  -webkit-tap-highlight-color: transparent;
+}
+input:focus, textarea:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+@media (prefers-color-scheme: light) {
+  html {
+    color-scheme: light;
+  }
   body {
-    background-color: #000;
+    background-color: #F3F3F4;
   }
 }`;

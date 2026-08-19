@@ -2,7 +2,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { ChevronRight } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { AppIcon, type Icon3DName } from '@/components/ui/Icon3D';
-import { fonts, radius, spacing, shadows } from '@/constants/theme';
+import { fonts, radius, shadowsFor, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
 
 export function ListCard({
@@ -12,15 +12,16 @@ export function ListCard({
   children: React.ReactNode;
   style?: object;
 }) {
-  const { colors } = useTheme();
+  const { colors, resolved } = useTheme();
   return (
     <View
       style={[
         styles.card,
         {
-          backgroundColor: colors.white,
+          backgroundColor: colors.surface,
           borderColor: colors.line,
         },
+        shadowsFor(resolved).soft,
         style,
       ]}
     >
@@ -83,12 +84,13 @@ export function StatStrip({
 }: {
   items: { label: string; value: string }[];
 }) {
-  const { colors } = useTheme();
+  const { colors, resolved } = useTheme();
   return (
     <View
       style={[
         styles.stats,
-        { backgroundColor: colors.white, borderColor: colors.line },
+        { backgroundColor: colors.surface, borderColor: colors.line },
+        shadowsFor(resolved).soft,
       ]}
     >
       {items.map((item, i) => (
@@ -133,15 +135,15 @@ export function FilterChips({
             style={[
               styles.chip,
               {
-                backgroundColor: on ? colors.forest : colors.white,
-                borderColor: on ? colors.forest : colors.line,
+                backgroundColor: on ? colors.accent : colors.surface,
+                borderColor: on ? colors.accent : colors.line,
               },
             ]}
           >
             <Text
               style={[
                 styles.chipText,
-                { color: on ? colors.forestOn : colors.slate },
+                { color: on ? colors.accentOn : colors.slate },
               ]}
             >
               {opt.label}
@@ -158,7 +160,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
-    ...shadows.soft,
   },
   row: {
     flexDirection: 'row',
@@ -173,12 +174,12 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   title: {
-    fontSize: 15,
+    fontSize: 16,
     lineHeight: 20,
   },
   meta: {
     fontFamily: fonts.sansMedium,
-    fontSize: 12,
+    fontSize: 16,
     maxWidth: 88,
     textAlign: 'right',
   },
@@ -187,7 +188,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
     marginBottom: spacing.lg,
-    ...shadows.soft,
   },
   stat: {
     flex: 1,
@@ -214,6 +214,6 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 12,
+    fontSize: 16,
   },
 });

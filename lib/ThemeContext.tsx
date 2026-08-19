@@ -7,46 +7,50 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { useColorScheme } from 'react-native';
+import { Appearance, Platform, useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  linenColors,
-  paletteFor,
-  spacing,
-  spacingFor,
-  type Density,
+  APPEARANCE_REV,
+  DEFAULT_APPEARANCE,
+  applyLivePalette,
+  inkDark,
+  migrateAppearancePrefs,
+  resolvePalette,
+  type AppearancePrefs,
   type ThemeColors,
-  type ThemeId,
+  type ThemeFamily,
+  type ThemeMode,
+  type ThemeResolved,
 } from '@/constants/theme';
 
 const STORAGE_KEY = 'lifeos:appearance:v1';
 
-export type AppearancePrefs = {
-  theme: ThemeId;
-  density: Density;
-};
-
-const DEFAULTS: AppearancePrefs = {
-  theme: 'linen',
-  density: 'comfortable',
-};
-
 type ThemeContextValue = {
-  theme: ThemeId;
-  resolved: 'linen' | 'hearth';
-  density: Density;
+  family: ThemeFamily;
+  mode: ThemeMode;
+  resolved: ThemeResolved;
   colors: ThemeColors;
-  space: Record<'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'xxl' | 'xxxl', number>;
-  setTheme: (theme: ThemeId) => Promise<void>;
-  setDensity: (density: Density) => Promise<void>;
+  setFamily: (family: ThemeFamily) => Promise<void>;
+  setMode: (mode: ThemeMode) => Promise<void>;
   ready: boolean;
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
+function syncNativeScheme(mode: ThemeMode, resolved: ThemeResolved, bg: string) {
+  try {
+    Appearance.setColorScheme(mode === 'system' ? 'unspecified' : resolved);
+  } catch {
+    /* web / older runtimes */
+  }
+  if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+  document.documentElement.style.colorScheme = resolved;
+  document.body.style.backgroundColor = bg;
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const system = useColorScheme();
-  const [prefs, setPrefs] = useState<AppearancePrefs>(DEFAULTS);
+  const [prefs, setPrefs] = useState<AppearancePrefs>(DEFAULT_APPEARANCE);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -54,19 +58,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       try {
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
         if (raw) {
-          const parsed = JSON.parse(raw) as Partial<AppearancePrefs>;
-          setPrefs({
-            theme:
-              parsed.theme === 'hearth' ||
-              parsed.theme === 'system' ||
-              parsed.theme === 'linen'
-                ? parsed.theme
-                : DEFAULTS.theme,
-            density:
-              parsed.density === 'compact' || parsed.density === 'comfortable'
-                ? parsed.density
-                : DEFAULTS.density,
-          });
+          const parsed = JSON.parse(raw) as Record<string, unknown>;
+          const next = migrateAppearancePrefs(parsed);
+          setPrefs(next);
+          if (parsed.rev !== APPEARANCE_REV) {
+            await AsyncStorage.setItem(
+              STORAGE_KEY,
+              JSON.stringify({ ...next, rev: APPEARANCE_REV })
+            );
+          }
         }
       } catch {
         /* ignore */
@@ -78,46 +78,53 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const persist = useCallback(async (next: AppearancePrefs) => {
     setPrefs(next);
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    await AsyncStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ ...next, rev: APPEARANCE_REV })
+    );
+    void import('@/lib/cloud/sync').then((m) => m.scheduleCloudPush()).catch(() => undefined);
   }, []);
 
-  const setTheme = useCallback(
-    async (theme: ThemeId) => {
-      await persist({ ...prefs, theme });
+  const setFamily = useCallback(
+    async (family: ThemeFamily) => {
+      await persist({ ...prefs, family });
     },
     [persist, prefs]
   );
 
-  const setDensity = useCallback(
-    async (density: Density) => {
-      await persist({ ...prefs, density });
+  const setMode = useCallback(
+    async (mode: ThemeMode) => {
+      await persist({ ...prefs, mode });
     },
     [persist, prefs]
   );
 
   const systemDark = system === 'dark';
-  const resolved: 'linen' | 'hearth' =
-    prefs.theme === 'hearth' || (prefs.theme === 'system' && systemDark)
-      ? 'hearth'
-      : 'linen';
+  const resolved: ThemeResolved =
+    prefs.mode === 'dark' || (prefs.mode === 'system' && systemDark)
+      ? 'dark'
+      : 'light';
   const colors = useMemo(
-    () => paletteFor(prefs.theme, systemDark),
-    [prefs.theme, systemDark]
+    () => resolvePalette(prefs.family, prefs.mode, systemDark),
+    [prefs.family, prefs.mode, systemDark]
   );
-  const space = useMemo(() => spacingFor(prefs.density), [prefs.density]);
+  applyLivePalette(colors);
+
+  useEffect(() => {
+    syncNativeScheme(prefs.mode, resolved, colors.bg);
+  }, [prefs.mode, resolved, colors.bg]);
 
   const value = useMemo(
     () => ({
-      theme: prefs.theme,
+      family: prefs.family,
+      mode: prefs.mode,
       resolved,
-      density: prefs.density,
       colors,
-      space,
-      setTheme,
-      setDensity,
+      setFamily,
+      setMode,
       ready,
     }),
-    [prefs.theme, prefs.density, resolved, colors, space, setTheme, setDensity, ready]
+    [prefs.family, prefs.mode, resolved, colors, setFamily, setMode, ready]
   );
 
   return (
@@ -129,13 +136,12 @@ export function useTheme() {
   const ctx = useContext(ThemeContext);
   if (!ctx) {
     return {
-      theme: 'linen' as ThemeId,
-      resolved: 'linen' as const,
-      density: 'comfortable' as Density,
-      colors: linenColors,
-      space: spacing,
-      setTheme: async () => undefined,
-      setDensity: async () => undefined,
+      family: 'ink' as ThemeFamily,
+      mode: 'dark' as ThemeMode,
+      resolved: 'dark' as const,
+      colors: inkDark,
+      setFamily: async () => undefined,
+      setMode: async () => undefined,
       ready: true,
     };
   }

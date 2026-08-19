@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { useTalkOverlay } from '@/lib/TalkOverlayContext';
 
 /**
- * Legacy Talk route — opens the floating sheet and returns to Chat.
+ * Legacy Talk route — opens the floating sheet and returns to Home.
  */
 export default function TalkScreen() {
   const router = useRouter();

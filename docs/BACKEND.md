@@ -66,10 +66,20 @@ With GitHub linked, pushing `supabase/migrations/` to Git `staging` applies them
 
 | Table | Columns | Why |
 |-------|---------|-----|
-| `auth.users` | id, Apple/email from Auth | Sign-in only |
+| `auth.users` | id (anonymous until Apple Sign in) | Session for RLS |
 | `public.profiles` | `id` (= auth uid), timestamps | Empty profile so RLS has a row |
+| `public.life_stores` | `user_id`, `store_key`, `body` jsonb | Per-module JSON snapshot |
+| `public.life_recovery` | `code_hash`, `body` jsonb | Restore on a new phone with a recovery code |
 
-No display name, phone, birthday, address, photos, or inventory on Supabase yet.
+**In the JSON snapshot:** Things, spaces, household, expenses, habits, classes, subscriptions, Last Done, profile, plan, appearance, notification prefs, talk-voice, onboarding. Local photo URIs are stripped. Face ID prefs stay on the device.
+
+**Not in the cloud yet:** item photos, document scans, Apple user identity.
+
+Turn on **Anonymous** sign-ins in the staging Auth providers (or `enable_anonymous_sign_ins` locally). Apply `supabase/migrations/20260815180000_life_stores.sql` on staging before relying on backup.
+
+The app opens an anonymous session automatically when `EXPO_PUBLIC_SUPABASE_URL` + publishable key are set. Settings → Export & backup shows last sync and the recovery code.
+
+Apple Sign in can replace anonymous later (`linkIdentity`) without changing these tables.
 
 ## Onboarding vs Apple App Privacy
 

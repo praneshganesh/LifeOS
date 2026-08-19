@@ -1,3 +1,4 @@
+import { useTheme } from '@/lib/ThemeContext';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Redirect, Stack, useFocusEffect, useLocalSearchParams, useRouter, type Href } from 'expo-router';
@@ -12,11 +13,13 @@ import { useInventory } from '@/lib/InventoryContext';
 import { useSpaces } from '@/lib/SpacesContext';
 import { inventoryToAsset } from '@/lib/mergeAssets';
 import { confirmDelete } from '@/lib/confirmDelete';
-import { colors, radius, spacing } from '@/constants/theme';
+import { type ThemeColors,  colors, radius, spacing  } from '@/constants/theme';
 import { blurActiveElement } from '@/lib/a11y';
 import { captureHref, kindFromSpace, rememberCaptureContext } from '@/lib/captureContext';
 
 export default function SpaceDetailScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { id: idParam } = useLocalSearchParams<{ id: string }>();
   const id = Array.isArray(idParam) ? idParam[0] : idParam;
   const insets = useSafeAreaInsets();
@@ -190,7 +193,8 @@ export default function SpaceDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   content: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
@@ -249,3 +253,4 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
 });
+}

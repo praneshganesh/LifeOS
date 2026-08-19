@@ -1,3 +1,4 @@
+import { useTheme } from '@/lib/ThemeContext';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
@@ -18,10 +19,12 @@ import {
 } from '@/lib/classes';
 import { confirmDelete } from '@/lib/confirmDelete';
 import { localDayKey } from '@/lib/dates';
-import { colors, fonts, radius, spacing } from '@/constants/theme';
+import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
 import CreateClassPackScreen from './create';
 
 export default function ClassPackDetailScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { id: idParam } = useLocalSearchParams<{ id: string }>();
   const id = Array.isArray(idParam) ? idParam[0] : idParam;
   const router = useRouter();
@@ -124,7 +127,7 @@ export default function ClassPackDetailScreen() {
         <ListRow title="Window" meta={statusLabel} last />
       </ListCard>
 
-      <Text variant="headline" style={{ fontSize: 15, marginTop: spacing.lg }}>
+      <Text variant="headline" style={{ fontSize: 16, marginTop: spacing.lg }}>
         Details
       </Text>
       <Text style={styles.fieldLabel}>Name</Text>
@@ -206,7 +209,7 @@ export default function ClassPackDetailScreen() {
 
       {recent.length ? (
         <>
-          <Text variant="headline" style={{ fontSize: 15, marginTop: spacing.lg }}>
+          <Text variant="headline" style={{ fontSize: 16, marginTop: spacing.lg }}>
             Attendance
           </Text>
           <ListCard style={{ marginTop: spacing.sm }}>
@@ -237,7 +240,8 @@ export default function ClassPackDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   hero: {
     backgroundColor: colors.white,
     borderRadius: radius.lg,
@@ -269,7 +273,7 @@ const styles = StyleSheet.create({
   },
   logTodayText: {
     fontFamily: fonts.sansSemi,
-    fontSize: 15,
+    fontSize: 16,
     color: colors.forest,
   },
   logTodayTextOn: {
@@ -277,7 +281,7 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
+    fontSize: 16,
     color: colors.mute,
     marginBottom: spacing.sm,
     marginTop: spacing.md,
@@ -312,7 +316,7 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
+    fontSize: 16,
     color: colors.ink,
   },
   chipTextOn: {
@@ -337,7 +341,8 @@ const styles = StyleSheet.create({
   },
   removeText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 15,
+    fontSize: 16,
     color: colors.coral,
   },
 });
+}

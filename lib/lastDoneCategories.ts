@@ -1,5 +1,5 @@
 import type { LastDoneItem } from '@/lib/lastDone';
-import { colors } from '@/constants/theme';
+import type { ThemeColors } from '@/constants/theme';
 
 export type LastDoneCategoryId =
   | 'home'
@@ -18,49 +18,26 @@ export type LastDoneCategory = {
 };
 
 export const LAST_DONE_CATEGORIES: Record<LastDoneCategoryId, LastDoneCategory> = {
-  home: {
-    id: 'home',
-    name: 'Home',
-    emoji: '🏠',
-    color: colors.forestBright,
-    soft: colors.forestSoft,
-  },
-  health: {
-    id: 'health',
-    name: 'Health',
-    emoji: '💪',
-    color: '#D1433B',
-    soft: 'rgba(209, 67, 59, 0.12)',
-  },
-  vehicle: {
-    id: 'vehicle',
-    name: 'Vehicles',
-    emoji: '🚗',
-    color: colors.sky,
-    soft: colors.skySoft,
-  },
-  documents: {
-    id: 'documents',
-    name: 'Documents',
-    emoji: '📄',
-    color: colors.violet,
-    soft: colors.violetSoft,
-  },
-  family: {
-    id: 'family',
-    name: 'Family',
-    emoji: '👨‍👩‍👧',
-    color: colors.amber,
-    soft: colors.amberSoft,
-  },
-  other: {
-    id: 'other',
-    name: 'Other',
-    emoji: '✨',
-    color: colors.slate,
-    soft: colors.surfaceSoft,
-  },
+  home: { id: 'home', name: 'Home', emoji: '🏠', color: '#4F6840', soft: 'rgba(79, 104, 64, 0.16)' },
+  health: { id: 'health', name: 'Health', emoji: '💪', color: '#D1433B', soft: 'rgba(209, 67, 59, 0.12)' },
+  vehicle: { id: 'vehicle', name: 'Vehicles', emoji: '🚗', color: '#4A6F8F', soft: 'rgba(74, 111, 143, 0.16)' },
+  documents: { id: 'documents', name: 'Documents', emoji: '📄', color: '#6E6088', soft: 'rgba(110, 96, 136, 0.16)' },
+  family: { id: 'family', name: 'Family', emoji: '👨‍👩‍👧', color: '#B4782E', soft: 'rgba(180, 120, 46, 0.16)' },
+  other: { id: 'other', name: 'Other', emoji: '✨', color: '#54493E', soft: '#F1EBE1' },
 };
+
+export function paintLastDoneCategory(
+  id: LastDoneCategoryId,
+  c: ThemeColors
+): LastDoneCategory {
+  const base = LAST_DONE_CATEGORIES[id];
+  if (id === 'home') return { ...base, color: c.accentStrong, soft: c.accentSoft };
+  if (id === 'health') return { ...base, color: c.coral, soft: c.coralSoft };
+  if (id === 'vehicle') return { ...base, color: c.sky, soft: c.skySoft };
+  if (id === 'documents') return { ...base, color: c.violet, soft: c.violetSoft };
+  if (id === 'family') return { ...base, color: c.amber, soft: c.amberSoft };
+  return { ...base, color: c.slate, soft: c.surfaceSoft };
+}
 
 /** Soft keyword grouping — users never pick a category. */
 export function categorizeLastDone(label: string): LastDoneCategory {
@@ -77,7 +54,9 @@ export function categorizeLastDone(label: string): LastDoneCategory {
     return LAST_DONE_CATEGORIES.vehicle;
   }
   if (
-    /passport|emirates id|visa|license|licence|document|eid|id card|renew.*id/.test(l)
+    /passport|emirates id|visa|license|licence|document|eid|id card|renew.*id/.test(
+      l
+    )
   ) {
     return LAST_DONE_CATEGORIES.documents;
   }

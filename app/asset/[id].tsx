@@ -1,3 +1,4 @@
+import { useTheme } from '@/lib/ThemeContext';
 import {
   Alert,
   Image,
@@ -13,7 +14,7 @@ import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import {
   BookOpen,
   Camera,
@@ -36,12 +37,14 @@ import { resolveManualLink } from '@/lib/manualLink';
 import { confirmDelete } from '@/lib/confirmDelete';
 import { shareDocument } from '@/lib/shareDocument';
 import { blurActiveElement } from '@/lib/a11y';
-import { colors, fonts, radius, spacing, shadows } from '@/constants/theme';
+import { type ThemeColors,  colors, fonts, radius, spacing, shadows  } from '@/constants/theme';
 
 const DOCK_CLEARANCE = 96;
 const CHROME_TOP = 18;
 
 export default function AssetDetailScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -462,6 +465,8 @@ function QuickAction({
   label: string;
   onPress: () => void;
 }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <Pressable
       onPress={() => {
@@ -483,7 +488,8 @@ function labelDocKind(kind?: string) {
   return 'Document';
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   chrome: {
     position: 'absolute',
     left: spacing.lg,
@@ -509,7 +515,7 @@ const styles = StyleSheet.create({
   },
   link: {
     fontFamily: fonts.sansMedium,
-    fontSize: 15,
+    fontSize: 16,
     color: colors.forest,
   },
   heroPhoto: {
@@ -549,7 +555,7 @@ const styles = StyleSheet.create({
   lastMaintained: {
     marginTop: spacing.sm,
     fontFamily: fonts.sans,
-    fontSize: 13,
+    fontSize: 16,
     color: colors.mute,
   },
   chip: {
@@ -562,7 +568,7 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
+    fontSize: 16,
     color: colors.slate,
   },
   quickRow: {
@@ -587,7 +593,7 @@ const styles = StyleSheet.create({
   },
   quickLabel: {
     fontFamily: fonts.sansMedium,
-    fontSize: 12,
+    fontSize: 16,
     color: colors.slate,
   },
   glanceStrip: {
@@ -611,13 +617,13 @@ const styles = StyleSheet.create({
   },
   glanceValue: {
     fontFamily: fonts.sansSemi,
-    fontSize: 15,
+    fontSize: 16,
     color: colors.ink,
   },
   glanceLabel: {
     marginTop: 4,
     fontFamily: fonts.sans,
-    fontSize: 12,
+    fontSize: 16,
     color: colors.mute,
   },
   privacyBanner: {
@@ -628,7 +634,7 @@ const styles = StyleSheet.create({
   },
   privacyText: {
     fontFamily: fonts.sans,
-    fontSize: 13,
+    fontSize: 16,
     lineHeight: 18,
     color: colors.forest,
   },
@@ -653,7 +659,7 @@ const styles = StyleSheet.create({
   insight: {
     marginTop: spacing.lg,
     fontFamily: fonts.sans,
-    fontSize: 14,
+    fontSize: 16,
     lineHeight: 20,
     color: colors.mute,
   },
@@ -705,7 +711,7 @@ const styles = StyleSheet.create({
   },
   editBtnText: {
     fontFamily: fonts.sansSemi,
-    fontSize: 15,
+    fontSize: 16,
     color: colors.forest,
   },
   deleteBtn: {
@@ -720,7 +726,8 @@ const styles = StyleSheet.create({
   },
   deleteBtnText: {
     fontFamily: fonts.sansSemi,
-    fontSize: 15,
+    fontSize: 16,
     color: colors.coral,
   },
 });
+}

@@ -22,6 +22,8 @@ export type LastDoneItem = {
   logs: LastDoneLog[];
   /** Optional link to an inventory item this activity is about */
   inventoryItemId?: string;
+  personId?: string;
+  assignedTo?: string;
   /** Absolute next-reminder date, if set */
   remindAt?: string;
   /**
@@ -38,6 +40,8 @@ export type LogDoneInput = {
   doneAt?: string;
   /** Link (or re-link) this activity to an inventory item */
   inventoryItemId?: string | null;
+  personId?: string | null;
+  assignedTo?: string | null;
   /**
    * Absolute reminder date. Pass `null` to clear.
    * Ignored when `remindInterval` is provided (computed instead).
@@ -179,6 +183,12 @@ export function normalizeItem(raw: unknown): LastDoneItem | null {
   if (typeof r.inventoryItemId === 'string' && r.inventoryItemId.trim()) {
     item.inventoryItemId = r.inventoryItemId.trim();
   }
+  if (typeof r.personId === 'string' && r.personId.trim()) {
+    item.personId = r.personId.trim();
+  }
+  if (typeof r.assignedTo === 'string' && r.assignedTo.trim()) {
+    item.assignedTo = r.assignedTo.trim();
+  }
   if (typeof r.remindAt === 'string') item.remindAt = r.remindAt;
   if (
     r.remindInterval &&
@@ -318,6 +328,8 @@ export function createLastDoneItem(
     remindAt?: string;
     remindInterval?: RemindInterval;
     inventoryItemId?: string;
+    personId?: string;
+    assignedTo?: string;
   } = {}
 ): LastDoneItem {
   const createdAt = new Date().toISOString();
@@ -330,6 +342,8 @@ export function createLastDoneItem(
   if (opts.remindAt) item.remindAt = opts.remindAt;
   if (opts.remindInterval) item.remindInterval = opts.remindInterval;
   if (opts.inventoryItemId) item.inventoryItemId = opts.inventoryItemId;
+  if (opts.personId) item.personId = opts.personId;
+  if (opts.assignedTo) item.assignedTo = opts.assignedTo;
   return item;
 }
 
@@ -341,6 +355,8 @@ export function appendLog(
     remindAt?: string | null;
     remindInterval?: RemindInterval | null;
     inventoryItemId?: string | null;
+    personId?: string | null;
+    assignedTo?: string | null;
     /** When true, replace remind fields from opts (including clear). */
     replaceRemind?: boolean;
   } = {}
@@ -360,6 +376,21 @@ export function appendLog(
     next.inventoryItemId = opts.inventoryItemId;
   } else if (existing.inventoryItemId) {
     next.inventoryItemId = existing.inventoryItemId;
+  }
+
+  if (opts.personId === null) {
+    // clear
+  } else if (typeof opts.personId === 'string' && opts.personId) {
+    next.personId = opts.personId;
+  } else if (existing.personId) {
+    next.personId = existing.personId;
+  }
+  if (opts.assignedTo === null) {
+    // clear
+  } else if (typeof opts.assignedTo === 'string' && opts.assignedTo) {
+    next.assignedTo = opts.assignedTo;
+  } else if (existing.assignedTo) {
+    next.assignedTo = existing.assignedTo;
   }
 
   if (opts.replaceRemind) {

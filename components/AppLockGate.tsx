@@ -14,13 +14,15 @@ import {
   loadSecurityPrefs,
   type SecurityPrefs,
 } from '@/lib/securityPrefs';
-import { colors, fonts, radius, spacing } from '@/constants/theme';
+import { fonts, radius, spacing } from '@/constants/theme';
+import { useTheme } from '@/lib/ThemeContext';
 
 /**
  * Full-screen lock when biometrics are enabled.
  * Unlocks via Face ID / Touch ID / device passcode.
  */
 export function AppLockGate({ children }: { children: ReactNode }) {
+  const { colors } = useTheme();
   const [prefs, setPrefs] = useState<SecurityPrefs | null>(null);
   const [locked, setLocked] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -108,23 +110,34 @@ export function AppLockGate({ children }: { children: ReactNode }) {
 
   // Avoid flashing unlocked content before SecureStore prefs load.
   if (!prefs) {
-    return <View style={[styles.overlay, { zIndex: 0 }]} />;
+    return <View style={[styles.overlay, { zIndex: 0, backgroundColor: colors.bg }]} />;
   }
 
   return (
     <View style={{ flex: 1 }}>
       {children}
       {locked && prefs.biometrics ? (
-        <View style={styles.overlay} accessibilityViewIsModal>
-          <Text style={styles.brand}>LifeOS</Text>
-          <Text style={styles.lead}>Unlock to continue. Data stays on this device.</Text>
-          {hint ? <Text style={styles.hint}>{hint}</Text> : null}
+        <View
+          style={[styles.overlay, { backgroundColor: colors.bg }]}
+          accessibilityViewIsModal
+        >
+          <Text style={[styles.brand, { color: colors.ink }]}>LifeOS</Text>
+          <Text style={[styles.lead, { color: colors.mute }]}>
+            Unlock to continue. Data stays on this device.
+          </Text>
+          {hint ? <Text style={[styles.hint, { color: colors.coral }]}>{hint}</Text> : null}
           <Pressable
             onPress={() => void unlock()}
             disabled={busy}
-            style={({ pressed }) => [styles.btn, pressed && { opacity: 0.9 }]}
+            style={({ pressed }) => [
+              styles.btn,
+              { backgroundColor: colors.accent },
+              pressed && { opacity: 0.9 },
+            ]}
           >
-            <Text style={styles.btnText}>{busy ? 'Checking…' : 'Unlock'}</Text>
+            <Text style={[styles.btnText, { color: colors.accentOn }]}>
+              {busy ? 'Checking…' : 'Unlock'}
+            </Text>
           </Pressable>
         </View>
       ) : null}
@@ -132,32 +145,9 @@ export function AppLockGate({ children }: { children: ReactNode }) {
   );
 }
 
-/** Prompt biometrics when vault lock is enabled. Returns true if allowed. */
-export async function authenticateForVault(): Promise<boolean> {
-  const prefs = await loadSecurityPrefs();
-  if (!prefs.vaultLock || Platform.OS === 'web') return true;
-  try {
-    const hasHardware = await LocalAuthentication.hasHardwareAsync();
-    const enrolled = await LocalAuthentication.isEnrolledAsync();
-    if (!hasHardware || !enrolled) {
-      // Vault lock is on but OS has nothing to authenticate with — deny open.
-      return false;
-    }
-    const result = await LocalAuthentication.authenticateAsync({
-      promptMessage: 'Unlock emergency vault',
-      cancelLabel: 'Cancel',
-      disableDeviceFallback: false,
-    });
-    return result.success;
-  } catch {
-    return false;
-  }
-}
-
 const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: colors.bg,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.xxl,
@@ -167,20 +157,17 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sansSemi,
     fontSize: 36,
     letterSpacing: -1.2,
-    color: colors.ink,
     marginBottom: spacing.sm,
   },
   lead: {
     fontFamily: fonts.sans,
-    fontSize: 15,
-    color: colors.mute,
+    fontSize: 16,
     textAlign: 'center',
     marginBottom: spacing.xl,
   },
   hint: {
     fontFamily: fonts.sans,
-    fontSize: 13,
-    color: colors.coral,
+    fontSize: 16,
     textAlign: 'center',
     marginBottom: spacing.md,
   },
@@ -189,7 +176,6 @@ const styles = StyleSheet.create({
     minWidth: 180,
     height: 52,
     borderRadius: radius.sm,
-    backgroundColor: colors.forest,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.xl,
@@ -197,7 +183,6 @@ const styles = StyleSheet.create({
   btnText: {
     fontFamily: fonts.sansMedium,
     fontSize: 16,
-    color: colors.forestOn,
   },
 });
 

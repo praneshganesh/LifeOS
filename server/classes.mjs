@@ -90,6 +90,12 @@ export function ensureClassActions(actions, lastUserText, classPacksSummary) {
     });
   }
 
+  if (looksLikeClassEnrollment(lastUserText)) {
+    for (let i = list.length - 1; i >= 0; i -= 1) {
+      if (list[i]?.type === 'habit_check_in') list.splice(i, 1);
+    }
+  }
+
   if (looksLikeClassAttendance(lastUserText) && !types.has('log_class') && packs.length) {
     list.push({
       type: 'log_class',
@@ -102,8 +108,9 @@ export function ensureClassActions(actions, lastUserText, classPacksSummary) {
       if (a.type === 'log_class') {
         if (!packs.length) return null;
         const next = { ...a };
-        if (!next.title && newest?.title) next.title = newest.title;
-        if (!next.id && newest?.id) next.id = newest.id;
+        if (!next.title && packs.length === 1 && newest?.title) {
+          next.title = newest.title;
+        }
         return next;
       }
       if (a.type !== 'add_class_pack') return a;

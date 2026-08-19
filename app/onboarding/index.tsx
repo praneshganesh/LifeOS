@@ -1,11 +1,15 @@
+import { useMemo } from 'react';
+import { useTheme } from '@/lib/ThemeContext';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/components/ui/Text';
-import { colors, fonts, radius, spacing } from '@/constants/theme';
+import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
 
 export default function OnboardingWelcome() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
@@ -43,7 +47,8 @@ export default function OnboardingWelcome() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.bg,
@@ -107,8 +112,9 @@ const styles = StyleSheet.create({
   },
   privacy: {
     fontFamily: fonts.sans,
-    fontSize: 12,
+    fontSize: 16,
     color: colors.faint,
     textAlign: 'center',
   },
 });
+}

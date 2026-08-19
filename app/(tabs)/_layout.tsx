@@ -1,7 +1,7 @@
 import { Tabs } from 'expo-router';
 
 /**
- * No bottom tab bar — Capture / Chat / Talk live in the floating dock (bottom-left).
+ * No bottom tab bar — Capture / Ask / Talk live in the floating dock (bottom-left).
  */
 export default function TabLayout() {
   return (
@@ -12,7 +12,8 @@ export default function TabLayout() {
       }}
       tabBar={() => null}
     >
-      <Tabs.Screen name="index" options={{ title: 'Chat' }} />
+      <Tabs.Screen name="index" options={{ title: 'Home' }} />
+      <Tabs.Screen name="ask" options={{ href: null, title: 'Ask' }} />
       <Tabs.Screen
         name="capture-tab"
         options={{ href: null }}

@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useTheme } from '@/lib/ThemeContext';
+import { useMemo, useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -21,9 +22,11 @@ import {
   type SubscriptionCategory,
   type SubscriptionCycle,
 } from '@/lib/subscriptions';
-import { colors, fonts, radius, spacing } from '@/constants/theme';
+import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
 
 export default function SubscriptionFormScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { editId: editParam } = useLocalSearchParams<{ editId?: string }>();
@@ -219,13 +222,14 @@ export default function SubscriptionFormScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   content: {
     padding: spacing.lg,
   },
   label: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
+    fontSize: 16,
     color: colors.mute,
     marginBottom: spacing.sm,
     marginTop: spacing.md,
@@ -260,7 +264,7 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
+    fontSize: 16,
     color: colors.ink,
   },
   chipTextOn: {
@@ -282,3 +286,4 @@ const styles = StyleSheet.create({
     color: colors.pure,
   },
 });
+}

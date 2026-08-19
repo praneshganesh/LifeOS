@@ -11,6 +11,7 @@ import {
 import {
   createClassPack,
   findClassPack,
+  pickAttendancePack,
   mergeClassPackUpdate,
   normalizeClassPack,
   toggleLogForDay,
@@ -35,6 +36,10 @@ type ClassesContextValue = {
   logClass: (id: string, date?: string) => Promise<ClassPack | null>;
   getById: (id: string) => ClassPack | undefined;
   findPack: (title: string, personId?: string) => ClassPack | undefined;
+  pickAttendance: (opts: {
+    title?: string;
+    personId?: string;
+  }) => ClassPack | undefined;
   newestPack: () => ClassPack | undefined;
 };
 
@@ -138,6 +143,12 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  const pickAttendance = useCallback(
+    (opts: { title?: string; personId?: string }) =>
+      pickAttendancePack(packsRef.current, opts),
+    []
+  );
+
   const newestPack = useCallback(() => {
     return [...packsRef.current].sort((a, b) =>
       b.createdAt.localeCompare(a.createdAt)
@@ -154,9 +165,10 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
       logClass,
       getById,
       findPack,
+      pickAttendance,
       newestPack,
     }),
-    [packs, ready, addPack, updatePack, removePack, logClass, getById, findPack, newestPack]
+    [packs, ready, addPack, updatePack, removePack, logClass, getById, findPack, pickAttendance, newestPack]
   );
 
   return (

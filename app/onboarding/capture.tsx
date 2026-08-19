@@ -1,11 +1,15 @@
+import { useMemo } from 'react';
+import { useTheme } from '@/lib/ThemeContext';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Camera, FileText, Receipt } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
-import { colors, fonts, radius, spacing } from '@/constants/theme';
+import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
 
 export default function OnboardingCapture() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
@@ -56,7 +60,8 @@ export default function OnboardingCapture() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.bg,
@@ -66,7 +71,7 @@ const styles = StyleSheet.create({
   body: { flex: 1 },
   step: {
     fontFamily: fonts.sansMedium,
-    fontSize: 12,
+    fontSize: 16,
     color: colors.forest,
     letterSpacing: 0.4,
     textTransform: 'uppercase',
@@ -81,7 +86,7 @@ const styles = StyleSheet.create({
   },
   lead: {
     fontFamily: fonts.sans,
-    fontSize: 15,
+    fontSize: 16,
     lineHeight: 22,
     color: colors.mute,
     marginBottom: spacing.xxl,
@@ -103,7 +108,7 @@ const styles = StyleSheet.create({
   },
   cardHint: {
     fontFamily: fonts.sans,
-    fontSize: 13,
+    fontSize: 16,
     color: colors.mute,
   },
   footer: {
@@ -130,7 +135,8 @@ const styles = StyleSheet.create({
   },
   secondaryText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 15,
+    fontSize: 16,
     color: colors.mute,
   },
 });
+}

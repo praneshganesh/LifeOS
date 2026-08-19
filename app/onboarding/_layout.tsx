@@ -1,12 +1,15 @@
 import { Stack } from 'expo-router';
-import { colors, fonts } from '@/constants/theme';
+import { fonts } from '@/constants/theme';
+import { useTheme } from '@/lib/ThemeContext';
 
 export default function OnboardingLayout() {
+  const { colors } = useTheme();
+
   return (
     <Stack
       screenOptions={{
         headerStyle: { backgroundColor: colors.bg },
-        headerTintColor: colors.forest,
+        headerTintColor: colors.ink,
         headerTitleStyle: {
           fontFamily: fonts.sansMedium,
           color: colors.ink,

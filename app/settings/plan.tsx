@@ -8,11 +8,14 @@ import { useSpaces } from '@/lib/SpacesContext';
 import { useHousehold } from '@/lib/HouseholdContext';
 import {
   PLANS,
+  TRIAL_DAYS,
   buildLimitMeters,
   loadPlanPrefs,
   planById,
   savePlanPrefs,
+  trialDaysLeft,
   type PlanId,
+  type PlanPrefs,
 } from '@/lib/planLimits';
 import { useEffect, useState } from 'react';
 import { fonts, radius, spacing } from '@/constants/theme';
@@ -23,10 +26,10 @@ export default function PlanSettingsScreen() {
   const { items } = useInventory();
   const { spaces } = useSpaces();
   const { members } = useHousehold();
-  const [planId, setPlanId] = useState<PlanId>('free');
+  const [prefs, setPrefs] = useState<PlanPrefs>({ planId: 'trial' });
 
   useEffect(() => {
-    void loadPlanPrefs().then((p) => setPlanId(p.planId));
+    void loadPlanPrefs().then(setPrefs);
   }, []);
 
   const usage = useMemo(
@@ -38,33 +41,36 @@ export default function PlanSettingsScreen() {
     [items.length, spaces, members.length]
   );
 
+  const planId = prefs.planId;
   const plan = planById(planId);
   const meters = buildLimitMeters(plan, usage);
+  const daysLeft = trialDaysLeft(prefs);
+  const subtitle =
+    planId === 'trial' && daysLeft != null
+      ? daysLeft > 0
+        ? `Trial — ${daysLeft} day${daysLeft === 1 ? '' : 's'} left of ${TRIAL_DAYS}. Full Pro.`
+        : 'Trial ended. Billing needs an Apple Developer account — nothing is locked yet.'
+      : `You’re on ${plan.name} (local). App Store billing comes later.`;
 
   async function selectPlan(id: PlanId) {
     if (id === planId) return;
-    if (id !== 'free') {
-      Alert.alert(
-        'Local plan only',
-        'Billing isn’t connected yet. This switches your on-device limits for testing — no charge.'
-      );
-    }
-    setPlanId(id);
-    await savePlanPrefs({ planId: id });
+    Alert.alert(
+      'Local plan only',
+      'App Store billing isn’t connected yet (needs Apple Developer / DUNS). This only switches the on-device label — no charge.'
+    );
+    const next: PlanPrefs = {
+      planId: id,
+      trialStartedAt: prefs.trialStartedAt,
+    };
+    setPrefs(next);
+    await savePlanPrefs(next);
   }
 
   return (
-    <ModuleScreen
-      title="Plan & billing"
-      subtitle={`You’re on ${plan.name} (local). Billing connects later.`}
-    >
-      <ModuleSection label="Usage on this device">
+    <ModuleScreen title="Plan & billing" subtitle={subtitle}>
+      <ModuleSection label="On this device">
         <ListCard>
-          <MeterRow
-            title="Things"
-            meter={meters.assets}
-            colors={colors}
-          />
+          <MeterRow title="Things" meter={meters.assets} colors={colors} />
           <MeterRow title="Homes" meter={meters.homes} colors={colors} />
           <MeterRow
             title="People"
@@ -101,9 +107,9 @@ export default function PlanSettingsScreen() {
                 </Text>
               ))}
               {current ? (
-                <Text style={[styles.current, { color: colors.forest }]}>Current plan</Text>
+                <Text style={[styles.current, { color: colors.forest }]}>Current</Text>
               ) : (
-                <Text style={[styles.cta, { color: colors.slate }]}>Use on this device</Text>
+                <Text style={[styles.cta, { color: colors.slate }]}>Preview on this device</Text>
               )}
             </Pressable>
           );
@@ -114,12 +120,12 @@ export default function PlanSettingsScreen() {
         <ListCard>
           <ListRow
             title="Payment method"
-            subtitle="Not connected — App Store billing comes with the backend"
+            subtitle="Sign in with Apple + App Store trial after DUNS / Developer account"
             meta="Later"
           />
           <ListRow
-            title="Invoices"
-            subtitle="No charges on local plans"
+            title="What we meter"
+            subtitle="Talk per login (not Things). Cloud photos later. Family is extra logins, not extra modules."
             meta="—"
             last
           />
@@ -151,7 +157,7 @@ function MeterRow({
       ]}
     >
       <View style={styles.meterTop}>
-        <Text variant="headline" style={{ fontSize: 15 }}>
+        <Text variant="headline" style={{ fontSize: 16 }}>
           {title}
         </Text>
         <Text
@@ -190,18 +196,18 @@ const styles = StyleSheet.create({
   },
   price: {
     fontFamily: fonts.sansSemi,
-    fontSize: 14,
+    fontSize: 16,
   },
   perk: { marginTop: 2 },
   current: {
     marginTop: spacing.md,
     fontFamily: fonts.sansMedium,
-    fontSize: 12,
+    fontSize: 16,
   },
   cta: {
     marginTop: spacing.md,
     fontFamily: fonts.sansMedium,
-    fontSize: 12,
+    fontSize: 16,
   },
   meterRow: {
     paddingHorizontal: spacing.md,

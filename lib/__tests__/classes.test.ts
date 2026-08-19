@@ -9,6 +9,7 @@ import {
   looksLikeClassAttendance,
   looksLikeClassEnrollment,
   mergeClassPackUpdate,
+  pickAttendancePack,
   remainingCount,
   toggleLogForDay,
   usedCount,
@@ -85,6 +86,28 @@ describe('class packs', () => {
   it('finds skating class by title', () => {
     const pack = createClassPack({ title: 'Skating', total: 24 });
     assert.equal(findClassPack([pack], 'skating class')?.id, pack.id);
+  });
+
+  it('does not pick another adult’s swimming pack', () => {
+    const mine = createClassPack({
+      title: 'Swimming',
+      personId: 'you',
+      assignedTo: 'Pranesh',
+    });
+    const hers = createClassPack({
+      title: 'Swimming',
+      personId: 'wife',
+      assignedTo: 'Priya',
+    });
+    assert.equal(findClassPack([hers, mine], 'swimming', 'you')?.id, mine.id);
+    assert.equal(
+      pickAttendancePack([hers, mine], { title: 'swimming', personId: 'you' })?.id,
+      mine.id
+    );
+    assert.equal(
+      pickAttendancePack([hers], { title: 'swimming', personId: 'you' }),
+      undefined
+    );
   });
 });
 

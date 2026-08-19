@@ -12,7 +12,7 @@ import {
 } from '../ocr/receiptHints';
 import { isTalkStub, isIncompleteStub, findTalkMatches } from '../matchTalkStubs';
 import { crossSearch } from '../crossSearch';
-import { paletteFor } from '../../constants/theme';
+import { paletteFor, contrastRatio, PALETTES, migrateAppearancePrefs } from '../../constants/theme';
 import {
   findHabitByTitle,
   mergeDuplicateHabits,
@@ -32,11 +32,12 @@ describe('planLimits', () => {
     assert.match(m.label, /Unlimited/);
   });
 
-  it('flags free plan overage', () => {
-    const free = planById('free');
-    const meters = buildLimitMeters(free, { assets: 101, homes: 1, members: 2 });
-    assert.equal(meters.assets.over, true);
-    assert.equal(wouldExceedAssetLimit(free, 100), true);
+  it('does not cap Things on trial, Pro, or Family', () => {
+    const trial = planById('trial');
+    const meters = buildLimitMeters(trial, { assets: 101, homes: 1, members: 2 });
+    assert.equal(meters.assets.over, false);
+    assert.equal(wouldExceedAssetLimit(trial, 100), false);
+    assert.equal(wouldExceedAssetLimit(planById('free'), 1000), false);
     assert.equal(wouldExceedAssetLimit(planById('pro'), 1000), false);
   });
 });
@@ -127,9 +128,44 @@ describe('crossSearch', () => {
 });
 
 describe('theme palettes', () => {
-  it('resolves system dark to hearth', () => {
+  it('resolves system dark to earth dark (legacy hearth)', () => {
     assert.equal(paletteFor('system', true).bg, paletteFor('hearth').bg);
     assert.equal(paletteFor('system', false).bg, paletteFor('linen').bg);
+  });
+
+  it('keeps ocean and clay distinct from earth sage', () => {
+    assert.notEqual(paletteFor('ocean').accent, paletteFor('earth').accent);
+    assert.notEqual(paletteFor('clay').accent, paletteFor('earth').accent);
+    assert.notEqual(paletteFor('ink').accent, paletteFor('earth').accent);
+    assert.equal(paletteFor('ink', false, 'dark').ink, '#FAFAFA');
+  });
+
+  it('gives readable ink on surface and accentOn on accent', () => {
+    for (const family of ['earth', 'ocean', 'clay', 'ink'] as const) {
+      for (const mode of ['light', 'dark'] as const) {
+        const p = PALETTES[family][mode];
+        assert.ok(
+          contrastRatio(p.ink, p.surface) >= 4.5,
+          `${family} ${mode} ink/surface ${contrastRatio(p.ink, p.surface).toFixed(2)}`
+        );
+        assert.ok(
+          contrastRatio(p.accentOn, p.accent) >= 4.5,
+          `${family} ${mode} accentOn/accent ${contrastRatio(p.accentOn, p.accent).toFixed(2)}`
+        );
+      }
+    }
+  });
+
+  it('promotes the old Earth default to Ink once', () => {
+    const fromDefault = migrateAppearancePrefs({ family: 'earth', mode: 'light' });
+    assert.equal(fromDefault.family, 'ink');
+    assert.equal(fromDefault.mode, 'dark');
+    const fromDark = migrateAppearancePrefs({ family: 'earth', mode: 'dark' });
+    assert.equal(fromDark.family, 'ink');
+    assert.equal(fromDark.mode, 'dark');
+    const kept = migrateAppearancePrefs({ family: 'earth', mode: 'light', rev: 2 });
+    assert.equal(kept.family, 'earth');
+    assert.equal(kept.mode, 'light');
   });
 });
 
@@ -156,6 +192,29 @@ describe('habit title matching', () => {
     assert.equal(removedIds.length, 2);
     assert.equal(habits[0]!.logs.length, 2);
     assert.ok(findHabitByTitle(habits, 'walk'));
+  });
+
+  it('does not merge Walk habits that belong to different people', () => {
+    const a: Habit = {
+      id: '1',
+      title: 'Walk',
+      categoryId: 'health',
+      personId: 'you',
+      logs: [],
+      createdAt: '2026-01-01T00:00:00Z',
+    };
+    const b: Habit = {
+      id: '2',
+      title: 'Walk',
+      categoryId: 'health',
+      personId: 'wife',
+      logs: [],
+      createdAt: '2026-01-02T00:00:00Z',
+    };
+    const { habits, removedIds } = mergeDuplicateHabits([a, b]);
+    assert.equal(habits.length, 2);
+    assert.equal(removedIds.length, 0);
+    assert.equal(findHabitByTitle([a, b], 'walk', 'wife')?.id, '2');
   });
 });
 

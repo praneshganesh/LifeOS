@@ -1,3 +1,4 @@
+import { useTheme } from '@/lib/ThemeContext';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Platform,
@@ -25,13 +26,15 @@ import { useSubscriptions } from '@/lib/SubscriptionsContext';
 import { useLastDone } from '@/lib/LastDoneContext';
 import { confirmDelete } from '@/lib/confirmDelete';
 import { crossSearch, type SearchHit } from '@/lib/crossSearch';
-import { colors, fonts, radius, spacing } from '@/constants/theme';
+import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
 
 /**
  * On-device cross-search — Things, docs, spaces, spend, habits, people.
  * No LLM.
  */
 export default function SearchScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { items: inventory, removeItem, getById } = useInventory();
@@ -186,6 +189,7 @@ export default function SearchScreen() {
                       icon={hit.icon}
                       title={hit.title}
                       subtitle={hit.subtitle}
+                      styles={styles}
                       onPress={() => router.push(hit.href as Href)}
                     />
                   )
@@ -210,11 +214,13 @@ function HitCard({
   title,
   subtitle,
   onPress,
+  styles,
 }: {
   icon: Icon3DName;
   title: string;
   subtitle: string;
   onPress: () => void;
+  styles: ReturnType<typeof makeStyles>;
 }) {
   return (
     <Card style={styles.resultCard} onPress={onPress}>
@@ -233,7 +239,8 @@ function HitCard({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   content: {
     paddingHorizontal: spacing.lg,
   },
@@ -261,7 +268,7 @@ const styles = StyleSheet.create({
   },
   clear: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
+    fontSize: 16,
     color: colors.forest,
   },
   blockLabel: {
@@ -289,7 +296,7 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
+    fontSize: 16,
     color: colors.slate,
   },
   resultCard: {
@@ -302,3 +309,4 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
 });
+}

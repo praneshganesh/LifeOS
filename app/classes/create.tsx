@@ -1,3 +1,4 @@
+import { useTheme } from '@/lib/ThemeContext';
 import { useMemo, useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -13,14 +14,18 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { DateField } from '@/components/ui/DateField';
+import { PersonChips } from '@/components/PersonChips';
 import { useClasses } from '@/lib/ClassesContext';
 import { useHousehold } from '@/lib/HouseholdContext';
+import { selfMember } from '@/lib/people';
 import { addCalendarMonths, localDayKey } from '@/lib/dates';
-import { colors, fonts, radius, spacing } from '@/constants/theme';
+import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
 
 const MONTH_CHIPS = [1, 2, 3, 6] as const;
 
 export default function CreateClassPackScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { addPack } = useClasses();
@@ -29,7 +34,9 @@ export default function CreateClassPackScreen() {
   const [total, setTotal] = useState('24');
   const [months, setMonths] = useState(3);
   const [startsOn, setStartsOn] = useState(localDayKey());
-  const [personId, setPersonId] = useState<string | null>(null);
+  const [personId, setPersonId] = useState<string | null>(
+    () => selfMember(members)?.id ?? null
+  );
   const [saving, setSaving] = useState(false);
 
   const endsOn = useMemo(
@@ -127,35 +134,12 @@ export default function CreateClassPackScreen() {
             })}
           </Text>
 
-          {members.length ? (
-            <>
-              <Text style={styles.label}>Who (optional)</Text>
-              <View style={styles.chips}>
-                <Pressable
-                  onPress={() => setPersonId(null)}
-                  style={[styles.chip, !personId && styles.chipOn]}
-                >
-                  <Text style={[styles.chipText, !personId && styles.chipTextOn]}>
-                    Unassigned
-                  </Text>
-                </Pressable>
-                {members.map((m) => {
-                  const on = personId === m.id;
-                  return (
-                    <Pressable
-                      key={m.id}
-                      onPress={() => setPersonId(m.id)}
-                      style={[styles.chip, on && styles.chipOn]}
-                    >
-                      <Text style={[styles.chipText, on && styles.chipTextOn]}>
-                        {m.name}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </>
-          ) : null}
+          <PersonChips
+            members={members}
+            personId={personId}
+            onChange={setPersonId}
+            noneLabel="Unassigned"
+          />
 
           <Pressable
             onPress={() => void save()}
@@ -172,13 +156,14 @@ export default function CreateClassPackScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   content: {
     padding: spacing.lg,
   },
   label: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
+    fontSize: 16,
     color: colors.mute,
     marginBottom: spacing.sm,
     marginTop: spacing.md,
@@ -197,7 +182,7 @@ const styles = StyleSheet.create({
   preview: {
     marginTop: spacing.md,
     fontFamily: fonts.sansMedium,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.forest,
   },
   chips: {
@@ -219,7 +204,7 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
+    fontSize: 16,
     color: colors.ink,
   },
   chipTextOn: {
@@ -241,3 +226,4 @@ const styles = StyleSheet.create({
     color: colors.pure,
   },
 });
+}

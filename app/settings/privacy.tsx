@@ -11,32 +11,33 @@ export default function PrivacySettingsScreen() {
     >
       <Text variant="body" style={{ marginBottom: spacing.lg }}>
         LifeOS keeps your inventory, family, spend, habits, and documents on this
-        device. Talk and Ask only send short text plus a compact summary of what
-        you already own — never raw photos or full document scans — to your chat
+        device first. When cloud backup is on, a JSON snapshot (not photos) is
+        stored in your Supabase project so a lost phone is not the only copy.
+        Talk and Ask still send short text plus a compact summary to your chat
         API so the assistant can answer.
       </Text>
 
-      <ModuleSection label="Stays on this device">
+      <ModuleSection label="Your records">
         <ListCard>
           <ListRow
             title="Things & spaces"
-            subtitle="Inventory, rooms, photos, warranties"
-            meta="Local"
+            subtitle="Inventory, rooms, warranties — photos stay on-device"
+            meta="Phone"
           />
           <ListRow
             title="Money & habits"
             subtitle="Expenses, subscriptions, habit logs"
-            meta="Local"
+            meta="Phone"
           />
           <ListRow
             title="Family & Last Done"
             subtitle="Household people, maintenance history"
-            meta="Local"
+            meta="Phone"
           />
           <ListRow
             title="Document reading"
             subtitle="OCR / MRZ runs on-device"
-            meta="Local"
+            meta="Phone"
             last
           />
         </ListCard>
@@ -58,9 +59,13 @@ export default function PrivacySettingsScreen() {
         </ListCard>
       </ModuleSection>
 
-      <ModuleSection label="Not connected">
+      <ModuleSection label="Elsewhere">
         <ListCard>
-          <ListRow title="Cloud sync" subtitle="Deferred — no multi-device sync yet" meta="Off" />
+          <ListRow
+            title="Cloud backup"
+            subtitle="JSON snapshot in your Supabase project"
+            meta="On"
+          />
           <ListRow title="Gmail / email import" subtitle="Not required" meta="Off" />
           <ListRow title="Bank / payment import" subtitle="Not required" meta="Off" />
           <ListRow

@@ -1,3 +1,4 @@
+import { useTheme } from '@/lib/ThemeContext';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
@@ -16,9 +17,11 @@ import { Text } from '@/components/ui/Text';
 import { useInventory } from '@/lib/InventoryContext';
 import { useSpaces } from '@/lib/SpacesContext';
 import { blurActiveElement } from '@/lib/a11y';
-import { colors, fonts, radius, spacing } from '@/constants/theme';
+import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
 
 export default function EditAssetScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -267,6 +270,8 @@ function Field({
   placeholder?: string;
   multiline?: boolean;
 }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.field}>
       <Text variant="caption" style={styles.fieldLabel}>
@@ -284,7 +289,8 @@ function Field({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   content: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
@@ -297,7 +303,7 @@ const styles = StyleSheet.create({
   },
   link: {
     fontFamily: fonts.sansMedium,
-    fontSize: 15,
+    fontSize: 16,
     color: colors.forest,
   },
   field: {
@@ -315,7 +321,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: 12,
     fontFamily: fonts.sans,
-    fontSize: 15,
+    fontSize: 16,
     color: colors.ink,
   },
   inputMulti: {
@@ -342,7 +348,7 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
+    fontSize: 16,
     color: colors.slate,
   },
   chipTextOn: {
@@ -358,7 +364,7 @@ const styles = StyleSheet.create({
   },
   saveText: {
     fontFamily: fonts.sansSemi,
-    fontSize: 15,
+    fontSize: 16,
     color: colors.forestOn,
   },
   deleteBtn: {
@@ -368,7 +374,8 @@ const styles = StyleSheet.create({
   },
   deleteText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 15,
+    fontSize: 16,
     color: colors.coral,
   },
 });
+}

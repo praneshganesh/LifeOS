@@ -1,3 +1,4 @@
+import { useTheme } from '@/lib/ThemeContext';
 import { useMemo, useState } from 'react';
 import {
   ScrollView,
@@ -43,7 +44,7 @@ import {
   LastDoneActivityCard,
   LastDoneCategoryHeader,
 } from '@/components/LastDoneActivityCard';
-import { colors, fonts, radius, shadows, spacing } from '@/constants/theme';
+import { type ThemeColors,  colors, fonts, radius, shadows, spacing  } from '@/constants/theme';
 import { blurActiveElement } from '@/lib/a11y';
 
 const REMIND_CHOICES: { key: string; label: string; interval: RemindInterval | null }[] = [
@@ -88,6 +89,8 @@ function ActivityRow({
   highlighted?: boolean;
   last?: boolean;
 }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <Pressable
       onPress={onPress}
@@ -119,6 +122,8 @@ function ActivityRow({
 }
 
 export default function LastDoneModal() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { linkItemId: linkItemIdParam } = useLocalSearchParams<{
@@ -675,7 +680,8 @@ export default function LastDoneModal() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   content: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
@@ -710,7 +716,7 @@ const styles = StyleSheet.create({
   linkChipText: {
     flexShrink: 1,
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
+    fontSize: 16,
     color: colors.forest,
   },
   composer: {
@@ -759,12 +765,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   compactHeadline: {
-    fontSize: 15,
+    fontSize: 16,
     lineHeight: 20,
   },
   chooseText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 12,
+    fontSize: 16,
     color: colors.forest,
   },
   metaRow: {
@@ -792,7 +798,7 @@ const styles = StyleSheet.create({
   metaBtnText: {
     flex: 1,
     fontFamily: fonts.sansMedium,
-    fontSize: 12,
+    fontSize: 16,
     color: colors.ink,
   },
   pickerSheet: {
@@ -816,7 +822,7 @@ const styles = StyleSheet.create({
   },
   quickText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 12,
+    fontSize: 16,
     color: colors.slate,
   },
   quickTextOn: {
@@ -841,7 +847,7 @@ const styles = StyleSheet.create({
   },
   choiceText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.ink,
   },
   clearAll: {
@@ -862,7 +868,7 @@ const styles = StyleSheet.create({
   },
   confirmBtnText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 15,
+    fontSize: 16,
     color: colors.forestOn,
   },
   sectionHead: {
@@ -873,7 +879,7 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     color: colors.mute,
-    fontSize: 11,
+    fontSize: 16,
   },
   listCard: {
     backgroundColor: colors.white,
@@ -909,12 +915,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.forest,
   },
   activityTitle: {
-    fontSize: 15,
+    fontSize: 16,
     lineHeight: 20,
   },
   useText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 12,
+    fontSize: 16,
     color: colors.forest,
   },
   useTextOn: {
@@ -941,3 +947,4 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
 });
+}

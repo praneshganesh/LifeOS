@@ -4,7 +4,8 @@ import { useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
-import { colors, spacing } from '@/constants/theme';
+import { spacing } from '@/constants/theme';
+import { useTheme } from '@/lib/ThemeContext';
 
 /** Shared scroll layout for module screens — keeps padding consistent. */
 export function ModuleScreen({
@@ -35,7 +36,7 @@ export function ModuleScreen({
         ref={scrollRef}
         contentContainerStyle={[
           styles.content,
-          { paddingBottom: insets.bottom + 40 },
+          { paddingBottom: insets.bottom + 108 },
           contentStyle,
         ]}
         showsVerticalScrollIndicator={false}
@@ -67,10 +68,11 @@ export function ModuleSection({
   count?: number;
   children: ReactNode;
 }) {
+  const { colors } = useTheme();
   return (
     <View style={styles.section}>
       <View style={styles.sectionHead}>
-        <Text variant="label" style={styles.sectionLabel}>
+        <Text variant="label" style={[styles.sectionLabel, { color: colors.mute }]}>
           {label}
         </Text>
         {count != null ? <Text variant="caption">{count}</Text> : null}
@@ -103,7 +105,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.sm,
   },
-  sectionLabel: {
-    color: colors.mute,
-  },
+  sectionLabel: {},
 });

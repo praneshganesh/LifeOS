@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const STORAGE_KEY = 'lifeos:plan:v1';
 
-export type PlanId = 'free' | 'pro' | 'family';
+export type PlanId = 'trial' | 'pro' | 'family';
 
 export type PlanDef = {
   id: PlanId;
@@ -16,30 +16,38 @@ export type PlanDef = {
   };
 };
 
+const UNLIMITED = {
+  assets: Infinity,
+  homes: Infinity,
+  members: Infinity,
+} as const;
+
+export const TRIAL_DAYS = 14;
+
 export const PLANS: PlanDef[] = [
   {
-    id: 'free',
-    name: 'Free',
-    price: 'AED 0',
+    id: 'trial',
+    name: 'Trial',
+    price: `${TRIAL_DAYS} days`,
     perks: [
-      '100 Things',
-      '1 home space',
-      '3 household people',
-      'On-device Capture & search',
+      'Full Pro for 14 days',
+      'Unlimited Things, homes, people',
+      'Talk, Capture, classes, habits',
+      'One login — Family adds household sharing later',
     ],
-    limits: { assets: 100, homes: 1, members: 3 },
+    limits: { ...UNLIMITED },
   },
   {
     id: 'pro',
     name: 'Pro',
     price: 'AED 29 / mo',
     perks: [
-      'Unlimited Things & homes',
-      'On-device document reading',
-      'Maintenance & reports',
-      'Talk (chat API)',
+      'Everything in Trial, after you pay',
+      'One login · your devices (sync later)',
+      'Talk capped per day (cost guard)',
+      'Person tags — son’s class on your account',
     ],
-    limits: { assets: Infinity, homes: Infinity, members: Infinity },
+    limits: { ...UNLIMITED },
   },
   {
     id: 'family',
@@ -47,39 +55,86 @@ export const PLANS: PlanDef[] = [
     price: 'AED 49 / mo',
     perks: [
       'Everything in Pro',
-      'Unlimited household people',
-      'Shared homes (when sync ships)',
-      'Shared docs',
+      '4 logins in one household',
+      'Extra seats as add-ons',
+      'Shared Things · personal habits',
     ],
-    limits: { assets: Infinity, homes: Infinity, members: Infinity },
+    limits: { ...UNLIMITED },
   },
 ];
 
 export type PlanPrefs = {
   planId: PlanId;
+  trialStartedAt?: string;
 };
 
-export const DEFAULT_PLAN: PlanPrefs = { planId: 'free' };
+export const DEFAULT_PLAN: PlanPrefs = { planId: 'trial' };
+
+function normalizePlanId(id: unknown): PlanId {
+  if (id === 'pro' || id === 'family' || id === 'trial') return id;
+  if (id === 'free') return 'trial';
+  return 'trial';
+}
 
 export async function loadPlanPrefs(): Promise<PlanPrefs> {
   try {
     const raw = await AsyncStorage.getItem(STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_PLAN };
-    const parsed = JSON.parse(raw) as Partial<PlanPrefs>;
-    const id = parsed.planId;
-    if (id === 'free' || id === 'pro' || id === 'family') return { planId: id };
-    return { ...DEFAULT_PLAN };
+    if (!raw) {
+      const fresh: PlanPrefs = {
+        planId: 'trial',
+        trialStartedAt: new Date().toISOString(),
+      };
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));
+      return fresh;
+    }
+    const parsed = JSON.parse(raw) as Partial<PlanPrefs> & { planId?: unknown };
+    const planId = normalizePlanId(parsed.planId);
+    const trialStartedAt =
+      typeof parsed.trialStartedAt === 'string' && parsed.trialStartedAt
+        ? parsed.trialStartedAt
+        : planId === 'trial'
+          ? new Date().toISOString()
+          : undefined;
+    const prefs: PlanPrefs = { planId, trialStartedAt };
+    if (String(parsed.planId) === 'free') {
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
+    }
+    return prefs;
   } catch {
-    return { ...DEFAULT_PLAN };
+    return {
+      planId: 'trial',
+      trialStartedAt: new Date().toISOString(),
+    };
   }
 }
 
 export async function savePlanPrefs(prefs: PlanPrefs): Promise<void> {
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
+  const planId = normalizePlanId(prefs.planId);
+  const next: PlanPrefs = {
+    planId,
+    trialStartedAt:
+      prefs.trialStartedAt ||
+      (planId === 'trial' ? new Date().toISOString() : undefined),
+  };
+  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  void import('@/lib/cloud/sync').then((m) => m.scheduleCloudPush()).catch(() => undefined);
 }
 
-export function planById(id: PlanId): PlanDef {
-  return PLANS.find((p) => p.id === id) ?? PLANS[0]!;
+export function planById(id: PlanId | 'free'): PlanDef {
+  const nid = normalizePlanId(id);
+  return PLANS.find((p) => p.id === nid) ?? PLANS[0]!;
+}
+
+/** Days remaining on trial (can be negative). Null if not on trial. */
+export function trialDaysLeft(prefs: PlanPrefs, now = new Date()): number | null {
+  if (prefs.planId !== 'trial') return null;
+  const start = prefs.trialStartedAt
+    ? new Date(prefs.trialStartedAt)
+    : now;
+  if (Number.isNaN(start.getTime())) return TRIAL_DAYS;
+  const end = new Date(start);
+  end.setDate(end.getDate() + TRIAL_DAYS);
+  return Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 }
 
 export type UsageSnapshot = {
@@ -132,23 +187,20 @@ export function buildLimitMeters(
   };
 }
 
-/** True if adding one more asset would exceed the Free (or limited) plan. */
-export function wouldExceedAssetLimit(plan: PlanDef, currentAssets: number): boolean {
-  if (!Number.isFinite(plan.limits.assets)) return false;
-  return currentAssets >= plan.limits.assets;
+/** Structured data is unlimited on every SKU. Media/Talk caps come later. */
+export function wouldExceedAssetLimit(_plan: PlanDef, _currentAssets: number): boolean {
+  return false;
 }
 
-export function wouldExceedHomeLimit(plan: PlanDef, currentHomes: number): boolean {
-  if (!Number.isFinite(plan.limits.homes)) return false;
-  return currentHomes >= plan.limits.homes;
+export function wouldExceedHomeLimit(_plan: PlanDef, _currentHomes: number): boolean {
+  return false;
 }
 
 export function wouldExceedMemberLimit(
-  plan: PlanDef,
-  currentMembers: number
+  _plan: PlanDef,
+  _currentMembers: number
 ): boolean {
-  if (!Number.isFinite(plan.limits.members)) return false;
-  return currentMembers >= plan.limits.members;
+  return false;
 }
 
 export type PlanLimitKind = 'assets' | 'homes' | 'members';
@@ -158,9 +210,7 @@ export class PlanLimitError extends Error {
   constructor(kind: PlanLimitKind) {
     const label =
       kind === 'assets' ? 'Things' : kind === 'homes' ? 'homes' : 'people';
-    super(
-      `Free plan limit reached for ${label}. Upgrade in Settings → Plan, or remove something first.`
-    );
+    super(`Plan limit reached for ${label}.`);
     this.name = 'PlanLimitError';
     this.kind = kind;
   }
@@ -168,6 +218,9 @@ export class PlanLimitError extends Error {
 
 export function messageForPlanLimit(err: unknown): string | null {
   if (err instanceof PlanLimitError) return err.message;
+  if (err instanceof Error && err.message.startsWith('Plan limit reached')) {
+    return err.message;
+  }
   if (err instanceof Error && err.message.startsWith('Free plan limit')) {
     return err.message;
   }

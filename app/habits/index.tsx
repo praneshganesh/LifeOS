@@ -1,3 +1,4 @@
+import { useTheme } from '@/lib/ThemeContext';
 import { useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
@@ -15,9 +16,11 @@ import {
   loggedOn,
   shouldSyncLastDone,
 } from '@/lib/habits';
-import { colors, fonts, radius, spacing } from '@/constants/theme';
+import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
 
 export default function HabitsScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
   const { habits, checkIn, getById } = useHabits();
   const { logDone } = useLastDone();
@@ -96,7 +99,8 @@ export default function HabitsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   addBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -108,7 +112,8 @@ const styles = StyleSheet.create({
   },
   addLabel: {
     fontFamily: fonts.sansSemi,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.forest,
   },
 });
+}

@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useTheme } from '@/lib/ThemeContext';
+import { useMemo, useEffect, useState } from 'react';
 import { Platform, StyleSheet, Switch, View } from 'react-native';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { ListCard } from '@/components/ui/ListKit';
@@ -15,7 +16,7 @@ import {
   syncLastDoneReminders,
 } from '@/lib/lastDoneNotifications';
 import { useLastDone } from '@/lib/LastDoneContext';
-import { colors, spacing } from '@/constants/theme';
+import { type ThemeColors,  colors, spacing  } from '@/constants/theme';
 
 function ToggleRow({
   title,
@@ -32,10 +33,12 @@ function ToggleRow({
   last?: boolean;
   disabled?: boolean;
 }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={[styles.row, !last && styles.border, disabled && { opacity: 0.45 }]}>
       <View style={{ flex: 1 }}>
-        <Text variant="headline" style={{ fontSize: 15 }}>
+        <Text variant="headline" style={{ fontSize: 16 }}>
           {title}
         </Text>
         {subtitle ? (
@@ -166,7 +169,8 @@ export default function NotificationPrefsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -179,3 +183,4 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.line,
   },
 });
+}

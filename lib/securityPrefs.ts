@@ -6,15 +6,12 @@ const STORAGE_KEY = 'lifeos:security:v1';
 export type SecurityPrefs = {
   /** Require Face ID / biometrics (or device passcode) to open the app */
   biometrics: boolean;
-  /** Require unlock each time emergency vault is opened */
-  vaultLock: boolean;
   /** Lock again after backgrounding (5 minutes) */
   autoLock: boolean;
 };
 
 export const DEFAULT_SECURITY_PREFS: SecurityPrefs = {
   biometrics: false,
-  vaultLock: true,
   autoLock: true,
 };
 

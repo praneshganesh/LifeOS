@@ -1,3 +1,4 @@
+import { useTheme } from '@/lib/ThemeContext';
 import { useMemo } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
@@ -14,7 +15,7 @@ import {
   sumMonthly,
   sumYearly,
 } from '@/lib/subscriptions';
-import { colors, fonts, radius } from '@/constants/theme';
+import { type ThemeColors,  colors, fonts, radius  } from '@/constants/theme';
 
 function renewalMeta(renewsOn: string): string {
   const days = daysUntilRenewal(renewsOn);
@@ -26,6 +27,8 @@ function renewalMeta(renewsOn: string): string {
 }
 
 export default function SubscriptionsScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
   const { subscriptions } = useSubscriptions();
   const monthly = sumMonthly(subscriptions);
@@ -100,7 +103,8 @@ export default function SubscriptionsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   addBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -112,7 +116,8 @@ const styles = StyleSheet.create({
   },
   addLabel: {
     fontFamily: fonts.sansSemi,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.forest,
   },
 });
+}

@@ -1,3 +1,4 @@
+import { useTheme } from '@/lib/ThemeContext';
 import { useMemo } from 'react';
 import {
   Alert,
@@ -22,9 +23,9 @@ import {
   formatRemindStatus,
   sortLogsNewestFirst,
 } from '@/lib/lastDone';
-import { categorizeLastDone } from '@/lib/lastDoneCategories';
+import { categorizeLastDone, paintLastDoneCategory } from '@/lib/lastDoneCategories';
 import { blurActiveElement } from '@/lib/a11y';
-import { colors, fonts, radius, shadows, spacing } from '@/constants/theme';
+import { type ThemeColors,  colors, fonts, radius, shadows, spacing  } from '@/constants/theme';
 
 function confirmDelete(message: string): Promise<boolean> {
   if (Platform.OS === 'web') {
@@ -39,6 +40,8 @@ function confirmDelete(message: string): Promise<boolean> {
 }
 
 export default function LastDoneDetailScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -54,7 +57,9 @@ export default function LastDoneDetailScreen() {
     [item]
   );
 
-  const category = item ? categorizeLastDone(item.label) : null;
+  const category = item
+    ? paintLastDoneCategory(categorizeLastDone(item.label).id, colors)
+    : null;
 
   async function onDeleteLog(logId: string) {
     if (!item) return;
@@ -182,7 +187,8 @@ export default function LastDoneDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   content: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
@@ -199,7 +205,7 @@ const styles = StyleSheet.create({
   },
   backLinkText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.forest,
   },
   remindLine: {
@@ -216,7 +222,7 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     color: colors.mute,
-    fontSize: 11,
+    fontSize: 16,
   },
   listCard: {
     backgroundColor: colors.white,
@@ -238,7 +244,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.line,
   },
   logWhen: {
-    fontSize: 15,
+    fontSize: 16,
     lineHeight: 20,
   },
   deleteBtn: {
@@ -259,7 +265,7 @@ const styles = StyleSheet.create({
   },
   markBtnText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 15,
+    fontSize: 16,
     color: colors.forestOn,
   },
   dangerBtn: {
@@ -274,7 +280,8 @@ const styles = StyleSheet.create({
   },
   dangerBtnText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.coral,
   },
 });
+}

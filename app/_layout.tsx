@@ -17,6 +17,7 @@ import { OnboardingGate } from '@/components/OnboardingGate';
 import { AppLockGate } from '@/components/AppLockGate';
 import { NotificationDeepLinkHost } from '@/components/NotificationDeepLinkHost';
 import { ThemeProvider, useTheme } from '@/lib/ThemeContext';
+import { CloudGate } from '@/lib/cloud/CloudGate';
 import { LastDoneProvider } from '@/lib/LastDoneContext';
 import { InventoryProvider } from '@/lib/InventoryContext';
 import { SpacesProvider } from '@/lib/SpacesContext';
@@ -62,7 +63,7 @@ function RootNavigation({
       <Stack
         screenOptions={{
           headerStyle: { backgroundColor: colors.bg },
-          headerTintColor: colors.forest,
+          headerTintColor: colors.ink,
           headerTitleStyle: {
             fontFamily: fonts.sansMedium,
             color: colors.ink,
@@ -116,7 +117,6 @@ function RootNavigation({
         <Stack.Screen name="tasks/index" options={{ title: '', headerBackTitle: 'Back' }} />
         <Stack.Screen name="notifications/index" options={{ title: '', headerBackTitle: 'Back' }} />
         <Stack.Screen name="reports/index" options={{ title: '', headerBackTitle: 'Back' }} />
-        <Stack.Screen name="vault/index" options={{ title: '', headerBackTitle: 'Back' }} />
       </Stack>
       {!showBrandSplash ? <TalkOverlayHost /> : null}
       {showBrandSplash ? <BrandSplash onFinished={onBrandSplashFinished} /> : null}
@@ -150,8 +150,9 @@ export default function RootLayout() {
   if (!loaded) return null;
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#0B0B0C' }}>
       <ThemeProvider>
+        <CloudGate>
         <LastDoneProvider>
           <InventoryProvider>
             <SpacesProvider>
@@ -178,6 +179,7 @@ export default function RootLayout() {
             </SpacesProvider>
           </InventoryProvider>
         </LastDoneProvider>
+        </CloudGate>
       </ThemeProvider>
     </GestureHandlerRootView>
   );

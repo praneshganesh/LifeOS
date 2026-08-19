@@ -167,6 +167,26 @@ export function toggleLogForDay(pack: ClassPack, date = localDayKey()): ClassPac
   };
 }
 
+function newestPackOf(packs: ClassPack[]): ClassPack | undefined {
+  return [...packs].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+}
+
+function pickPackForPerson(
+  hits: ClassPack[],
+  personId?: string
+): ClassPack | undefined {
+  if (!hits.length) return undefined;
+  if (personId) {
+    const mine = hits.filter((p) => p.personId === personId);
+    if (mine.length) return newestPackOf(mine);
+    const open = hits.filter((p) => !p.personId);
+    if (open.length === 1) return open[0];
+    return undefined;
+  }
+  if (hits.length === 1) return hits[0];
+  return undefined;
+}
+
 export function findClassPack(
   packs: ClassPack[],
   title: string,
@@ -174,15 +194,33 @@ export function findClassPack(
 ): ClassPack | undefined {
   const key = normalizeClassKey(title);
   if (!key) return undefined;
-  const hits = packs.filter((p) => normalizeClassKey(p.title) === key);
-  if (!hits.length) {
-    return packs.find((p) => normalizeClassKey(p.title).includes(key) || key.includes(normalizeClassKey(p.title)));
+  const exact = packs.filter((p) => normalizeClassKey(p.title) === key);
+  const hits = exact.length
+    ? exact
+    : packs.filter((p) => {
+        const pk = normalizeClassKey(p.title);
+        return pk.includes(key) || key.includes(pk);
+      });
+  return pickPackForPerson(hits, personId);
+}
+
+/** Attendance: never fall back to another adult's pack. */
+export function pickAttendancePack(
+  packs: ClassPack[],
+  opts: { title?: string; personId?: string } = {}
+): ClassPack | undefined {
+  if (opts.title?.trim()) {
+    return findClassPack(packs, opts.title, opts.personId);
   }
-  if (personId) {
-    const forPerson = hits.filter((p) => p.personId === personId);
-    if (forPerson.length) return forPerson[0];
+  if (opts.personId) {
+    const mine = packs.filter((p) => p.personId === opts.personId);
+    if (mine.length === 1) return mine[0];
+    const open = packs.filter((p) => !p.personId);
+    if (open.length === 1) return open[0];
+    return undefined;
   }
-  return hits[0];
+  if (packs.length === 1) return packs[0];
+  return undefined;
 }
 
 export function classPackFromUtterance(text?: string): {

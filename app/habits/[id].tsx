@@ -1,3 +1,4 @@
+import { useTheme } from '@/lib/ThemeContext';
 import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Switch, Pressable, View, TextInput } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
@@ -8,6 +9,8 @@ import { HabitCard } from '@/components/HabitCard';
 import { useHabits } from '@/lib/HabitsContext';
 import { useInventory } from '@/lib/InventoryContext';
 import { useLastDone } from '@/lib/LastDoneContext';
+import { useHousehold } from '@/lib/HouseholdContext';
+import { PersonChips } from '@/components/PersonChips';
 import {
   HABIT_CATEGORIES,
   categorizeHabit,
@@ -18,16 +21,19 @@ import {
   shouldSyncLastDone,
 } from '@/lib/habits';
 import { confirmDelete } from '@/lib/confirmDelete';
-import { colors, fonts, radius, spacing } from '@/constants/theme';
+import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
 import CreateHabitScreen from './create';
 
 export default function HabitDetailScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { id: idParam } = useLocalSearchParams<{ id: string }>();
   const id = Array.isArray(idParam) ? idParam[0] : idParam;
   const router = useRouter();
   const { getById, checkIn, removeHabit, updateHabit } = useHabits();
   const { getById: getItem, items } = useInventory();
   const { logDone } = useLastDone();
+  const { members } = useHousehold();
 
   const linkables = useMemo(
     () =>
@@ -108,7 +114,7 @@ export default function HabitDetailScreen() {
         onToggleDay={(date) => void onToggleDay(date)}
       />
 
-      <Text variant="headline" style={{ fontSize: 15, marginTop: spacing.md }}>
+      <Text variant="headline" style={{ fontSize: 16, marginTop: spacing.md }}>
         Details
       </Text>
       <Text style={styles.fieldLabel}>Name</Text>
@@ -125,6 +131,18 @@ export default function HabitDetailScreen() {
         placeholder="e.g. Clear my head"
         placeholderTextColor={colors.faint}
         style={styles.input}
+      />
+      <PersonChips
+        members={members}
+        personId={habit.personId ?? null}
+        onChange={(id) => {
+          const m = members.find((x) => x.id === id);
+          void updateHabit(habit.id, {
+            personId: m?.id,
+            assignedTo: m?.name,
+          });
+        }}
+        noneLabel="Just me / unassigned"
       />
       <Pressable
         onPress={() => {
@@ -170,7 +188,7 @@ export default function HabitDetailScreen() {
 
       {linkables.length ? (
         <View style={{ marginTop: spacing.lg }}>
-          <Text variant="headline" style={{ fontSize: 15 }}>
+          <Text variant="headline" style={{ fontSize: 16 }}>
             About a Thing? (optional)
           </Text>
           <Text variant="caption" style={{ marginTop: 4, marginBottom: spacing.sm }}>
@@ -223,7 +241,7 @@ export default function HabitDetailScreen() {
           {habit.inventoryItemId ? (
             <View style={styles.syncRow}>
               <View style={{ flex: 1 }}>
-                <Text variant="headline" style={{ fontSize: 15 }}>
+                <Text variant="headline" style={{ fontSize: 16 }}>
                   Also mark it done on that Thing
                 </Text>
                 <Text variant="caption" style={{ marginTop: 2 }}>
@@ -250,10 +268,11 @@ export default function HabitDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   fieldLabel: {
     fontFamily: fonts.sansMedium,
-    fontSize: 12,
+    fontSize: 16,
     color: colors.mute,
     marginBottom: 6,
     marginTop: spacing.sm,
@@ -278,7 +297,7 @@ const styles = StyleSheet.create({
   },
   saveBtnText: {
     fontFamily: fonts.sansSemi,
-    fontSize: 15,
+    fontSize: 16,
     color: colors.pure,
   },
   syncRow: {
@@ -313,7 +332,7 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
+    fontSize: 16,
     color: colors.ink,
   },
   chipTextOn: {
@@ -326,7 +345,8 @@ const styles = StyleSheet.create({
   },
   removeText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.coral,
   },
 });
+}

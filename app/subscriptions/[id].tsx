@@ -1,3 +1,5 @@
+import { useMemo } from 'react';
+import { useTheme } from '@/lib/ThemeContext';
 import { StyleSheet, Pressable } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { ModuleScreen } from '@/components/ui/ModuleScreen';
@@ -12,10 +14,12 @@ import {
   monthlyCost,
 } from '@/lib/subscriptions';
 import { confirmDelete } from '@/lib/confirmDelete';
-import { colors, fonts, spacing } from '@/constants/theme';
+import { type ThemeColors,  colors, fonts, spacing  } from '@/constants/theme';
 import CreateScreen from './create';
 
 export default function SubscriptionDetailScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { id: idParam } = useLocalSearchParams<{ id: string }>();
   const id = Array.isArray(idParam) ? idParam[0] : idParam;
   const router = useRouter();
@@ -109,7 +113,8 @@ export default function SubscriptionDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   note: {
     marginTop: spacing.lg,
     color: colors.mute,
@@ -121,7 +126,7 @@ const styles = StyleSheet.create({
   },
   editText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 15,
+    fontSize: 16,
     color: colors.forest,
   },
   remove: {
@@ -131,7 +136,8 @@ const styles = StyleSheet.create({
   },
   removeText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.coral,
   },
 });
+}

@@ -38,8 +38,8 @@ describe('chat-api class pack repair', () => {
       { id: 'cls-1', title: 'Swimming' },
     ]);
     assert.equal(next[0]?.type, 'log_class');
-    assert.equal(next[0]?.id, 'cls-1');
     assert.equal(next[0]?.title, 'Swimming');
+    assert.equal(next[0]?.id, undefined);
   });
 
   it('does not inject log_class when there are no packs', () => {
@@ -49,5 +49,15 @@ describe('chat-api class pack repair', () => {
       []
     );
     assert.equal(next.length, 0);
+  });
+
+  it('drops habit_check_in on enroll', () => {
+    const next = ensureClassActions(
+      [{ type: 'habit_check_in', title: 'Swimming' }],
+      'I enrolled for a swimming class',
+      []
+    );
+    assert.equal(next.some((a) => a.type === 'habit_check_in'), false);
+    assert.equal(next[0]?.type, 'add_class_pack');
   });
 });

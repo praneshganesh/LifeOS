@@ -38,11 +38,13 @@ export type InventorySummaryInput = {
 };
 
 export type LastDoneSummaryInput = {
+  id?: string;
   label: string;
   lastDoneAt?: string;
   remindAt?: string;
   inventoryItemId?: string;
   itemName?: string;
+  assignedTo?: string;
 };
 
 export type ExpenseSummaryInput = {
@@ -53,6 +55,7 @@ export type ExpenseSummaryInput = {
   category: string;
   date: string;
   merchant?: string;
+  personId?: string;
 };
 
 /**
@@ -105,15 +108,17 @@ export function buildLastDoneSummary(
   return items
     .map((i) => {
       const lastDone = dayOnly(i.lastDoneAt);
-      if (!meaningful(i.label) || !lastDone) return null;
+      const remind = dayOnly(i.remindAt);
+      if (!meaningful(i.label) || (!lastDone && !remind)) return null;
       const row: Record<string, string> = {
         activity: i.label.trim(),
-        lastDone,
       };
-      const remind = dayOnly(i.remindAt);
+      if (i.id?.trim()) row.id = i.id.trim();
+      if (lastDone) row.lastDone = lastDone;
       if (remind) row.remindAt = remind;
       if (meaningful(i.inventoryItemId)) row.itemId = i.inventoryItemId!.trim();
       if (meaningful(i.itemName)) row.itemName = i.itemName!.trim();
+      if (meaningful(i.assignedTo)) row.assignedTo = i.assignedTo!.trim();
       return row;
     })
     .filter(Boolean)
@@ -132,6 +137,7 @@ export function buildExpenseSummary(items: ExpenseSummaryInput[], limit = 40) {
       date: dayOnly(e.date) || e.date,
     };
     if (meaningful(e.merchant)) row.merchant = e.merchant!.trim();
+    if (meaningful(e.personId)) row.personId = e.personId!.trim();
     return row;
   });
 }
@@ -143,23 +149,31 @@ export type HabitSummaryInput = {
   streak: number;
   doneToday: boolean;
   rate30: number;
+  assignedTo?: string;
+  personId?: string;
 };
 
 export function buildHabitSummary(items: HabitSummaryInput[], limit = 30) {
-  return items.slice(0, limit).map((h) => ({
-    id: h.id,
-    title: h.title,
-    category: h.category,
-    streak: h.streak,
-    doneToday: h.doneToday,
-    rate30: h.rate30,
-  }));
+  return items.slice(0, limit).map((h) => {
+    const row: Record<string, unknown> = {
+      id: h.id,
+      title: h.title,
+      category: h.category,
+      streak: h.streak,
+      doneToday: h.doneToday,
+      rate30: h.rate30,
+    };
+    if (meaningful(h.assignedTo)) row.assignedTo = h.assignedTo!.trim();
+    if (meaningful(h.personId)) row.personId = h.personId!.trim();
+    return row;
+  });
 }
 
 export type ClassPackSummaryInput = {
   id: string;
   title: string;
   assignedTo?: string;
+  personId?: string;
   total: number;
   used: number;
   remaining?: number;
@@ -182,6 +196,7 @@ export function buildClassPackSummary(
     };
     if (typeof p.remaining === 'number') row.remaining = p.remaining;
     if (meaningful(p.assignedTo)) row.assignedTo = p.assignedTo!.trim();
+    if (meaningful(p.personId)) row.personId = p.personId!.trim();
     return row;
   });
 }
@@ -195,6 +210,7 @@ export type SubscriptionSummaryInput = {
   renewsOn: string;
   category: string;
   provider?: string;
+  personId?: string;
 };
 
 /** Compact subscriptions for renewals / recurring spend Q&A. */
@@ -213,6 +229,7 @@ export function buildSubscriptionSummary(
       category: s.category,
     };
     if (meaningful(s.provider)) row.provider = s.provider!.trim();
+    if (meaningful(s.personId)) row.personId = s.personId!.trim();
     return row;
   });
 }
@@ -225,7 +242,7 @@ export function formatMoney(raw?: string | null): string | undefined {
 
   const lower = s.toLowerCase();
   const numMatch = lower.replace(/,/g, '').match(/(\d+(?:\.\d+)?)/);
-  if (!numMatch) return titleRetailer(s);
+  if (!numMatch) return s;
 
   const amount = numMatch[1];
   const n = Number(amount);
@@ -253,29 +270,27 @@ export function formatMoney(raw?: string | null): string | undefined {
   return s;
 }
 
-/** Light cleanup for store names (model should send good values; this is display polish). */
+/** Pull merchant from "at/in/from <store> for …" when the model omits it — no store name rewriting. */
+export function merchantFromUtterance(text?: string | null): string | undefined {
+  if (!text?.trim()) return undefined;
+  const m = text.match(
+    /\b(?:at|in|from|@)\s+([A-Za-z][A-Za-z .']{1,40}?)(?:\s+for\b|\s+on\b|\s+\d|,|\.|$)/i
+  );
+  if (!m?.[1]) return undefined;
+  const candidate = m[1].trim();
+  if (/^(aed|dirhams?|dhs|dh|euros?|dollars?|cash|card)$/i.test(candidate)) {
+    return undefined;
+  }
+  return formatPurchasedFrom(candidate);
+}
+
+/** Display polish only — title-case. Store identity is the model's job. */
 export function formatPurchasedFrom(raw?: string | null): string | undefined {
   if (!raw?.trim()) return undefined;
-  const s = raw.trim();
-  const key = s.toLowerCase().replace(/[^a-z0-9]/g, '');
-  const known: Record<string, string> = {
-    amazon: 'Amazon',
-    sharafdg: 'Sharaf DG',
-    sharaf: 'Sharaf DG',
-    noon: 'Noon',
-    carrefour: 'Carrefour',
-    ikea: 'IKEA',
-    apple: 'Apple',
-    applestore: 'Apple Store',
-  };
-  if (known[key]) return known[key];
-  return s
+  return raw
+    .trim()
     .split(/\s+/)
     .filter(Boolean)
     .map((w) => (w.length <= 3 ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1)))
     .join(' ');
-}
-
-function titleRetailer(s: string) {
-  return s;
 }

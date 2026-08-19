@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useTheme } from '@/lib/ThemeContext';
+import { useMemo, useEffect, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -20,9 +21,11 @@ import {
   type ExpenseCategory,
 } from '@/lib/expenses';
 import { localDayKey } from '@/lib/dates';
-import { colors, fonts, radius, spacing } from '@/constants/theme';
+import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
 
 export default function ExpenseFormScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { editId: editParam } = useLocalSearchParams<{ editId?: string }>();
@@ -189,13 +192,14 @@ export default function ExpenseFormScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   content: {
     padding: spacing.lg,
   },
   label: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
+    fontSize: 16,
     color: colors.mute,
     marginBottom: spacing.sm,
     marginTop: spacing.md,
@@ -230,7 +234,7 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
+    fontSize: 16,
     color: colors.ink,
   },
   chipTextOn: {
@@ -252,3 +256,4 @@ const styles = StyleSheet.create({
     color: colors.pure,
   },
 });
+}

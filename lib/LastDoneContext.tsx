@@ -49,6 +49,8 @@ type LastDoneContextValue = {
     label: string;
     remindAt: string;
     inventoryItemId?: string | null;
+    personId?: string | null;
+    assignedTo?: string | null;
   }) => Promise<LastDoneItem>;
   /** Delete the whole activity (all logs). */
   remove: (id: string) => Promise<void>;
@@ -105,6 +107,17 @@ function applyLog(existing: LastDoneItem | null, input: LogDoneInput): LastDoneI
       : input.inventoryItemId
         ? { inventoryItemId: input.inventoryItemId }
         : {};
+  const personOpts =
+    input.personId === null
+      ? { personId: null as string | null, assignedTo: null as string | null }
+      : input.personId
+        ? {
+            personId: input.personId,
+            assignedTo: input.assignedTo || undefined,
+          }
+        : input.assignedTo
+          ? { assignedTo: input.assignedTo }
+          : {};
 
   if (existing) {
     if (hasExplicitRemind) {
@@ -116,6 +129,7 @@ function applyLog(existing: LastDoneItem | null, input: LogDoneInput): LastDoneI
         doneAt: doneDate,
         ...remindFields,
         ...linkOpts,
+        ...personOpts,
         replaceRemind: true,
       });
     }
@@ -128,6 +142,7 @@ function applyLog(existing: LastDoneItem | null, input: LogDoneInput): LastDoneI
         doneAt: doneDate,
         ...rolled,
         ...linkOpts,
+        ...personOpts,
         replaceRemind: true,
       });
     }
@@ -136,6 +151,7 @@ function applyLog(existing: LastDoneItem | null, input: LogDoneInput): LastDoneI
     return appendLog(existing, {
       doneAt: doneDate,
       ...linkOpts,
+      ...personOpts,
       replaceRemind: true,
     });
   }
@@ -153,6 +169,9 @@ function applyLog(existing: LastDoneItem | null, input: LogDoneInput): LastDoneI
     ...remindFields,
     ...(typeof input.inventoryItemId === 'string' && input.inventoryItemId
       ? { inventoryItemId: input.inventoryItemId }
+      : {}),
+    ...(typeof input.personId === 'string' && input.personId
+      ? { personId: input.personId, assignedTo: input.assignedTo || undefined }
       : {}),
   });
 }
@@ -207,17 +226,28 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
           ? input.inventoryItemId
           : undefined;
 
+      const personId =
+        typeof input.personId === 'string' && input.personId
+          ? input.personId
+          : undefined;
+
+      const samePerson = (i: LastDoneItem) =>
+        personId ? i.personId === personId || !i.personId : true;
+
       // Prefer same label on the same linked thing; else same label unlinked (then attach)
       const match =
         (linkId
           ? list.find(
               (i) =>
-                labelsMatch(i.label, label) && i.inventoryItemId === linkId
+                labelsMatch(i.label, label) &&
+                i.inventoryItemId === linkId &&
+                samePerson(i)
             )
           : undefined) ||
         list.find(
           (i) =>
             labelsMatch(i.label, label) &&
+            samePerson(i) &&
             (!linkId || !i.inventoryItemId || i.inventoryItemId === linkId)
         );
 
@@ -241,6 +271,8 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
       label: string;
       remindAt: string;
       inventoryItemId?: string | null;
+      personId?: string | null;
+      assignedTo?: string | null;
     }) => {
       const list = itemsRef.current;
       const label = normalizeLabel(input.label ?? '');
@@ -251,21 +283,32 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
         typeof input.inventoryItemId === 'string' && input.inventoryItemId
           ? input.inventoryItemId
           : undefined;
+      const personId =
+        typeof input.personId === 'string' && input.personId
+          ? input.personId
+          : undefined;
+      const assignedTo = input.assignedTo?.trim() || undefined;
+
+      const samePerson = (i: LastDoneItem) =>
+        personId ? i.personId === personId || !i.personId : true;
 
       const match =
         (linkId
           ? list.find(
               (i) =>
-                labelsMatch(i.label, label) && i.inventoryItemId === linkId
+                labelsMatch(i.label, label) &&
+                i.inventoryItemId === linkId &&
+                samePerson(i)
             )
           : undefined) ||
-        list.find((i) => labelsMatch(i.label, label));
+        list.find((i) => labelsMatch(i.label, label) && samePerson(i));
 
       if (match) {
         const updated: LastDoneItem = {
           ...match,
           ...remindFields,
           ...(linkId ? { inventoryItemId: linkId } : {}),
+          ...(personId ? { personId, assignedTo: assignedTo || match.assignedTo } : {}),
         };
         await persist(list.map((i) => (i.id === updated.id ? updated : i)));
         void scheduleLastDoneReminder(updated);
@@ -276,6 +319,8 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
         doneAt: null,
         remindAt: remindFields.remindAt,
         inventoryItemId: linkId,
+        personId,
+        assignedTo,
       });
       await persist([created, ...list]);
       void scheduleLastDoneReminder(created);

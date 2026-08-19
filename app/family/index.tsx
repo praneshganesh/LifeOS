@@ -10,9 +10,11 @@ import { useHousehold } from '@/lib/HouseholdContext';
 import { useInventory } from '@/lib/InventoryContext';
 import { useSpaces } from '@/lib/SpacesContext';
 import { spaceIdByKind } from '@/lib/moduleFilters';
-import { colors, fonts, radius, spacing } from '@/constants/theme';
+import { fonts, radius, spacing } from '@/constants/theme';
+import { useTheme } from '@/lib/ThemeContext';
 
 export default function FamilyScreen() {
+  const { colors } = useTheme();
   const router = useRouter();
   const { members } = useHousehold();
   const { items } = useInventory();
@@ -60,7 +62,7 @@ export default function FamilyScreen() {
   return (
     <ModuleScreen
       title="Family"
-      subtitle="People, pets, and who things belong to."
+      subtitle="People on your login. They only need a seat if they use the app themselves."
       right={
         <CaptureContextButton
           kind="family"
@@ -79,10 +81,13 @@ export default function FamilyScreen() {
 
       <Pressable
         onPress={() => router.push('/family/create' as Href)}
-        style={styles.addBtn}
+        style={[
+          styles.addBtn,
+          { backgroundColor: colors.surface, borderColor: colors.line },
+        ]}
       >
-        <Plus size={18} color={colors.forest} strokeWidth={2.2} />
-        <Text style={styles.addLabel}>Add person or pet</Text>
+        <Plus size={18} color={colors.ink} strokeWidth={2.2} />
+        <Text style={[styles.addLabel, { color: colors.ink }]}>Add person or pet</Text>
       </Pressable>
 
       <ModuleSection label="Members" count={members.length}>
@@ -94,10 +99,18 @@ export default function FamilyScreen() {
                 <Pressable
                   key={m.id}
                   onPress={() => router.push(`/family/${m.id}` as Href)}
-                  style={[styles.member, i < members.length - 1 && styles.border]}
+                  style={[
+                    styles.member,
+                    i < members.length - 1 && {
+                      borderBottomWidth: StyleSheet.hairlineWidth,
+                      borderBottomColor: colors.line,
+                    },
+                  ]}
                 >
-                  <View style={styles.avatar}>
-                    <Text style={styles.avatarLetter}>{m.avatarLetter}</Text>
+                  <View style={[styles.avatar, { backgroundColor: colors.surfaceSoft }]}>
+                    <Text style={[styles.avatarLetter, { color: colors.ink }]}>
+                      {m.avatarLetter}
+                    </Text>
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text variant="headline">{m.name}</Text>
@@ -105,13 +118,13 @@ export default function FamilyScreen() {
                       {m.relation} · {docs} docs · {devices} things
                     </Text>
                   </View>
-                  <Text style={styles.role}>{m.role}</Text>
+                  <Text style={[styles.role, { color: colors.mute }]}>{m.role}</Text>
                 </Pressable>
               );
             })}
           </ListCard>
         ) : (
-          <Text variant="body" style={styles.empty}>
+          <Text variant="body" style={{ color: colors.mute }}>
             No one yet. Add yourself and family so Talk can tag things “for Priya” only when that person exists here.
           </Text>
         )}
@@ -144,16 +157,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     alignSelf: 'flex-start',
-    backgroundColor: colors.forestSoft,
     paddingHorizontal: spacing.md,
     paddingVertical: 10,
     borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
     marginBottom: spacing.lg,
   },
   addLabel: {
     fontFamily: fonts.sansSemi,
-    fontSize: 14,
-    color: colors.forest,
+    fontSize: 16,
   },
   member: {
     flexDirection: 'row',
@@ -162,30 +174,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: 14,
   },
-  border: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
-  },
   avatar: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: colors.forestSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarLetter: {
     fontFamily: fonts.sansSemi,
-    fontSize: 15,
-    color: colors.forest,
+    fontSize: 16,
   },
   role: {
     fontFamily: fonts.sansMedium,
-    fontSize: 11,
-    color: colors.mute,
+    fontSize: 16,
     textTransform: 'capitalize',
-  },
-  empty: {
-    color: colors.mute,
   },
 });

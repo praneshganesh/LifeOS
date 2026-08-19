@@ -1,9 +1,14 @@
 import type { ChatAgentResponse } from '@/lib/chat/types';
+import { openingLineForFocus, type TalkFocus } from '@/lib/chat/focus';
 
 export type LocalIntentContext = {
   focusItemId?: string | null;
   /** Newest inventory item — used when focus wasn’t set but user clearly means “the item” */
   fallbackItemId?: string | null;
+  /** Last expense from Talk — vague “show me” prefers this over inventory */
+  focusExpenseId?: string | null;
+  /** Last module Talk touched — vague show uses this, never a stale MacBook. */
+  talkFocus?: TalkFocus | null;
 };
 
 function normalizeUtterance(utterance: string) {
@@ -23,12 +28,22 @@ export function isCloseTalkIntent(utterance: string) {
 export function isOpenItemIntent(utterance: string) {
   const t = normalizeUtterance(utterance);
   if (!t || isCloseTalkIntent(t)) return false;
+  if (/^(show|open|see|view)(\s+me)?(\s+please)?\s*[.!?]?$/.test(t)) return true;
+  if (/^(can you\s+)?(show|open|see|view)(\s+me)?(\s+please)?\s*[.!?]?$/.test(t)) {
+    return true;
+  }
   return (
-    /\b(show|open|see|view)\b.{0,40}\b(item|it)\b/.test(t) ||
+    /\b(show|open|see|view)\b.{0,40}\b(item|it|expense|spend|purchase|habit|subscription|class|activity|reminder)\b/.test(
+      t
+    ) ||
     /\b(item|it)\s+(page|screen)\b/.test(t) ||
-    /\bgo\s+to\s+(the\s+)?(item|it)\b/.test(t) ||
-    /\btake\s+me\s+to\s+(the\s+)?(item|it)\b/.test(t) ||
-    /^(i\s+want\s+to\s+)?(see|open|show)\s+(the\s+)?(item|it)\b/.test(t)
+    /\bgo\s+to\s+(the\s+)?(item|it|expense|habit|subscription|class|activity)\b/.test(t) ||
+    /\btake\s+me\s+to\s+(the\s+)?(item|it|expense|habit|subscription|class|activity)\b/.test(
+      t
+    ) ||
+    /^(i\s+want\s+to\s+)?(see|open|show)\s+(me\s+)?(my\s+)?(last\s+|latest\s+|recent\s+)?(the\s+)?(item|it|expense|spend|purchase|habit|subscription|class|activity)\b/.test(
+      t
+    )
   );
 }
 
@@ -51,7 +66,20 @@ export function resolveLocalIntent(
   }
 
   if (isOpenItemIntent(text)) {
-    const id = ctx.focusItemId || ctx.fallbackItemId || null;
+    const focus = ctx.talkFocus;
+    if (focus) {
+      return {
+        reply: openingLineForFocus(focus),
+        actions: [{ type: 'open_item', id: focus.kind === 'item' ? focus.id : '' }],
+      };
+    }
+    if (ctx.focusExpenseId) {
+      return {
+        reply: 'Opening that expense.',
+        actions: [{ type: 'open_item', id: '' }],
+      };
+    }
+    const id = ctx.focusItemId || null;
     if (id) {
       return {
         reply: 'Opening that item.',
@@ -59,7 +87,7 @@ export function resolveLocalIntent(
       };
     }
     return {
-      reply: 'Which item? Name it, or add one first.',
+      reply: 'Which one? Name it first.',
       actions: [{ type: 'none' }],
     };
   }

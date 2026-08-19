@@ -1,3 +1,4 @@
+import { useTheme } from '@/lib/ThemeContext';
 import { useCallback, useMemo, useRef } from 'react';
 import { ScrollView, StyleSheet, View, Pressable } from 'react-native';
 import { useFocusEffect, useRouter, type Href } from 'expo-router';
@@ -12,9 +13,11 @@ import {
 import { useLastDone } from '@/lib/LastDoneContext';
 import { groupByCategory } from '@/lib/lastDoneCategories';
 import { blurActiveElement } from '@/lib/a11y';
-import { colors, radius, spacing } from '@/constants/theme';
+import { type ThemeColors,  colors, radius, spacing  } from '@/constants/theme';
 
 export default function DoneTabScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { items, logDone } = useLastDone();
@@ -94,7 +97,8 @@ export default function DoneTabScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   content: {
     paddingHorizontal: spacing.lg,
   },
@@ -124,3 +128,4 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
 });
+}

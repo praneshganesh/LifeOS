@@ -10,7 +10,7 @@ export default function FamilyLayout() {
       screenOptions={{
         headerBackTitle: 'Back',
         headerStyle: { backgroundColor: colors.bg },
-        headerTintColor: colors.forest,
+        headerTintColor: colors.ink,
         headerTitleStyle: { fontFamily: fonts.sansMedium, color: colors.ink },
         headerShadowVisible: false,
         contentStyle: { backgroundColor: colors.bg },

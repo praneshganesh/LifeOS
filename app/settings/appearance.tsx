@@ -3,60 +3,57 @@ import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { ListCard } from '@/components/ui/ListKit';
 import { Text } from '@/components/ui/Text';
 import { useTheme } from '@/lib/ThemeContext';
-import { hearthColors, linenColors, fonts, radius, spacing, type ThemeId } from '@/constants/theme';
+import {
+  PALETTES,
+  THEME_FAMILIES,
+  fonts,
+  radius,
+  spacing,
+  type ThemeFamily,
+  type ThemeMode,
+} from '@/constants/theme';
 
-const THEMES: {
-  id: ThemeId;
-  title: string;
-  hint: string;
-  swatches: string[];
-}[] = [
-  {
-    id: 'linen',
-    title: 'Linen morning',
-    hint: 'Warm daylight · olive-sage accent',
-    swatches: [linenColors.bg, linenColors.forest, linenColors.amber],
-  },
-  {
-    id: 'hearth',
-    title: 'Hearth',
-    hint: 'Warm charcoal · same olive accent',
-    swatches: [hearthColors.bg, hearthColors.forest, hearthColors.amber],
-  },
-  {
-    id: 'system',
-    title: 'System',
-    hint: 'Follow device light / dark',
-    swatches: [linenColors.bg, hearthColors.bg, linenColors.forest],
-  },
+const MODES: { id: ThemeMode; title: string }[] = [
+  { id: 'light', title: 'Light' },
+  { id: 'dark', title: 'Dark' },
+  { id: 'system', title: 'System' },
 ];
 
+const FAMILY_LABEL: Record<ThemeFamily, string> = {
+  ink: 'Ink',
+  earth: 'Earth',
+  ocean: 'Ocean',
+  clay: 'Clay',
+};
+
 export default function AppearanceSettingsScreen() {
-  const { theme, density, colors, setTheme, setDensity, resolved } = useTheme();
+  const { family, mode, colors, setFamily, setMode, resolved } = useTheme();
 
   return (
     <ModuleScreen
       title="Appearance"
-      subtitle={`${resolved === 'hearth' ? 'Hearth' : 'Linen'} · Figtree.`}
+      subtitle={`${FAMILY_LABEL[family]} · ${resolved} · Figtree.`}
     >
-      <ModuleSection label="Theme">
+      <ModuleSection label="Palette">
         <ListCard>
-          {THEMES.map((t, i) => {
-            const on = theme === t.id;
+          {THEME_FAMILIES.map((t, i) => {
+            const on = family === t.id;
+            const light = PALETTES[t.id].light;
+            const dark = PALETTES[t.id].dark;
             return (
               <Pressable
                 key={t.id}
-                onPress={() => void setTheme(t.id)}
+                onPress={() => void setFamily(t.id)}
                 style={[
                   styles.row,
-                  i < THEMES.length - 1 && {
+                  i < THEME_FAMILIES.length - 1 && {
                     borderBottomWidth: StyleSheet.hairlineWidth,
                     borderBottomColor: colors.line,
                   },
                 ]}
               >
                 <View style={{ flex: 1 }}>
-                  <Text variant="headline" style={{ fontSize: 15 }}>
+                  <Text variant="headline" style={{ fontSize: 16 }}>
                     {t.title}
                     {on ? ' · Active' : ''}
                   </Text>
@@ -65,9 +62,9 @@ export default function AppearanceSettingsScreen() {
                   </Text>
                 </View>
                 <View style={styles.swatches}>
-                  {t.swatches.map((c) => (
+                  {[light.bg, light.accent, dark.bg].map((c) => (
                     <View
-                      key={c}
+                      key={`${t.id}-${c}`}
                       style={[
                         styles.swatch,
                         {
@@ -84,34 +81,31 @@ export default function AppearanceSettingsScreen() {
         </ListCard>
       </ModuleSection>
 
-      <ModuleSection label="Density">
+      <ModuleSection label="Brightness">
         <View style={styles.chips}>
-          {(['comfortable', 'compact'] as const).map((d) => (
+          {MODES.map((m) => (
             <Pressable
-              key={d}
-              onPress={() => void setDensity(d)}
+              key={m.id}
+              onPress={() => void setMode(m.id)}
               style={[
                 styles.chip,
                 {
-                  backgroundColor: density === d ? colors.forest : colors.white,
-                  borderColor: density === d ? colors.forest : colors.line,
+                  backgroundColor: mode === m.id ? colors.accent : colors.surface,
+                  borderColor: mode === m.id ? colors.accent : colors.line,
                 },
               ]}
             >
               <Text
                 style={[
                   styles.chipText,
-                  { color: density === d ? colors.forestOn : colors.slate },
+                  { color: mode === m.id ? colors.accentOn : colors.slate },
                 ]}
               >
-                {d === 'comfortable' ? 'Comfortable' : 'Compact'}
+                {m.title}
               </Text>
             </Pressable>
           ))}
         </View>
-        <Text variant="caption" style={{ marginTop: spacing.md, color: colors.mute }}>
-          Compact tightens spacing on screens that use theme spacing tokens.
-        </Text>
       </ModuleSection>
     </ModuleScreen>
   );
@@ -132,7 +126,7 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     borderWidth: StyleSheet.hairlineWidth,
   },
-  chips: { flexDirection: 'row', gap: 8 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -141,7 +135,6 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
-    textTransform: 'capitalize',
+    fontSize: 16,
   },
 });

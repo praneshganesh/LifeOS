@@ -22,6 +22,7 @@ export const LIFEOS_STORAGE_KEYS = [
   'lifeos:security:v1',
   'lifeos:plan:v1',
   'lifeos:talk-voice:v1',
+  'lifeos:home-surface:v1',
 ] as const;
 
 export type LifeOsBackup = {

@@ -8,6 +8,7 @@ import { SwipeableThingRow } from '@/components/SwipeableThingRow';
 import { useHousehold } from '@/lib/HouseholdContext';
 import { useInventory } from '@/lib/InventoryContext';
 import { useClasses } from '@/lib/ClassesContext';
+import { useHabits } from '@/lib/HabitsContext';
 import { remainingCount, usedCount } from '@/lib/classes';
 import {
   labelForPermission,
@@ -15,7 +16,9 @@ import {
   type SharingPermission,
 } from '@/lib/household';
 import { confirmDelete } from '@/lib/confirmDelete';
-import { colors, fonts, radius, spacing } from '@/constants/theme';
+import { fonts, radius, spacing } from '@/constants/theme';
+import { useTheme } from '@/lib/ThemeContext';
+import { noFocusRing } from '@/lib/a11y';
 import CreateScreen from './create';
 
 const PERMS: SharingPermission[] = ['owner', 'editor', 'viewer'];
@@ -26,18 +29,19 @@ const ROLES: { id: HouseholdRole; label: string }[] = [
 ];
 
 export default function FamilyMemberScreen() {
+  const { colors } = useTheme();
   const { id: idParam } = useLocalSearchParams<{ id: string }>();
   const id = Array.isArray(idParam) ? idParam[0] : idParam;
   const router = useRouter();
   const { getById, removeMember, updateMember } = useHousehold();
   const { items, removeItem } = useInventory();
   const { packs: classPacks } = useClasses();
+  const { habits } = useHabits();
 
   const memberEarly = id && id !== 'new' ? getById(id) : undefined;
   const [name, setName] = useState('');
   const [relation, setRelation] = useState('');
   const [role, setRole] = useState<HouseholdRole>('adult');
-  const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -45,13 +49,11 @@ export default function FamilyMemberScreen() {
     setName(memberEarly.name);
     setRelation(memberEarly.relation || '');
     setRole(memberEarly.role === 'parent' ? 'adult' : memberEarly.role);
-    setNotes(memberEarly.medicalNotes || '');
   }, [
     memberEarly?.id,
     memberEarly?.name,
     memberEarly?.relation,
     memberEarly?.role,
-    memberEarly?.medicalNotes,
   ]);
 
   if (id === 'new') {
@@ -66,6 +68,11 @@ export default function FamilyMemberScreen() {
       (member && i.assignedTo?.toLowerCase() === member.name.toLowerCase())
   );
   const docs = devices.filter((i) => i.isDocument);
+  const theirHabits = habits.filter(
+    (h) =>
+      h.personId === id ||
+      (member && h.assignedTo?.toLowerCase() === member.name.toLowerCase())
+  );
   const theirClasses = classPacks.filter(
     (p) =>
       p.personId === id ||
@@ -95,7 +102,6 @@ export default function FamilyMemberScreen() {
         name: name.trim(),
         relation: relation.trim(),
         role,
-        medicalNotes: notes.trim() || undefined,
       });
     } finally {
       setSaving(false);
@@ -114,8 +120,8 @@ export default function FamilyMemberScreen() {
     <ModuleScreen title={member.name} subtitle={member.relation}>
       <Stack.Screen options={{ title: '' }} />
       <View style={styles.hero}>
-        <View style={styles.avatar}>
-          <Text style={styles.letter}>{member.avatarLetter}</Text>
+        <View style={[styles.avatar, { backgroundColor: colors.surfaceSoft }]}>
+          <Text style={[styles.letter, { color: colors.ink }]}>{member.avatarLetter}</Text>
         </View>
         <Text
           variant="caption"
@@ -125,25 +131,51 @@ export default function FamilyMemberScreen() {
         </Text>
       </View>
 
-      <Text variant="label" style={styles.label}>
+      <Text variant="label" style={[styles.label, { color: colors.mute }]}>
         Profile
       </Text>
-      <Text style={styles.fieldLabel}>Name</Text>
+      <Text style={[styles.fieldLabel, { color: colors.mute }]}>Name</Text>
       <TextInput
         value={name}
         onChangeText={setName}
-        style={styles.input}
+        style={[
+          styles.input,
+          noFocusRing,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.line,
+            color: colors.ink,
+          },
+        ]}
         placeholderTextColor={colors.faint}
+        autoCorrect={false}
+        spellCheck={false}
+        autoComplete="off"
+        textContentType="none"
+        autoCapitalize="words"
       />
-      <Text style={styles.fieldLabel}>Relation</Text>
+      <Text style={[styles.fieldLabel, { color: colors.mute }]}>Relation</Text>
       <TextInput
         value={relation}
         onChangeText={setRelation}
         placeholder="e.g. Partner"
         placeholderTextColor={colors.faint}
-        style={styles.input}
+        style={[
+          styles.input,
+          noFocusRing,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.line,
+            color: colors.ink,
+          },
+        ]}
+        autoCorrect={false}
+        spellCheck={false}
+        autoComplete="off"
+        textContentType="none"
+        autoCapitalize="words"
       />
-      <Text style={styles.fieldLabel}>Type</Text>
+      <Text style={[styles.fieldLabel, { color: colors.mute }]}>Type</Text>
       <View style={styles.permRow}>
         {ROLES.map((r) => {
           const on = role === r.id;
@@ -151,30 +183,36 @@ export default function FamilyMemberScreen() {
             <Pressable
               key={r.id}
               onPress={() => setRole(r.id)}
-              style={[styles.permChip, on && styles.permChipOn]}
+              style={[
+                styles.permChip,
+                {
+                  backgroundColor: on ? colors.ink : colors.surface,
+                  borderColor: on ? colors.ink : colors.line,
+                },
+              ]}
             >
-              <Text style={[styles.permLabel, on && styles.permLabelOn]}>
+              <Text
+                style={[
+                  styles.permLabel,
+                  { color: on ? colors.onInk : colors.slate },
+                ]}
+              >
                 {r.label}
               </Text>
             </Pressable>
           );
         })}
       </View>
-      <Text style={styles.fieldLabel}>Notes</Text>
-      <TextInput
-        value={notes}
-        onChangeText={setNotes}
-        placeholder="Optional"
-        placeholderTextColor={colors.faint}
-        style={[styles.input, { minHeight: 72 }]}
-        multiline
-      />
       <Pressable
         onPress={() => void onSaveProfile()}
         disabled={!name.trim() || saving}
-        style={[styles.saveBtn, (!name.trim() || saving) && { opacity: 0.45 }]}
+        style={[
+          styles.saveBtn,
+          { backgroundColor: colors.ink },
+          (!name.trim() || saving) && { opacity: 0.45 },
+        ]}
       >
-        <Text style={styles.saveBtnText}>
+        <Text style={[styles.saveBtnText, { color: colors.onInk }]}>
           {saving ? 'Saving…' : 'Save profile'}
         </Text>
       </Pressable>
@@ -184,7 +222,7 @@ export default function FamilyMemberScreen() {
         <ListRow title="Things" meta={String(devices.length - docs.length)} last />
       </ListCard>
 
-      <Text variant="label" style={styles.label}>
+      <Text variant="label" style={[styles.label, { color: colors.mute }]}>
         Sharing role
       </Text>
       <Text variant="caption" style={{ marginBottom: spacing.sm, color: colors.mute }}>
@@ -197,15 +235,45 @@ export default function FamilyMemberScreen() {
             <Pressable
               key={p}
               onPress={() => void updateMember(member.id, { permission: p })}
-              style={[styles.permChip, on && styles.permChipOn]}
+              style={[
+                styles.permChip,
+                {
+                  backgroundColor: on ? colors.ink : colors.surface,
+                  borderColor: on ? colors.ink : colors.line,
+                },
+              ]}
             >
-              <Text style={[styles.permLabel, on && styles.permLabelOn]}>
+              <Text
+                style={[
+                  styles.permLabel,
+                  { color: on ? colors.onInk : colors.slate },
+                ]}
+              >
                 {labelForPermission(p)}
               </Text>
             </Pressable>
           );
         })}
       </View>
+
+      {theirHabits.length ? (
+        <>
+          <Text variant="label" style={styles.label}>
+            Habits
+          </Text>
+          {theirHabits.map((h) => (
+            <ListCard key={h.id} style={{ marginBottom: spacing.sm }}>
+              <ListRow
+                title={h.title}
+                subtitle={h.why}
+                meta="Open"
+                onPress={() => router.push(`/habits/${h.id}` as Href)}
+                last
+              />
+            </ListCard>
+          ))}
+        </>
+      ) : null}
 
       {theirClasses.length ? (
         <>
@@ -248,13 +316,13 @@ export default function FamilyMemberScreen() {
           ))}
         </>
       ) : (
-        <Text variant="body" style={styles.empty}>
+        <Text variant="body" style={[styles.empty, { color: colors.mute }]}>
           Nothing tagged to {member.name} yet. Try Talk: “I got a laptop for {member.name}.”
         </Text>
       )}
 
       <Pressable onPress={() => void onRemoveMember()} style={styles.remove}>
-        <Text style={styles.removeText}>Remove from household</Text>
+        <Text style={[styles.removeText, { color: colors.coral }]}>Remove from household</Text>
       </Pressable>
     </ModuleScreen>
   );
@@ -266,74 +334,56 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: colors.forestSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
   letter: {
     fontFamily: fonts.sansSemi,
     fontSize: 28,
-    color: colors.forest,
   },
   label: {
     marginTop: spacing.lg,
     marginBottom: spacing.sm,
-    color: colors.mute,
   },
   fieldLabel: {
     fontFamily: fonts.sansMedium,
-    fontSize: 12,
-    color: colors.mute,
+    fontSize: 16,
     marginBottom: 6,
     marginTop: spacing.sm,
   },
   input: {
-    backgroundColor: colors.white,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
     paddingHorizontal: spacing.md,
     paddingVertical: 12,
     fontFamily: fonts.sans,
     fontSize: 16,
-    color: colors.ink,
   },
   saveBtn: {
     marginTop: spacing.md,
-    backgroundColor: colors.forest,
     borderRadius: radius.md,
     paddingVertical: 12,
     alignItems: 'center',
   },
   saveBtnText: {
     fontFamily: fonts.sansSemi,
-    fontSize: 15,
-    color: colors.pure,
+    fontSize: 16,
   },
   permRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   permChip: {
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: radius.full,
-    backgroundColor: colors.white,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-  },
-  permChipOn: {
-    backgroundColor: colors.forest,
-    borderColor: colors.forest,
   },
   permLabel: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
-    color: colors.slate,
+    fontSize: 16,
   },
-  permLabelOn: { color: colors.forestOn },
-  empty: { color: colors.mute, marginTop: spacing.md },
+  empty: { marginTop: spacing.md },
   remove: { marginTop: spacing.xxl, alignItems: 'center', padding: spacing.md },
   removeText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 15,
-    color: colors.coral,
+    fontSize: 16,
   },
 });

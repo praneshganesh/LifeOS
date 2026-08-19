@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useTheme } from '@/lib/ThemeContext';
+import { useMemo, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -41,7 +42,7 @@ import {
   mergeCaptureIntoStub,
   type TalkMatch,
 } from '@/lib/matchTalkStubs';
-import { colors, fonts, radius, spacing } from '@/constants/theme';
+import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
 import type { Icon3DName } from '@/components/ui/Icon3D';
 
 type Phase = 'camera' | 'reading' | 'review';
@@ -62,6 +63,8 @@ const SAVE_DESTINATIONS: {
  * After OCR, incomplete Talk stubs can be linked on-device (no cloud AI).
  */
 export default function CaptureModal() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{
@@ -948,6 +951,8 @@ function Field({
   onChange: (v: string) => void;
   placeholder?: string;
 }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
@@ -962,7 +967,8 @@ function Field({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   black: { flex: 1, backgroundColor: '#000' },
   centered: {
     alignItems: 'center',
@@ -977,7 +983,7 @@ const styles = StyleSheet.create({
   },
   permBody: {
     fontFamily: fonts.sans,
-    fontSize: 15,
+    fontSize: 16,
     lineHeight: 22,
     color: 'rgba(255,255,255,0.7)',
     textAlign: 'center',
@@ -992,17 +998,17 @@ const styles = StyleSheet.create({
   },
   permBtnText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 15,
+    fontSize: 16,
     color: colors.forestOn,
   },
   link: {
     fontFamily: fonts.sansMedium,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.forestBright,
   },
   linkMuted: {
     fontFamily: fonts.sansMedium,
-    fontSize: 14,
+    fontSize: 16,
     color: 'rgba(255,255,255,0.55)',
   },
   topBar: {
@@ -1023,7 +1029,7 @@ const styles = StyleSheet.create({
   },
   contextBadge: {
     fontFamily: fonts.sansSemi,
-    fontSize: 11,
+    fontSize: 16,
     letterSpacing: 0.3,
     textTransform: 'uppercase',
     color: colors.forestBright,
@@ -1031,7 +1037,7 @@ const styles = StyleSheet.create({
   },
   hint: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
+    fontSize: 16,
     color: 'rgba(255,255,255,0.85)',
     textAlign: 'center',
   },
@@ -1064,7 +1070,7 @@ const styles = StyleSheet.create({
   },
   altLabel: {
     fontFamily: fonts.sansMedium,
-    fontSize: 11,
+    fontSize: 16,
     color: 'rgba(255,255,255,0.8)',
   },
   shutterOuter: {
@@ -1100,7 +1106,7 @@ const styles = StyleSheet.create({
   },
   reviewLink: {
     fontFamily: fonts.sansMedium,
-    fontSize: 15,
+    fontSize: 16,
     color: colors.forest,
   },
   preview: {
@@ -1121,12 +1127,12 @@ const styles = StyleSheet.create({
   },
   contextChipText: {
     fontFamily: fonts.sansSemi,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.ink,
   },
   contextChipMeta: {
     fontFamily: fonts.sans,
-    fontSize: 12,
+    fontSize: 16,
     color: colors.mute,
     marginTop: 2,
   },
@@ -1142,7 +1148,7 @@ const styles = StyleSheet.create({
   },
   privacyText: {
     fontFamily: fonts.sans,
-    fontSize: 13,
+    fontSize: 16,
     lineHeight: 18,
     color: colors.forest,
   },
@@ -1157,14 +1163,14 @@ const styles = StyleSheet.create({
   },
   matchTitle: {
     fontFamily: fonts.sansSemi,
-    fontSize: 15,
+    fontSize: 16,
     color: colors.ink,
   },
   matchLead: {
     marginTop: 4,
     marginBottom: spacing.sm,
     fontFamily: fonts.sans,
-    fontSize: 13,
+    fontSize: 16,
     lineHeight: 18,
     color: colors.mute,
   },
@@ -1185,23 +1191,23 @@ const styles = StyleSheet.create({
   },
   matchName: {
     fontFamily: fonts.sansMedium,
-    fontSize: 15,
+    fontSize: 16,
     color: colors.ink,
   },
   matchMeta: {
     marginTop: 2,
     fontFamily: fonts.sans,
-    fontSize: 12,
+    fontSize: 16,
     color: colors.mute,
   },
   matchAction: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
+    fontSize: 16,
     color: colors.slate,
   },
   matchSkip: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
+    fontSize: 16,
     color: colors.mute,
   },
   routerCard: {
@@ -1216,12 +1222,12 @@ const styles = StyleSheet.create({
   },
   routerTitle: {
     fontFamily: fonts.sansSemi,
-    fontSize: 15,
+    fontSize: 16,
     color: colors.ink,
   },
   routerLead: {
     fontFamily: fonts.sans,
-    fontSize: 12,
+    fontSize: 16,
     color: colors.mute,
     marginTop: 4,
     marginBottom: spacing.md,
@@ -1247,7 +1253,7 @@ const styles = StyleSheet.create({
   },
   routerChipTitle: {
     fontFamily: fonts.sansSemi,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.ink,
   },
   routerChipTitleOn: {
@@ -1255,7 +1261,7 @@ const styles = StyleSheet.create({
   },
   routerChipHint: {
     fontFamily: fonts.sans,
-    fontSize: 11,
+    fontSize: 16,
     color: colors.mute,
     marginTop: 2,
   },
@@ -1286,12 +1292,12 @@ const styles = StyleSheet.create({
   },
   expenseTitle: {
     fontFamily: fonts.sansSemi,
-    fontSize: 15,
+    fontSize: 16,
     color: colors.ink,
   },
   expenseHint: {
     fontFamily: fonts.sans,
-    fontSize: 12,
+    fontSize: 16,
     color: colors.mute,
     marginTop: 2,
   },
@@ -1301,7 +1307,7 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     fontFamily: fonts.sansMedium,
-    fontSize: 11,
+    fontSize: 16,
     color: colors.mute,
     textTransform: 'uppercase',
     letterSpacing: 0.4,
@@ -1344,3 +1350,4 @@ const styles = StyleSheet.create({
     color: colors.forestOn,
   },
 });
+}

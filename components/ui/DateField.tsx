@@ -9,7 +9,8 @@ import {
 import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { parseDateInput, toDateInputValue } from '@/lib/lastDone';
-import { colors, fonts, radius, shadows, spacing } from '@/constants/theme';
+import { fonts, radius, shadows, spacing } from '@/constants/theme';
+import { useTheme } from '@/lib/ThemeContext';
 
 const WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'] as const;
 
@@ -86,6 +87,7 @@ export function DateField({
   style,
   defaultOpen = false,
 }: Props) {
+  const { colors } = useTheme();
   const resolved = value || toDateInputValue(new Date());
   const selected = toDate(resolved);
   const today = startOfDay(new Date());
@@ -127,34 +129,56 @@ export function DateField({
         }}
         style={({ pressed }) => [
           styles.field,
-          open && styles.fieldOpen,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.lineStrong,
+          },
+          open && {
+            borderColor: colors.accentStrong,
+            backgroundColor: colors.accentWash,
+          },
           pressed && { opacity: 0.92 },
         ]}
       >
-        <View style={styles.iconWrap}>
-          <Calendar size={16} color={colors.forest} strokeWidth={2.2} />
+        <View style={[styles.iconWrap, { backgroundColor: colors.accentSoft }]}>
+          <Calendar size={16} color={colors.accent} strokeWidth={2.2} />
         </View>
-        <Text style={styles.fieldText} numberOfLines={1}>
+        <Text style={[styles.fieldText, { color: colors.ink }]} numberOfLines={1}>
           {formatDisplay(resolved)}
         </Text>
-        <Text style={styles.changeHint}>{open ? 'Close' : 'Change'}</Text>
+        <Text style={[styles.changeHint, { color: colors.accent }]}>
+          {open ? 'Close' : 'Change'}
+        </Text>
       </Pressable>
 
       {open ? (
-        <View style={styles.panel}>
+        <View
+          style={[
+            styles.panel,
+            { backgroundColor: colors.surface, borderColor: colors.line },
+          ]}
+        >
           <View style={styles.monthBar}>
             <Pressable
               onPress={() => goMonth(-1)}
               hitSlop={8}
-              style={({ pressed }) => [styles.navBtn, pressed && styles.navBtnPressed]}
+              style={({ pressed }) => [
+                styles.navBtn,
+                { backgroundColor: colors.surfaceSoft },
+                pressed && { backgroundColor: colors.surfaceHover },
+              ]}
             >
               <ChevronLeft size={18} color={colors.ink} strokeWidth={2} />
             </Pressable>
-            <Text style={styles.monthTitle}>{monthTitle(view)}</Text>
+            <Text style={[styles.monthTitle, { color: colors.ink }]}>{monthTitle(view)}</Text>
             <Pressable
               onPress={() => goMonth(1)}
               hitSlop={8}
-              style={({ pressed }) => [styles.navBtn, pressed && styles.navBtnPressed]}
+              style={({ pressed }) => [
+                styles.navBtn,
+                { backgroundColor: colors.surfaceSoft },
+                pressed && { backgroundColor: colors.surfaceHover },
+              ]}
             >
               <ChevronRight size={18} color={colors.ink} strokeWidth={2} />
             </Pressable>
@@ -162,7 +186,7 @@ export function DateField({
 
           <View style={styles.weekRow}>
             {WEEKDAYS.map((d) => (
-              <Text key={d} style={styles.weekday}>
+              <Text key={d} style={[styles.weekday, { color: colors.mute }]}>
                 {d}
               </Text>
             ))}
@@ -183,17 +207,18 @@ export function DateField({
                   onPress={() => selectDay(day)}
                   style={({ pressed }) => [
                     styles.dayCell,
-                    isSelected && styles.daySelected,
-                    !isSelected && isToday && styles.dayToday,
-                    pressed && !disabled && !isSelected && styles.dayPressed,
+                    isSelected && { backgroundColor: colors.accent },
+                    !isSelected && isToday && { borderWidth: 1, borderColor: colors.accentSoft },
+                    pressed && !disabled && !isSelected && { backgroundColor: colors.accentWash },
                   ]}
                 >
                   <Text
                     style={[
                       styles.dayText,
-                      disabled && styles.dayTextDisabled,
-                      isSelected && styles.dayTextSelected,
-                      !isSelected && isToday && styles.dayTextToday,
+                      { color: colors.ink },
+                      disabled && { color: colors.faint },
+                      isSelected && { color: colors.accentOn },
+                      !isSelected && isToday && { color: colors.accent },
                     ]}
                   >
                     {day.getDate()}
@@ -203,9 +228,9 @@ export function DateField({
             })}
           </View>
 
-          <View style={styles.footer}>
+          <View style={[styles.footer, { borderTopColor: colors.line }]}>
             <Pressable onPress={jumpToday} hitSlop={6}>
-              <Text style={styles.footerLink}>Today</Text>
+              <Text style={[styles.footerLink, { color: colors.accent }]}>Today</Text>
             </Pressable>
           </View>
         </View>
@@ -219,45 +244,34 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: colors.white,
     borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: colors.lineStrong,
     paddingHorizontal: spacing.md,
     paddingVertical: 12,
     minHeight: 48,
-  },
-  fieldOpen: {
-    borderColor: colors.forestBright,
-    backgroundColor: colors.forestWash,
   },
   iconWrap: {
     width: 28,
     height: 28,
     borderRadius: 9,
-    backgroundColor: colors.forestSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
   fieldText: {
     flex: 1,
     fontFamily: fonts.sansMedium,
-    fontSize: 15,
+    fontSize: 16,
     lineHeight: 20,
-    color: colors.ink,
     letterSpacing: -0.2,
   },
   changeHint: {
     fontFamily: fonts.sansMedium,
-    fontSize: 12,
-    color: colors.forest,
+    fontSize: 16,
   },
   panel: {
     marginTop: 8,
-    backgroundColor: colors.white,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
     padding: spacing.md,
     ...shadows.soft,
   },
@@ -269,8 +283,7 @@ const styles = StyleSheet.create({
   },
   monthTitle: {
     fontFamily: fonts.sansMedium,
-    fontSize: 15,
-    color: colors.ink,
+    fontSize: 16,
     letterSpacing: -0.2,
   },
   navBtn: {
@@ -279,10 +292,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.surfaceSoft,
-  },
-  navBtnPressed: {
-    backgroundColor: colors.surfaceHover,
   },
   weekRow: {
     flexDirection: 'row',
@@ -292,8 +301,7 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'center',
     fontFamily: fonts.sansMedium,
-    fontSize: 11,
-    color: colors.mute,
+    fontSize: 16,
   },
   grid: {
     flexDirection: 'row',
@@ -306,40 +314,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 10,
   },
-  daySelected: {
-    backgroundColor: colors.forest,
-  },
-  dayToday: {
-    borderWidth: 1,
-    borderColor: colors.forestSoft,
-  },
-  dayPressed: {
-    backgroundColor: colors.forestWash,
-  },
   dayText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 14,
-    color: colors.ink,
-  },
-  dayTextDisabled: {
-    color: colors.faint,
-  },
-  dayTextSelected: {
-    color: colors.forestOn,
-  },
-  dayTextToday: {
-    color: colors.forest,
+    fontSize: 16,
   },
   footer: {
     marginTop: spacing.sm,
     paddingTop: spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.line,
     alignItems: 'flex-end',
   },
   footerLink: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
-    color: colors.forest,
+    fontSize: 16,
   },
 });

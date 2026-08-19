@@ -1,3 +1,4 @@
+import { useTheme } from '@/lib/ThemeContext';
 import { useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
@@ -15,9 +16,11 @@ import {
   sumExpenses,
   totalsByCategory,
 } from '@/lib/expenses';
-import { colors, fonts, radius, spacing } from '@/constants/theme';
+import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
 
 export default function ExpensesScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
   const { expenses } = useExpenses();
   const month = currentMonthKey();
@@ -102,7 +105,8 @@ export default function ExpensesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   addBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -114,7 +118,7 @@ const styles = StyleSheet.create({
   },
   addLabel: {
     fontFamily: fonts.sansSemi,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.forest,
   },
   bars: {
@@ -130,7 +134,7 @@ const styles = StyleSheet.create({
   },
   barLabel: {
     fontFamily: fonts.sansMedium,
-    fontSize: 12,
+    fontSize: 16,
     color: colors.mute,
   },
   barTrack: {
@@ -146,8 +150,9 @@ const styles = StyleSheet.create({
   },
   barAmount: {
     fontFamily: fonts.sansSemi,
-    fontSize: 12,
+    fontSize: 16,
     color: colors.ink,
     alignSelf: 'flex-end',
   },
 });
+}

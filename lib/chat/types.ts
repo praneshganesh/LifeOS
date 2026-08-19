@@ -29,6 +29,10 @@ export type InventorySummaryItem = {
 export type ChatSessionFocus = {
   /** Item most recently added/updated/opened in this conversation */
   focusItemId?: string | null;
+  /** Expense most recently logged/updated — “show it” after spend */
+  focusExpenseId?: string | null;
+  /** Last module Talk touched — vague show/delete/update uses this. */
+  focus?: { kind: string; id: string } | null;
 };
 
 export type ChatAddAction = {
@@ -99,6 +103,8 @@ export type ChatSetReminderAction = {
   /** YYYY-MM-DD */
   remindAt: string;
   inventoryItemId?: string;
+  assignedTo?: string;
+  personId?: string;
 };
 
 /** Log a spend entry (not a durable Thing). */
@@ -116,6 +122,73 @@ export type ChatAddExpenseAction = {
   merchant?: string;
   note?: string;
   inventoryItemId?: string;
+  assignedTo?: string;
+  personId?: string;
+};
+
+/** Refine an existing expense (amount, merchant, title, …). */
+export type ChatUpdateExpenseAction = {
+  type: 'update_expense';
+  id: string;
+  patch: {
+    title?: string;
+    amount?: number | string;
+    currency?: string;
+    category?: string;
+    date?: string;
+    merchant?: string;
+    note?: string;
+  };
+};
+
+export type ChatRemoveExpenseAction = {
+  type: 'remove_expense';
+  id?: string;
+  title?: string;
+};
+
+export type ChatOpenExpenseAction = {
+  type: 'open_expense';
+  id?: string;
+};
+
+export type ChatOpenHabitAction = {
+  type: 'open_habit';
+  id?: string;
+};
+
+export type ChatOpenSubscriptionAction = {
+  type: 'open_subscription';
+  id?: string;
+};
+
+export type ChatOpenClassAction = {
+  type: 'open_class';
+  id?: string;
+};
+
+export type ChatOpenLastDoneAction = {
+  type: 'open_last_done';
+  id?: string;
+};
+
+export type ChatRemoveLastDoneAction = {
+  type: 'remove_last_done';
+  id?: string;
+  label?: string;
+};
+
+export type ChatUpdateClassPackAction = {
+  type: 'update_class_pack';
+  id?: string;
+  title?: string;
+  patch: {
+    title?: string;
+    total?: number | string;
+    months?: number | string;
+    startsOn?: string;
+    endsOn?: string;
+  };
 };
 
 /** Log a recurring subscription. */
@@ -132,6 +205,41 @@ export type ChatAddSubscriptionAction = {
   category?: string;
   provider?: string;
   note?: string;
+  assignedTo?: string;
+  personId?: string;
+};
+
+export type ChatUpdateSubscriptionAction = {
+  type: 'update_subscription';
+  id: string;
+  patch: {
+    title?: string;
+    amount?: number | string;
+    currency?: string;
+    cycle?: string;
+    renewsOn?: string;
+    category?: string;
+    provider?: string;
+    note?: string;
+  };
+};
+
+export type ChatRemoveSubscriptionAction = {
+  type: 'remove_subscription';
+  id?: string;
+  title?: string;
+};
+
+export type ChatRemoveHabitAction = {
+  type: 'remove_habit';
+  id?: string;
+  title?: string;
+};
+
+export type ChatRemoveClassPackAction = {
+  type: 'remove_class_pack';
+  id?: string;
+  title?: string;
 };
 
 /** Check in a habit (create if missing when createIfMissing). */
@@ -143,6 +251,8 @@ export type ChatHabitCheckInAction = {
   createIfMissing?: boolean;
   /** Optional Thing to link (and log Last Done on check-in). */
   inventoryItemId?: string;
+  assignedTo?: string;
+  personId?: string;
 };
 
 /** Enroll a finite class pack (24 sessions in 3 months). */
@@ -174,13 +284,26 @@ export type ChatAction =
   | ChatUpdateAction
   | ChatRemoveAction
   | ChatOpenAction
+  | ChatOpenExpenseAction
+  | ChatOpenHabitAction
+  | ChatOpenSubscriptionAction
+  | ChatOpenClassAction
+  | ChatOpenLastDoneAction
   | ChatLogDoneAction
   | ChatSetReminderAction
+  | ChatRemoveLastDoneAction
   | ChatAddExpenseAction
+  | ChatUpdateExpenseAction
+  | ChatRemoveExpenseAction
   | ChatAddSubscriptionAction
+  | ChatUpdateSubscriptionAction
+  | ChatRemoveSubscriptionAction
   | ChatHabitCheckInAction
+  | ChatRemoveHabitAction
   | ChatAddClassPackAction
+  | ChatUpdateClassPackAction
   | ChatLogClassAction
+  | ChatRemoveClassPackAction
   | ChatNoneAction;
 
 export type ChatAgentResponse = {

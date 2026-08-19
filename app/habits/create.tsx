@@ -1,3 +1,4 @@
+import { useTheme } from '@/lib/ThemeContext';
 import { useMemo, useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -14,18 +15,28 @@ import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { useHabits } from '@/lib/HabitsContext';
 import { useInventory } from '@/lib/InventoryContext';
+import { useHousehold } from '@/lib/HouseholdContext';
+import { PersonChips } from '@/components/PersonChips';
 import { categorizeHabit } from '@/lib/habits';
-import { colors, fonts, radius, spacing } from '@/constants/theme';
+import { selfMember } from '@/lib/people';
+import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
 
 export default function CreateHabitScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { addHabit } = useHabits();
   const { items } = useInventory();
+  const { members } = useHousehold();
   const [title, setTitle] = useState('');
   const [why, setWhy] = useState('');
   const [linkId, setLinkId] = useState<string | null>(null);
+  const [personId, setPersonId] = useState<string | null>(
+    () => selfMember(members)?.id ?? null
+  );
   const [saving, setSaving] = useState(false);
+  const person = members.find((m) => m.id === personId);
 
   const preview = title.trim() ? categorizeHabit(title, why) : null;
   const linkables = useMemo(
@@ -45,6 +56,8 @@ export default function CreateHabitScreen() {
       const habit = await addHabit({
         title: trimmed,
         why: why.trim() || undefined,
+        personId: person?.id,
+        assignedTo: person?.name,
         inventoryItemId: linkId || undefined,
         syncLastDone: linkId ? true : undefined,
       });
@@ -93,6 +106,13 @@ export default function CreateHabitScreen() {
               Category → {preview.emoji} {preview.name}
             </Text>
           ) : null}
+
+          <PersonChips
+            members={members}
+            personId={personId}
+            onChange={setPersonId}
+            noneLabel="Just me / unassigned"
+          />
 
           {linkables.length ? (
             <>
@@ -143,13 +163,14 @@ export default function CreateHabitScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   content: {
     padding: spacing.lg,
   },
   label: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
+    fontSize: 16,
     color: colors.mute,
     marginBottom: spacing.sm,
     marginTop: spacing.md,
@@ -172,7 +193,7 @@ const styles = StyleSheet.create({
   preview: {
     marginTop: spacing.md,
     fontFamily: fonts.sansMedium,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.forest,
   },
   chips: {
@@ -195,7 +216,7 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
+    fontSize: 16,
     color: colors.ink,
   },
   chipTextOn: {
@@ -217,3 +238,4 @@ const styles = StyleSheet.create({
     color: colors.pure,
   },
 });
+}

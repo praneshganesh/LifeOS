@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useTheme } from '@/lib/ThemeContext';
+import { useMemo, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -16,7 +17,7 @@ import { Text } from '@/components/ui/Text';
 import { Icon3DBadge, type Icon3DName } from '@/components/ui/Icon3D';
 import { useSpaces, type SpaceKind } from '@/lib/SpacesContext';
 import { messageForPlanLimit } from '@/lib/planLimits';
-import { colors, fonts, radius, spacing } from '@/constants/theme';
+import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
 
 const KINDS: { id: SpaceKind; label: string; icon: Icon3DName; hint: string }[] = [
   { id: 'home', label: 'Home', icon: 'house', hint: 'House or apartment' },
@@ -28,6 +29,8 @@ const KINDS: { id: SpaceKind; label: string; icon: Icon3DName; hint: string }[] 
 const HOME_ICONS: Icon3DName[] = ['house', 'holiday', 'building'];
 
 export default function NewSpaceScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { addSpace } = useSpaces();
@@ -148,14 +151,15 @@ export default function NewSpaceScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   content: {
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.md,
   },
   label: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
+    fontSize: 16,
     color: colors.mute,
     marginBottom: 8,
     marginTop: spacing.md,
@@ -191,13 +195,13 @@ const styles = StyleSheet.create({
   kindTitle: {
     marginTop: 8,
     fontFamily: fonts.sansSemi,
-    fontSize: 15,
+    fontSize: 16,
     color: colors.ink,
   },
   kindHint: {
     marginTop: 2,
     fontFamily: fonts.sans,
-    fontSize: 12,
+    fontSize: 16,
     color: colors.mute,
   },
   iconRow: {
@@ -218,7 +222,7 @@ const styles = StyleSheet.create({
   hint: {
     marginTop: spacing.md,
     fontFamily: fonts.sans,
-    fontSize: 13,
+    fontSize: 16,
     lineHeight: 18,
     color: colors.mute,
   },
@@ -235,3 +239,4 @@ const styles = StyleSheet.create({
     color: colors.forestOn,
   },
 });
+}

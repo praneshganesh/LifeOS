@@ -1,3 +1,4 @@
+import { useTheme } from '@/lib/ThemeContext';
 import { useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
@@ -14,9 +15,11 @@ import {
   usedCount,
 } from '@/lib/classes';
 import { localDayKey } from '@/lib/dates';
-import { colors, fonts, radius, spacing } from '@/constants/theme';
+import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
 
 export default function ClassesScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
   const { packs, logClass } = useClasses();
   const today = localDayKey();
@@ -115,7 +118,8 @@ export default function ClassesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   addBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -127,7 +131,7 @@ const styles = StyleSheet.create({
   },
   addLabel: {
     fontFamily: fonts.sansSemi,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.forest,
   },
   card: {
@@ -154,7 +158,7 @@ const styles = StyleSheet.create({
   },
   logLabel: {
     fontFamily: fonts.sansSemi,
-    fontSize: 12,
+    fontSize: 16,
     color: colors.forest,
   },
   logLabelOn: {
@@ -173,3 +177,4 @@ const styles = StyleSheet.create({
     backgroundColor: colors.forest,
   },
 });
+}

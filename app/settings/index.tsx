@@ -5,16 +5,22 @@ import { ListCard, ListRow } from '@/components/ui/ListKit';
 import { useSpaces } from '@/lib/SpacesContext';
 import { useHousehold } from '@/lib/HouseholdContext';
 import { loadLocalProfile } from '@/lib/profile';
+import { resolveSelfDisplayName } from '@/lib/people';
+import { useTheme } from '@/lib/ThemeContext';
+import { THEME_FAMILIES } from '@/constants/theme';
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const { family, resolved } = useTheme();
   const { spaces } = useSpaces();
   const { members } = useHousehold();
   const [displayName, setDisplayName] = useState('You');
 
   useEffect(() => {
-    void loadLocalProfile().then((p) => setDisplayName(p.displayName));
-  }, []);
+    void loadLocalProfile().then((p) =>
+      setDisplayName(resolveSelfDisplayName(p.displayName, members) || p.displayName)
+    );
+  }, [members]);
 
   const homes = spaces.filter((s) => s.kind === 'home');
   const defaultHome = homes[0]?.name || 'No home yet';
@@ -35,7 +41,7 @@ export default function SettingsScreen() {
           <ListRow
             icon="credit"
             title="Plan & billing"
-            subtitle="Free · local for now"
+            subtitle="Trial · on this device"
             onPress={() => router.push('/settings/plan' as Href)}
             last
           />
@@ -52,7 +58,7 @@ export default function SettingsScreen() {
           <ListRow
             icon="sparkles"
             title="Appearance"
-            subtitle="Linen"
+            subtitle={`${THEME_FAMILIES.find((t) => t.id === family)?.title ?? 'Earth'} · ${resolved}`}
             onPress={() => router.push('/settings/appearance' as Href)}
           />
           <ListRow
@@ -94,7 +100,7 @@ export default function SettingsScreen() {
           <ListRow
             icon="package"
             title="Export & backup"
-            subtitle="JSON on this device"
+            subtitle="Phone + cloud snapshot"
             onPress={() => router.push('/settings/data' as Href)}
           />
           <ListRow

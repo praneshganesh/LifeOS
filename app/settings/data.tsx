@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
-import { Alert, Platform } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { Alert, Platform, StyleSheet, TextInput, View } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import Constants from 'expo-constants';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { ListCard, ListRow } from '@/components/ui/ListKit';
+import { Text } from '@/components/ui/Text';
 import { useInventory } from '@/lib/InventoryContext';
 import { useExpenses } from '@/lib/ExpensesContext';
 import { useHabits } from '@/lib/HabitsContext';
@@ -15,8 +16,19 @@ import {
   shareLifeOsBackup,
   wipeLifeOsData,
 } from '@/lib/dataExport';
+import { isSupabaseConfigured } from '@/lib/supabase';
+import {
+  loadCloudMeta,
+  loadRecoveryCode,
+  restoreFromRecoveryCode,
+  syncCloudNow,
+  type CloudMeta,
+} from '@/lib/cloud/sync';
+import { fonts, radius, spacing } from '@/constants/theme';
+import { useTheme } from '@/lib/ThemeContext';
 
 export default function DataSettingsScreen() {
+  const { colors } = useTheme();
   const router = useRouter();
   const { items } = useInventory();
   const { expenses } = useExpenses();
@@ -25,6 +37,12 @@ export default function DataSettingsScreen() {
   const { items: lastDone } = useLastDone();
   const { members } = useHousehold();
   const [busy, setBusy] = useState(false);
+  const [meta, setMeta] = useState<CloudMeta | null>(null);
+  const [recovery, setRecovery] = useState<string | null>(null);
+  const [showCode, setShowCode] = useState(false);
+  const [restoreCode, setRestoreCode] = useState('');
+
+  const configured = isSupabaseConfigured();
 
   const version =
     Constants.expoConfig?.version ||
@@ -42,6 +60,11 @@ export default function DataSettingsScreen() {
     [items, expenses, habits, subscriptions, lastDone, members]
   );
 
+  useEffect(() => {
+    void loadCloudMeta().then(setMeta);
+    void loadRecoveryCode().then(setRecovery);
+  }, []);
+
   async function onExport() {
     if (busy) return;
     setBusy(true);
@@ -55,8 +78,47 @@ export default function DataSettingsScreen() {
     }
   }
 
+  async function onSync() {
+    if (busy || !configured) return;
+    setBusy(true);
+    try {
+      const next = await syncCloudNow();
+      setMeta(next);
+      setRecovery(await loadRecoveryCode());
+      if (next.lastError) {
+        Alert.alert('Cloud backup', next.lastError);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onRestore() {
+    if (busy || !configured) return;
+    setBusy(true);
+    try {
+      await restoreFromRecoveryCode(restoreCode);
+      try {
+        await reloadAppAfterWipe();
+      } catch {
+        /* Expo Go / web */
+      }
+      Alert.alert(
+        'Restored',
+        'Force-quit and reopen LifeOS so every screen reloads from the cloud copy.'
+      );
+    } catch (err) {
+      Alert.alert(
+        'Restore failed',
+        err instanceof Error ? err.message : 'Could not restore that backup.'
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function onWipe() {
-    const message = `This permanently deletes inventory, expenses, habits, subscriptions, Last Done, household, spaces, and profile on this device (${total} records). Default spaces will be restored.`;
+    const message = `This permanently deletes inventory, expenses, habits, classes, subscriptions, Last Done, household, spaces, and profile on this device (${total} records). The cloud copy is not deleted. Default spaces will be restored.`;
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       if (!window.confirm(`${message}\n\nType OK in the next prompt to confirm.`)) return;
       const typed = window.prompt('Type DELETE to confirm wipe');
@@ -70,7 +132,7 @@ export default function DataSettingsScreen() {
         text: 'Wipe everything',
         style: 'destructive',
         onPress: () => {
-          Alert.alert('Final confirm', 'This cannot be undone.', [
+          Alert.alert('Final confirm', 'This cannot be undone on this phone.', [
             { text: 'Cancel', style: 'cancel' },
             {
               text: 'Delete all',
@@ -95,17 +157,25 @@ export default function DataSettingsScreen() {
       }
       Alert.alert(
         'Data wiped',
-        'Force-quit and reopen LifeOS so every screen reloads empty defaults.'
+        'Force-quit and reopen LifeOS so every screen reloads empty defaults. Use your recovery code if you want the cloud copy back.'
       );
     } finally {
       setBusy(false);
     }
   }
 
+  const cloudSubtitle = !configured
+    ? 'Add Supabase keys to .env'
+    : meta?.lastError
+      ? meta.lastError
+      : meta?.lastPushAt
+        ? `Last backup ${new Date(meta.lastPushAt).toLocaleString()}`
+        : 'Waiting for first backup';
+
   return (
     <ModuleScreen
       title="Export & backup"
-      subtitle="Local backup on this device — no cloud sync yet."
+      subtitle="On this phone, plus a cloud copy when Supabase is configured."
     >
       <ModuleSection label="On this device">
         <ListCard>
@@ -115,6 +185,72 @@ export default function DataSettingsScreen() {
           <ListRow title="Subscriptions" meta={String(subscriptions.length)} />
           <ListRow title="Last Done" meta={String(lastDone.length)} />
           <ListRow title="Household" meta={String(members.length)} last />
+        </ListCard>
+      </ModuleSection>
+
+      <ModuleSection label="Cloud">
+        <ListCard>
+          <ListRow
+            icon="sparkles"
+            title={configured ? 'Supabase backup' : 'Cloud not configured'}
+            subtitle={cloudSubtitle}
+          />
+          <ListRow
+            icon="package"
+            title={busy ? 'Working…' : 'Backup now'}
+            subtitle="JSON snapshot — photos stay on this phone"
+            onPress={() => void onSync()}
+          />
+          <ListRow
+            icon="key"
+            title={showCode ? 'Hide recovery code' : 'Show recovery code'}
+            subtitle="Needed to restore on a new phone — treat it like a password"
+            onPress={() => setShowCode((v) => !v)}
+            last
+          />
+        </ListCard>
+        {showCode ? (
+          <Text
+            selectable
+            style={[
+              styles.code,
+              {
+                color: colors.ink,
+                backgroundColor: colors.surface,
+                borderColor: colors.line,
+              },
+            ]}
+          >
+            {recovery || 'Backup once to create a code.'}
+          </Text>
+        ) : null}
+        <Text variant="caption" style={{ marginTop: spacing.md, color: colors.mute }}>
+          Restore on another phone
+        </Text>
+        <TextInput
+          value={restoreCode}
+          onChangeText={setRestoreCode}
+          autoCapitalize="characters"
+          autoCorrect={false}
+          placeholder="XXXX-XXXX-XXXX-XXXX"
+          placeholderTextColor={colors.faint}
+          style={[
+            styles.input,
+            {
+              color: colors.ink,
+              backgroundColor: colors.surface,
+              borderColor: colors.line,
+            },
+          ]}
+        />
+        <ListCard>
+          <ListRow
+            icon="folder"
+            title="Restore from recovery code"
+            subtitle="Replaces data on this phone, then reloads"
+            onPress={() => void onRestore()}
+            last
+          />
         </ListCard>
       </ModuleSection>
 
@@ -150,3 +286,29 @@ export default function DataSettingsScreen() {
     </ModuleScreen>
   );
 }
+
+const styles = StyleSheet.create({
+  code: {
+    marginTop: spacing.sm,
+    fontFamily: fonts.sansMedium,
+    fontSize: 16,
+    letterSpacing: 1,
+    textAlign: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
+  input: {
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
+    fontFamily: fonts.sansMedium,
+    fontSize: 16,
+    letterSpacing: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+});

@@ -7,22 +7,31 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
-import { ChevronRight } from 'lucide-react-native';
+import { ChevronRight, User } from 'lucide-react-native';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { ListCard, ListRow, StatStrip } from '@/components/ui/ListKit';
 import { Text } from '@/components/ui/Text';
 import { useInventory } from '@/lib/InventoryContext';
 import { useSpaces } from '@/lib/SpacesContext';
 import { useHousehold } from '@/lib/HouseholdContext';
+import { resolveSelfDisplayName, selfAvatarInitial } from '@/lib/people';
 import { isDocumentItem, spaceIdByKind } from '@/lib/moduleFilters';
 import {
   DEFAULT_PROFILE,
   loadLocalProfile,
   saveLocalProfile,
 } from '@/lib/profile';
-import { colors, fonts, radius, spacing } from '@/constants/theme';
+import {
+  loadPlanPrefs,
+  planById,
+  trialDaysLeft,
+  type PlanPrefs,
+} from '@/lib/planLimits';
+import { fonts, radius, spacing } from '@/constants/theme';
+import { useTheme } from '@/lib/ThemeContext';
 
 export default function ProfileScreen() {
+  const { colors } = useTheme();
   const router = useRouter();
   const { items } = useInventory();
   const { spaces } = useSpaces();
@@ -31,6 +40,7 @@ export default function ProfileScreen() {
   const [locale, setLocale] = useState(DEFAULT_PROFILE.locale || '');
   const [ready, setReady] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [planPrefs, setPlanPrefs] = useState<PlanPrefs>({ planId: 'trial' });
 
   const documentsSpaceId = spaceIdByKind(spaces, 'documents');
   const homes = spaces.filter((s) => s.kind === 'home').length;
@@ -41,11 +51,12 @@ export default function ProfileScreen() {
 
   useEffect(() => {
     void loadLocalProfile().then((p) => {
-      setName(p.displayName);
+      setName(resolveSelfDisplayName(p.displayName, members) || p.displayName);
       setLocale(p.locale || '');
       setReady(true);
     });
-  }, []);
+    void loadPlanPrefs().then(setPlanPrefs);
+  }, [members]);
 
   async function save() {
     if (saving) return;
@@ -58,25 +69,47 @@ export default function ProfileScreen() {
     }
   }
 
-  const letter = (name.trim() || 'Y').slice(0, 1).toUpperCase();
+  const letter = selfAvatarInitial(name, members);
+  const plan = planById(planPrefs.planId);
+  const daysLeft = trialDaysLeft(planPrefs);
+  const planLabel =
+    plan.id === 'trial'
+      ? daysLeft != null && daysLeft > 0
+        ? `Trial · ${daysLeft}d left`
+        : daysLeft === 0 || (daysLeft != null && daysLeft <= 0)
+          ? 'Trial ended'
+          : 'Trial · 14 days'
+      : `${plan.name} · on this device`;
 
   return (
     <ModuleScreen
       title="Profile"
       subtitle={locale || 'On this device'}
     >
-      <View style={styles.hero}>
-        <View style={styles.avatar}>
-          <Text style={styles.letter}>{letter}</Text>
+      <View
+        style={[
+          styles.hero,
+          { backgroundColor: colors.surface, borderColor: colors.line },
+        ]}
+      >
+        <View style={[styles.avatar, { backgroundColor: colors.ink }]}>
+          {letter ? (
+            <Text style={[styles.letter, { color: colors.onInk }]}>{letter}</Text>
+          ) : (
+            <User size={28} color={colors.onInk} strokeWidth={1.8} />
+          )}
         </View>
-        <Text variant="headline" style={{ marginTop: spacing.md }}>
+        <Text
+          variant="title"
+          style={{ marginTop: spacing.md, color: colors.ink, textAlign: 'center' }}
+        >
           {name.trim() || 'You'}
         </Text>
-        <Text variant="caption" style={{ marginTop: 4 }}>
-          Local profile — no account yet
+        <Text variant="caption" style={{ marginTop: 6, color: colors.mute, textAlign: 'center' }}>
+          On this device
         </Text>
-        <View style={styles.planPill}>
-          <Text style={styles.planText}>Free · on this device</Text>
+        <View style={[styles.planPill, { backgroundColor: colors.surfaceSoft }]}>
+          <Text style={[styles.planText, { color: colors.slate }]}>{planLabel}</Text>
         </View>
       </View>
 
@@ -89,31 +122,61 @@ export default function ProfileScreen() {
       />
 
       <ModuleSection label="Your details">
-        <View style={styles.formCard}>
-          <Text style={styles.label}>Display name</Text>
+        <View
+          style={[
+            styles.formCard,
+            { backgroundColor: colors.surface, borderColor: colors.line },
+          ]}
+        >
+          <Text style={[styles.label, { color: colors.mute }]}>Display name</Text>
           <TextInput
             value={name}
             onChangeText={setName}
             placeholder="Your name"
             placeholderTextColor={colors.faint}
-            style={styles.input}
+            style={[
+              styles.input,
+              {
+                backgroundColor: colors.surfaceSoft,
+                borderColor: colors.line,
+                color: colors.ink,
+              },
+            ]}
+            autoCorrect={false}
+            spellCheck={false}
+            autoComplete="off"
+            textContentType="none"
+            autoCapitalize="words"
             editable={ready}
           />
-          <Text style={styles.label}>Locale note</Text>
+          <Text style={[styles.label, { color: colors.mute }]}>Locale note</Text>
           <TextInput
             value={locale}
             onChangeText={setLocale}
             placeholder="e.g. Dubai"
             placeholderTextColor={colors.faint}
-            style={styles.input}
+            style={[
+              styles.input,
+              {
+                backgroundColor: colors.surfaceSoft,
+                borderColor: colors.line,
+                color: colors.ink,
+              },
+            ]}
             editable={ready}
           />
           <Pressable
             onPress={() => void save()}
             disabled={saving || !ready}
-            style={[styles.save, saving && { opacity: 0.5 }]}
+            style={[
+              styles.save,
+              { backgroundColor: colors.ink },
+              saving && { opacity: 0.5 },
+            ]}
           >
-            <Text style={styles.saveText}>{saving ? 'Saving…' : 'Save profile'}</Text>
+            <Text style={[styles.saveText, { color: colors.onInk }]}>
+              {saving ? 'Saving…' : 'Save profile'}
+            </Text>
           </Pressable>
         </View>
       </ModuleSection>
@@ -138,11 +201,6 @@ export default function ProfileScreen() {
             onPress={() => router.push('/notifications' as Href)}
           />
           <ListRow
-            icon="shield"
-            title="Emergency vault"
-            onPress={() => router.push('/vault' as Href)}
-          />
-          <ListRow
             icon="package"
             title="Things"
             onPress={() => router.push('/(tabs)/spaces' as Href)}
@@ -158,11 +216,18 @@ export default function ProfileScreen() {
 
       <Pressable
         onPress={() => router.push('/settings/plan' as Href)}
-        style={styles.upgrade}
+        style={[
+          styles.upgrade,
+          { backgroundColor: colors.surface, borderColor: colors.line },
+        ]}
       >
         <View style={{ flex: 1 }}>
-          <Text style={styles.upgradeTitle}>Plan</Text>
-          <Text variant="caption">Local Free for now — billing comes later</Text>
+          <Text style={[styles.upgradeTitle, { color: colors.ink }]}>Plan</Text>
+          <Text variant="caption">
+            {plan.id === 'trial'
+              ? 'Full Pro while trial lasts — billing comes later'
+              : `${plan.name} on this device — billing comes later`}
+          </Text>
         </View>
         <ChevronRight size={16} color={colors.faint} />
       </Pressable>
@@ -173,90 +238,73 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   hero: {
     alignItems: 'center',
-    backgroundColor: colors.white,
     borderRadius: radius.lg,
     padding: spacing.xl,
     marginBottom: spacing.lg,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
   },
   avatar: {
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: colors.forest,
     alignItems: 'center',
     justifyContent: 'center',
   },
   letter: {
     fontFamily: fonts.sansSemi,
     fontSize: 28,
-    color: colors.forestOn,
   },
   planPill: {
     marginTop: spacing.md,
-    backgroundColor: colors.forestSoft,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: radius.full,
   },
   planText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 12,
-    color: colors.forest,
+    fontSize: 16,
   },
   formCard: {
-    backgroundColor: colors.white,
     borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
     padding: spacing.md,
   },
   label: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
-    color: colors.mute,
+    fontSize: 16,
     marginBottom: spacing.sm,
     marginTop: spacing.sm,
   },
   input: {
-    backgroundColor: colors.bgElevated,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
     paddingHorizontal: spacing.md,
     paddingVertical: 12,
     fontFamily: fonts.sans,
     fontSize: 16,
-    color: colors.ink,
   },
   save: {
     marginTop: spacing.md,
-    backgroundColor: colors.forest,
     borderRadius: radius.md,
     paddingVertical: 14,
     alignItems: 'center',
   },
   saveText: {
     fontFamily: fonts.sansSemi,
-    fontSize: 15,
-    color: colors.pure,
+    fontSize: 16,
   },
   upgrade: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    backgroundColor: colors.white,
     borderRadius: radius.lg,
     padding: spacing.lg,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
     marginBottom: spacing.xl,
   },
   upgradeTitle: {
     fontFamily: fonts.sansSemi,
-    fontSize: 15,
-    color: colors.ink,
+    fontSize: 16,
     marginBottom: 2,
   },
 });

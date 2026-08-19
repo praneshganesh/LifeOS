@@ -68,17 +68,17 @@ loadDotEnv();
 /** Keep this stable + under ~600 tokens so prompt cache can kick in. */
 const SYSTEM = `LifeOS home-inventory + spend assistant for voice/chat. Reply in 1 short real English sentence (never the word "none").
 
-ASR mangles brands (accents, homophones). When the product type is obvious, store the real manufacturer spelling — never a nonsense brand (there is no "Sangu"). TV + "Sangu"/"Sam sung"/"Samson" → Samsung; coffee machine + "dilon ki"/"dalungi" → De'Longhi; "el gee" TV → LG. Reply with the corrected name. If it is not a close match to a well-known brand, keep what they said.
+ASR often mangles brand and store names. When the real manufacturer or retailer is clear from context, store the correct common spelling and reply with that. If it is not a clear match, keep what they said — never invent a brand or merchant.
 
 Defaults: coffee/espresso → Kitchen / Appliances. Laptops/phones/headphones → room Personal (never Personal Documents — that is for passports/IDs only). Rooms: Kitchen, Living Room, Bedroom, Utility, Vehicles, Personal, Family, Personal Documents.
-Ownership: assign ONLY if Household JSON in this request has that person (match name or id). Never invent people, never copy example names (there is no Ananya unless they are in Household). If Household is empty or they did not name someone, omit assignedTo and personId.
+Ownership: assign ONLY if Household JSON in this request has that person (match name or id). Never invent people, never copy example names (there is no Ananya unless they are in Household). Things: if they did not name someone, omit assignedTo and personId. Habits, class packs, attendance, reminders: first-person (“I walked”, “I attended”, “I enrolled”, “remind me”) with no other person named → the household member whose relation is You (include that id + name). Never log another adult’s class or habit as theirs. “My son’s swimming” → that child only.
 On add_item for appliances/electronics: include "manualUrl" when you know a real https manufacturer support/manual page (e.g. Apple → https://support.apple.com). Never invent fake product-PDF URLs. Omit if unsure.
 
 Facts (critical):
 - Answer ONLY from Inventory + LastDone + Expenses + Habits + Subscriptions JSON in this request.
 - Inventory fields may include price, purchasedFrom, purchaseDate, addedAt, warrantyExpiry, expiryDate, serial, assignedTo, room, recentEvents.
 - Expenses fields: title, amount, currency, category, date, merchant.
-- Habits fields: title, category, streak, doneToday, rate30.
+- Habits fields: title, assignedTo, category, streak, doneToday, rate30.
 - Class packs fields: title, assignedTo, total, used, remaining, startsOn, endsOn.
 - Subscriptions fields: title, amount, currency, cycle, renewsOn, category, provider.
 - If a field is missing, say it isn’t recorded — NEVER invent dates, prices, stores, warranty lengths, serials, service history, spend totals, streaks, remaining classes, or renewals.
@@ -98,16 +98,25 @@ Facts (critical):
 
 Actions:
 - durable goods (laptop, machine, headphones, passport) → add_item (name, brand?, room?, category?, price?, purchasedFrom?, warrantyExpiry?, manualUrl?, assignedTo?, personId?). warrantyExpiry YYYY-MM-DD; year-only "until 2028" → 2028-12-31. Omit condition unless they said used/refurbished/etc — never invent Good. "I got a new X" is not a condition.
-- spent/paid/coffee run/groceries/bill (one-off consumable spend, not a Thing) → add_expense { title, amount, currency?, category?, date?, merchant? } categories: food|transport|home|shopping|health|travel|bills|entertainment|other
-- recurring subscription ("I pay for Netflix", "Spotify is AED 22/month") → add_subscription { title, amount, currency?, cycle?, renewsOn?, category?, provider? } cycle: weekly|monthly|yearly; categories: streaming|software|fitness|cloud|news|other
-- habit check-in ("I walked", "mark gym done", "did meditation") → habit_check_in { title, date?, why?, createIfMissing?, inventoryItemId? } (default createIfMissing true; inventoryItemId links a Thing and logs Last Done)
-- enrolled in a class pack ("I enrolled for swimming", "24 skating classes in 3 months") → add_class_pack { title, total?, months?, endsOn?, assignedTo?, personId? }. Create even if they omit the count. ASR "12th classes" → total 12. Not a habit. Not a lookup.
-- attended a class ("I attended", "went to skating") → log_class { title?, id?, date? } only if Classes JSON has a matching pack (or one pack). If Classes JSON is empty, do not log_class — say there isn’t a pack yet. Never invent a pack from attendance.
+- spent/paid/coffee run/groceries/bill (one-off consumable spend, not a Thing) → add_expense { title, amount, currency?, category?, date?, merchant?, assignedTo?, personId? } categories: food|transport|home|shopping|health|travel|bills|entertainment|other. "at/in/from STORE for X" or "got X from STORE for N dirhams" → always set merchant to STORE (keep spelling if ASR is unclear; normalize only when the real retailer is obvious). Dirhams → currency AED. Named person ("for Aarav") → that personId. Vague "show/open that/show me" after ANY successful action → open that same record using session focus (kind + id). Never open an unrelated Thing.
+- refine an expense (change amount/merchant/title of yogurt, coffee, groceries already in Expenses JSON) → update_expense { id, patch: { amount?, currency?, merchant?, title?, date?, category? } }. Never update_item for consumable spend. Dirhams → amount number + currency AED.
+- delete an expense ("delete that juice", "remove the coffee spend") → remove_expense { id } from Expenses JSON. Never remove_item for spend. Vague "delete that" uses session focus.
+- recurring subscription ("I pay for Netflix", "Spotify is AED 22/month") → add_subscription { title, amount, currency?, cycle?, renewsOn?, category?, provider?, assignedTo?, personId? } cycle: weekly|monthly|yearly; categories: streaming|software|fitness|cloud|news|other
+- change/cancel a subscription → update_subscription { id, patch } or remove_subscription { id } from Subscriptions JSON. Never update_item / remove_item for a subscription.
+- habit check-in ("I walked", "mark gym done", "did meditation") → habit_check_in { title, date?, why?, createIfMissing?, inventoryItemId?, assignedTo?, personId? } (default createIfMissing true). First-person with no other name → You. Never check in someone else’s habit of the same title. Delete a habit → remove_habit { id }.
+- enrolled in a class pack ("I enrolled for swimming", "24 skating classes in 3 months") → add_class_pack { title, total?, months?, endsOn?, assignedTo?, personId? }. Create even if they omit the count. ASR "12th classes" → total 12. Not a habit. Not a lookup. First-person enroll → You; “my son” → that child. Never also habit_check_in on enroll. Change pack size → update_class_pack { id, patch: { total? } }. Cancel a pack → remove_class_pack { id }.
+- attended a class ("I attended", "went to skating") → log_class { title?, id?, date?, assignedTo?, personId? } only if Classes JSON has a pack for that person (or one unassigned pack). If Classes JSON is empty, do not log_class. Never invent a pack from attendance. Never log another adult’s pack.
 - refine Thing (store/price/warranty/date/serial/name) → update_item { id, patch } (patch may include purchaseDate, warrantyExpiry, serial, purchasedFrom, price). If user gives price → "AED 800" for dirhams; Sharafdg→Sharaf DG.
 - service/maintain/descale/filter change → log_done { label, inventoryItemId?, doneAt? }
-- reminder ("remind me next Tuesday", "log a reminder to renew passport") → set_reminder { label, remindAt, inventoryItemId? }. remindAt YYYY-MM-DD. Do not refuse — LifeOS stores this on Last Done.
-- delete/sold → remove_item { id } (reply with count). "Did you delete?" → none only, do not remove again.
-- show/open item → open_item { id } (use focus id; never omit id)
+- reminder ("remind me next Tuesday", "log a reminder to renew passport") → set_reminder { label, remindAt, inventoryItemId?, assignedTo?, personId? }. remindAt YYYY-MM-DD. Do not refuse — LifeOS stores this on Last Done.
+- delete a Last Done activity / reminder → remove_last_done { id } from LastDone JSON.
+- delete/sold a Thing → remove_item { id } (reply with count). "Did you delete?" → none only, do not remove again.
+- show/open a Thing → open_item { id } (use focus item id; never omit id)
+- show/open an expense → open_expense { id } (use focus expense id after spend)
+- show/open a habit → open_habit { id }
+- show/open a subscription → open_subscription { id }
+- show/open a class pack → open_class { id }
+- show/open a Last Done activity → open_last_done { id }
 - questions → none
 
 JSON only: { "reply": string, "actions": Action[] }`;
@@ -197,6 +206,42 @@ function sanitizeReply(reply, actions) {
   return 'Anything else?';
 }
 
+/** Pull store from "from/at/in STORE for …" — keep spelling as spoken (no rewrite map). */
+function merchantFromUtterance(text) {
+  const t = String(text || '');
+  if (!t.trim()) return undefined;
+  const m = t.match(
+    /\b(?:at|in|from|@)\s+([A-Za-z][A-Za-z .']{1,40}?)(?:\s+for\b|\s+on\b|\s+\d|,|\.|$)/i
+  );
+  if (!m?.[1]) return undefined;
+  const candidate = m[1].trim();
+  if (/^(aed|dirhams?|dhs|dh|euros?|dollars?|cash|card)$/i.test(candidate)) {
+    return undefined;
+  }
+  return candidate
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) =>
+      w.length <= 3 ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1)
+    )
+    .join(' ');
+}
+
+function formatExpenseAmount(amount, currency) {
+  const raw = amount != null ? String(amount).trim() : '';
+  if (!raw) return '';
+  const numMatch = raw.replace(/,/g, '').match(/(\d+(?:\.\d+)?)/);
+  const n = numMatch ? Number(numMatch[1]) : NaN;
+  const pretty = Number.isFinite(n)
+    ? n.toLocaleString('en-US', { maximumFractionDigits: 2 })
+    : raw;
+  const cur = String(currency || '').trim().toUpperCase();
+  if (cur) return `${cur} ${pretty}`;
+  if (/\b(aed|dirhams?|dhs|dh)\b/i.test(raw)) return `AED ${pretty}`;
+  if (/^\d+(\.\d+)?$/.test(raw)) return `AED ${pretty}`;
+  return raw;
+}
+
 /** Rebuild add/delete replies from actions so toast matches stored fields. */
 function alignReplyWithActions(reply, actions) {
   const list = Array.isArray(actions) ? actions : [];
@@ -214,14 +259,31 @@ function alignReplyWithActions(reply, actions) {
   }
   const expense = list.find((a) => a?.type === 'add_expense' && a.title);
   if (expense) {
-    const amt = expense.amount != null ? String(expense.amount) : '';
+    const at = expense.merchant ? ` at ${expense.merchant}` : '';
+    const amt = formatExpenseAmount(expense.amount, expense.currency);
     return amt
-      ? `Logged ${expense.title} — ${amt}.`
-      : `Logged expense: ${expense.title}.`;
+      ? `Logged ${expense.title}${at} — ${amt}.`
+      : `Logged expense: ${expense.title}${at}.`;
   }
+  const expenseUpdate = list.find((a) => a?.type === 'update_expense' && a.id);
+  if (expenseUpdate) {
+    const amt = formatExpenseAmount(
+      expenseUpdate.patch?.amount,
+      expenseUpdate.patch?.currency
+    );
+    const title = expenseUpdate.patch?.title || 'expense';
+    const at = expenseUpdate.patch?.merchant
+      ? ` at ${expenseUpdate.patch.merchant}`
+      : '';
+    return amt ? `Updated ${title}${at} — ${amt}.` : `Updated ${title}${at}.`;
+  }
+  const expenseRemove = list.find((a) => a?.type === 'remove_expense');
+  if (expenseRemove) return 'Deleted that expense.';
+  const openExp = list.find((a) => a?.type === 'open_expense');
+  if (openExp) return 'Opening that expense.';
   const sub = list.find((a) => a?.type === 'add_subscription' && a.title);
   if (sub) {
-    const amt = sub.amount != null ? String(sub.amount) : '';
+    const amt = formatExpenseAmount(sub.amount, sub.currency);
     return amt ? `Added ${sub.title} — ${amt}.` : `Added subscription: ${sub.title}.`;
   }
   const habit = list.find((a) => a?.type === 'habit_check_in' && a.title);
@@ -285,20 +347,167 @@ function statedCondition(raw, utterance) {
   return c;
 }
 
-function repairActions(actions, { focusItemId, inventorySummary, household, lastUserText, classPacksSummary }) {
+function expenseIdFromSummary(text, expensesSummary) {
+  const list = Array.isArray(expensesSummary) ? expensesSummary : [];
+  const t = String(text || '').toLowerCase();
+  if (!t || !list.length) return undefined;
+  const scored = list
+    .map((e) => {
+      const title = String(e?.title || '').toLowerCase();
+      if (!title) return null;
+      if (t.includes(title)) return { id: e.id, score: title.length };
+      const words = title.split(/\s+/).filter((w) => w.length > 2);
+      if (words.length && words.every((w) => t.includes(w))) {
+        return { id: e.id, score: title.length };
+      }
+      return null;
+    })
+    .filter(Boolean);
+  scored.sort((a, b) => b.score - a.score);
+  return scored[0]?.id;
+}
+
+function looksLikeExpenseRefine(text, expensesSummary) {
+  const list = Array.isArray(expensesSummary) ? expensesSummary : [];
+  if (!list.length || !String(text || '').trim()) return false;
+  if (!/\b(update|change|fix|set|make)\b/i.test(text)) return false;
+  if (
+    !/\b(price|amount|cost|dirhams?|aed|dhs|merchant|store|category|title|name|date)\b/i.test(
+      text
+    )
+  ) {
+    // Still OK if they named an expense title from the list
+    if (!expenseIdFromSummary(text, list)) return false;
+  }
+  return Boolean(expenseIdFromSummary(text, list));
+}
+
+function sessionFocusFromBody(session) {
+  const raw = session?.focus;
+  if (
+    raw &&
+    typeof raw.kind === 'string' &&
+    typeof raw.id === 'string' &&
+    raw.id.trim()
+  ) {
+    return { kind: raw.kind, id: raw.id.trim() };
+  }
+  if (typeof session?.focusExpenseId === 'string' && session.focusExpenseId) {
+    return { kind: 'expense', id: session.focusExpenseId };
+  }
+  if (typeof session?.focusItemId === 'string' && session.focusItemId) {
+    return { kind: 'item', id: session.focusItemId };
+  }
+  return null;
+}
+
+function openActionForFocus(focus) {
+  if (!focus?.id) return null;
+  switch (focus.kind) {
+    case 'expense':
+      return { type: 'open_expense', id: focus.id };
+    case 'habit':
+      return { type: 'open_habit', id: focus.id };
+    case 'subscription':
+      return { type: 'open_subscription', id: focus.id };
+    case 'class':
+      return { type: 'open_class', id: focus.id };
+    case 'lastDone':
+      return { type: 'open_last_done', id: focus.id };
+    default:
+      return { type: 'open_item', id: focus.id };
+  }
+}
+
+function removeActionForFocus(focus) {
+  if (!focus?.id) return null;
+  switch (focus.kind) {
+    case 'expense':
+      return { type: 'remove_expense', id: focus.id };
+    case 'habit':
+      return { type: 'remove_habit', id: focus.id };
+    case 'subscription':
+      return { type: 'remove_subscription', id: focus.id };
+    case 'class':
+      return { type: 'remove_class_pack', id: focus.id };
+    case 'lastDone':
+      return { type: 'remove_last_done', id: focus.id };
+    default:
+      return { type: 'remove_item', id: focus.id };
+  }
+}
+
+function isVagueShowUtterance(text) {
+  const t = String(text || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[’']/g, "'");
+  return (
+    /^(show|open|see|view)(\s+me)?(\s+please)?[.!?]?$/.test(t) ||
+    /^(show|open)\s+(it|that|this|me)\b/.test(t) ||
+    /^(can you )?(show|open)\s+(me\s+)?(it|that|this)\b/.test(t)
+  );
+}
+
+function isVagueDeleteUtterance(text) {
+  const t = String(text || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[’']/g, "'");
+  return /^(delete|remove|forget)(\s+(it|that|this|please))?\s*[.!?]?$/.test(t);
+}
+
+function repairActions(actions, { focusItemId, focusExpenseId, sessionFocus, inventorySummary, household, lastUserText, classPacksSummary, expensesSummary }) {
   const ids = inventoryIds(inventorySummary);
-  const newestId =
-    typeof inventorySummary?.[0]?.id === 'string' ? inventorySummary[0].id : null;
-  const focus = focusItemId || newestId;
+  const expenseIds = new Set(
+    (Array.isArray(expensesSummary) ? expensesSummary : [])
+      .map((e) => e?.id)
+      .filter((id) => typeof id === 'string' && id.length > 0)
+  );
+  const itemFocus = focusItemId || null;
+  const expenseFocus =
+    (sessionFocus?.kind === 'expense' ? sessionFocus.id : null) ||
+    focusExpenseId ||
+    null;
   const people = Array.isArray(household) ? household : [];
   const repaired = ensureReminderActions(
     ensureClassActions(actions, lastUserText, classPacksSummary),
     lastUserText,
     inventorySummary
-  );
+  ).filter((a) => {
+    if (!a) return false;
+    if (looksLikeClassEnrollment(lastUserText) && a.type === 'habit_check_in') {
+      return false;
+    }
+    return true;
+  });
 
   return repaired.map((a) => {
     if (!a) return a;
+    if (a.type === 'update_item' && a.id) {
+      const id = String(a.id || '').trim();
+      const inInventory = ids.has(id);
+      const inExpenses = expenseIds.has(id);
+      if (!inInventory && (inExpenses || looksLikeExpenseRefine(lastUserText, expensesSummary))) {
+        const matched =
+          (inExpenses && id) ||
+          expenseIdFromSummary(lastUserText, expensesSummary) ||
+          id;
+        const patch = {};
+        if (a.patch?.price != null && a.patch.price !== '') patch.amount = a.patch.price;
+        if (a.patch?.purchasedFrom) patch.merchant = a.patch.purchasedFrom;
+        if (a.patch?.name) patch.title = a.patch.name;
+        if (a.patch?.category) patch.category = a.patch.category;
+        if (a.patch?.purchaseDate) patch.date = a.patch.purchaseDate;
+        if (
+          !patch.currency &&
+          /\b(aed|dirhams?|dhs|dh)\b/i.test(String(lastUserText || a.patch?.price || ''))
+        ) {
+          patch.currency = 'AED';
+        }
+        return { type: 'update_expense', id: matched, patch };
+      }
+    }
     if (a.type === 'add_item') {
       const next = repairHeardBrand({
         name: a.name,
@@ -330,7 +539,7 @@ function repairActions(actions, { focusItemId, inventorySummary, household, last
       }
       return { ...merged, assignedTo: hit.name, personId: hit.id };
     }
-    if (a.type === 'add_class_pack' || a.type === 'log_class') {
+    if (a.type === 'add_class_pack' || a.type === 'log_class' || a.type === 'habit_check_in' || a.type === 'set_reminder') {
       const assigned = String(a.assignedTo || '').trim();
       const personId = String(a.personId || '').trim();
       const hit = people.find(
@@ -347,11 +556,58 @@ function repairActions(actions, { focusItemId, inventorySummary, household, last
       }
       return { ...a, assignedTo: hit.name, personId: hit.id };
     }
-    if (a.type === 'open_item') {
+    if (
+      a.type === 'open_item' ||
+      a.type === 'open_expense' ||
+      a.type === 'open_habit' ||
+      a.type === 'open_subscription' ||
+      a.type === 'open_class' ||
+      a.type === 'open_last_done'
+    ) {
+      const text = String(lastUserText || '').toLowerCase();
+      const wantsExpense =
+        a.type === 'open_expense' ||
+        /\b(expense|spend|spending|purchase|receipt)\b/.test(text);
+      if (wantsExpense && expenseFocus) {
+        let eid = typeof a.id === 'string' ? a.id.trim() : '';
+        if (!expenseIds.has(eid)) eid = expenseFocus;
+        return { type: 'open_expense', id: eid };
+      }
+      if (isVagueShowUtterance(lastUserText) && sessionFocus) {
+        return openActionForFocus(sessionFocus);
+      }
       let id = typeof a.id === 'string' ? a.id.trim() : '';
-      if (id === 'FOCUS_ITEM_ID') id = focus || '';
-      if (!id || (!ids.has(id) && id !== focus)) id = focus || id;
+      if (id === 'FOCUS_ITEM_ID') id = itemFocus || '';
+      if (!id || (!ids.has(id) && id !== itemFocus)) {
+        if (sessionFocus && sessionFocus.kind !== 'item') {
+          return openActionForFocus(sessionFocus);
+        }
+        id = itemFocus || id;
+      }
       return { type: 'open_item', id };
+    }
+    if (a.type === 'remove_item') {
+      const id = String(a.id || '').trim();
+      if (id && !ids.has(id) && expenseIds.has(id)) {
+        return { type: 'remove_expense', id };
+      }
+      if ((!id || !ids.has(id)) && isVagueDeleteUtterance(lastUserText) && sessionFocus) {
+        return removeActionForFocus(sessionFocus);
+      }
+    }
+    if (a.type === 'add_expense') {
+      const next = { ...a };
+      const merchant =
+        String(a.merchant || '').trim() || merchantFromUtterance(lastUserText) || '';
+      if (merchant) next.merchant = merchant;
+      else delete next.merchant;
+      if (
+        !String(next.currency || '').trim() &&
+        /\b(aed|dirhams?|dhs|dh)\b/i.test(String(lastUserText || ''))
+      ) {
+        next.currency = 'AED';
+      }
+      return next;
     }
     return a;
   });
@@ -392,13 +648,16 @@ function slimInventory(summary) {
 
 function slimLastDone(summary) {
   return (Array.isArray(summary) ? summary : [])
-    .filter((i) => i && i.activity && i.lastDone)
+    .filter((i) => i && i.activity && (i.lastDone || i.remindAt))
     .slice(0, 20)
     .map((i) => {
-      const row = { activity: i.activity, lastDone: i.lastDone };
+      const row = { activity: i.activity };
+      if (i.id) row.id = i.id;
+      if (i.lastDone) row.lastDone = i.lastDone;
       if (i.remindAt) row.remindAt = i.remindAt;
       if (i.itemId) row.itemId = i.itemId;
       if (i.itemName) row.itemName = i.itemName;
+      if (i.assignedTo) row.assignedTo = i.assignedTo;
       return row;
     });
 }
@@ -417,6 +676,7 @@ function slimExpenses(summary) {
         date: e.date,
       };
       if (e.merchant) row.merchant = e.merchant;
+      if (e.personId) row.personId = e.personId;
       return row;
     });
 }
@@ -425,14 +685,19 @@ function slimHabits(summary) {
   return (Array.isArray(summary) ? summary : [])
     .filter((h) => h && h.title)
     .slice(0, 25)
-    .map((h) => ({
-      id: h.id,
-      title: h.title,
-      category: h.category || 'other',
-      streak: Number(h.streak) || 0,
-      doneToday: Boolean(h.doneToday),
-      rate30: Number(h.rate30) || 0,
-    }));
+    .map((h) => {
+      const row = {
+        id: h.id,
+        title: h.title,
+        category: h.category || 'other',
+        streak: Number(h.streak) || 0,
+        doneToday: Boolean(h.doneToday),
+        rate30: Number(h.rate30) || 0,
+      };
+      if (h.assignedTo) row.assignedTo = h.assignedTo;
+      if (h.personId) row.personId = h.personId;
+      return row;
+    });
 }
 
 function slimClassPacks(summary) {
@@ -455,6 +720,7 @@ function slimClassPacks(summary) {
           p.remaining != null ? Number(p.remaining) : Math.max(0, total - used);
       }
       if (p.assignedTo) row.assignedTo = p.assignedTo;
+      if (p.personId) row.personId = p.personId;
       return row;
     });
 }
@@ -474,6 +740,7 @@ function slimSubscriptions(summary) {
         category: s.category || 'other',
       };
       if (s.provider) row.provider = s.provider;
+      if (s.personId) row.personId = s.personId;
       return row;
     });
 }
@@ -559,15 +826,34 @@ const server = createServer(async (req, res) => {
     typeof body.session?.focusItemId === 'string' && body.session.focusItemId
       ? body.session.focusItemId
       : null;
+  const focusExpenseId =
+    typeof body.session?.focusExpenseId === 'string' && body.session.focusExpenseId
+      ? body.session.focusExpenseId
+      : null;
+  const sessionFocus = sessionFocusFromBody(body.session);
 
   if (!messages.length) {
     json(req, res, 400, { error: 'messages required' });
     return;
   }
 
-  const focusLine = focusItemId
-    ? `Focus item id: ${focusItemId} (use for "the item" / open_item).`
-    : `No focus id. For open_item use newest inventory id: ${inventorySummary[0]?.id || 'none'}.`;
+  const focusBits = [];
+  if (sessionFocus) {
+    focusBits.push(
+      `Session focus: kind=${sessionFocus.kind} id=${sessionFocus.id} (vague "show me" / "delete that" / "update that" MUST use this record, never a different module).`
+    );
+  }
+  if (focusExpenseId) {
+    focusBits.push(
+      `Focus expense id: ${focusExpenseId} (use for "show it" after spend / open_expense).`
+    );
+  }
+  if (focusItemId) {
+    focusBits.push(`Focus item id: ${focusItemId} (use for "the item" / open_item).`);
+  }
+  const focusLine = focusBits.length
+    ? focusBits.join(' ')
+    : `No focus id. For open_item, name the Thing — do not guess the newest inventory item.`;
 
   const openAiMessages = [
     { role: 'system', content: SYSTEM },
@@ -629,10 +915,13 @@ const server = createServer(async (req, res) => {
     const lastUserText = String(lastUser?.content ?? lastUser?.text ?? '');
     parsed.actions = repairActions(parsed.actions, {
       focusItemId,
+      focusExpenseId,
+      sessionFocus,
       inventorySummary,
       household,
       lastUserText,
       classPacksSummary,
+      expensesSummary,
     });
     parsed.reply = alignReplyWithActions(parsed.reply, parsed.actions);
     if (

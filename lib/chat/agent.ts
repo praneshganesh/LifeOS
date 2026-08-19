@@ -96,11 +96,13 @@ export async function runChatAgent(params: {
     timeline?: { date: string; event: string }[];
   }>;
   lastDone?: Array<{
+    id?: string;
     label: string;
     lastDoneAt?: string;
     remindAt?: string;
     inventoryItemId?: string;
     itemName?: string;
+    assignedTo?: string;
   }>;
   expenses?: Array<{
     id: string;
@@ -110,6 +112,7 @@ export async function runChatAgent(params: {
     category: string;
     date: string;
     merchant?: string;
+    personId?: string;
   }>;
   habits?: Array<{
     id: string;
@@ -118,11 +121,14 @@ export async function runChatAgent(params: {
     streak: number;
     doneToday: boolean;
     rate30: number;
+    assignedTo?: string;
+    personId?: string;
   }>;
   classPacks?: Array<{
     id: string;
     title: string;
     assignedTo?: string;
+    personId?: string;
     total: number;
     used: number;
     remaining?: number;
@@ -138,6 +144,7 @@ export async function runChatAgent(params: {
     renewsOn: string;
     category: string;
     provider?: string;
+    personId?: string;
   }>;
   session?: ChatSessionFocus;
   household?: Array<{ id: string; name: string; relation: string; role: string }>;

@@ -20,8 +20,7 @@ export function resolveOpenItemId(params: {
   const wantsOpen = (params.actions ?? []).some((a) => a?.type === 'open_item');
   if (!wantsOpen) return null;
 
-  // Model often emits open_item with a missing/hallucinated id
-  if (focus) return focus;
-  // Newest item is first in our inventory list
-  return params.inventoryIds[0] ?? params.focusItemId ?? null;
+  // Model often emits open_item with a missing/hallucinated id.
+  // Never fall back to “newest inventory” — that opens a stale MacBook/TV.
+  return focus;
 }

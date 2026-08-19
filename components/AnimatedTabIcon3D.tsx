@@ -1,7 +1,7 @@
 import { StyleSheet, View, type ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ICON_MAP, type Icon3DName } from '@/components/ui/Icon3D';
-import { colors } from '@/constants/theme';
+import { useTheme } from '@/lib/ThemeContext';
 
 type Tone = 'soft' | 'forest';
 
@@ -25,6 +25,7 @@ export function AnimatedTabIcon3D({
   round = false,
   style,
 }: Props) {
+  const { colors } = useTheme();
   const Icon = ICON_MAP[name] ?? ICON_MAP.package;
   const glyph = Math.round(size * (round ? 0.42 : 0.48));
   const depth = Math.max(2, Math.round(size * 0.08));
@@ -48,12 +49,16 @@ export function AnimatedTabIcon3D({
               borderRadius: radius,
               top: depth,
               left: depth * 0.45,
-              backgroundColor: isForest ? '#0A433C' : '#B8C0CC',
+              backgroundColor: isForest ? colors.accentStrong : colors.faint,
             },
           ]}
         />
         <LinearGradient
-          colors={isForest ? ['#2A9A88', '#0F5C52'] : ['#FFFFFF', '#E8ECF1']}
+          colors={
+            isForest
+              ? [colors.accent, colors.accentStrong]
+              : [colors.surface, colors.surfaceSoft]
+          }
           start={{ x: 0.15, y: 0 }}
           end={{ x: 0.9, y: 1 }}
           style={[
@@ -68,7 +73,7 @@ export function AnimatedTabIcon3D({
         >
           <Icon
             size={glyph}
-            color={isForest ? colors.forestOn : colors.forest}
+            color={isForest ? colors.accentOn : colors.accent}
             strokeWidth={2}
           />
         </LinearGradient>

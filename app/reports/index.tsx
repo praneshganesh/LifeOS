@@ -1,3 +1,4 @@
+import { useTheme } from '@/lib/ThemeContext';
 import { useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
@@ -31,9 +32,11 @@ import {
   isVehicleItem,
   spaceIdByKind,
 } from '@/lib/moduleFilters';
-import { colors, fonts, radius, spacing } from '@/constants/theme';
+import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
 
 export default function ReportsScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
   const { items } = useInventory();
   const { expenses } = useExpenses();
@@ -148,7 +151,8 @@ export default function ReportsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   note: {
     marginTop: spacing.lg,
     marginBottom: spacing.xl,
@@ -157,3 +161,4 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
   },
 });
+}

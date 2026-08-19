@@ -1,12 +1,16 @@
+import { useMemo } from 'react';
+import { useTheme } from '@/lib/ThemeContext';
 import { useRouter, type Href } from 'expo-router';
 import { Pressable, StyleSheet } from 'react-native';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { ListCard, ListRow } from '@/components/ui/ListKit';
 import { Text } from '@/components/ui/Text';
 import { useSpaces } from '@/lib/SpacesContext';
-import { colors, fonts, spacing } from '@/constants/theme';
+import { type ThemeColors,  colors, fonts, spacing  } from '@/constants/theme';
 
 export default function HomesSettingsScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
   const { spaces } = useSpaces();
   const homes = spaces.filter((s) => s.kind === 'home');
@@ -38,7 +42,8 @@ export default function HomesSettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   add: {
     marginTop: spacing.lg,
     alignItems: 'center',
@@ -46,7 +51,8 @@ const styles = StyleSheet.create({
   },
   addText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 15,
+    fontSize: 16,
     color: colors.forest,
   },
 });
+}

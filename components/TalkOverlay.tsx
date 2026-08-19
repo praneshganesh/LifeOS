@@ -48,23 +48,32 @@ import { applyChatActions } from '@/lib/chat/applyActions';
 import { composeAppliedReply } from '@/lib/chat/composeReply';
 import { isCloseTalkIntent, resolveLocalIntent } from '@/lib/chat/localIntents';
 import { resolveOpenItemId } from '@/lib/chat/openItem';
+import { hrefForTalkFocus, type TalkFocus } from '@/lib/chat/focus';
 import type { ChatMessage } from '@/lib/chat/types';
 import { blurActiveElement } from '@/lib/a11y';
+import { saveHomeSurface } from '@/lib/homeSurface';
 import { rememberedCaptureHref } from '@/lib/captureContext';
 import { getHouseholdPeople } from '@/lib/people';
 import {
   loadTalkVoicePrefs,
   saveTalkVoicePrefs,
 } from '@/lib/talkVoicePrefs';
-import { colors, fonts, radius, spacing } from '@/constants/theme';
+import { fonts, radius, spacing } from '@/constants/theme';
+import { useTheme } from '@/lib/ThemeContext';
 
 type Phase = 'idle' | 'listening' | 'thinking' | 'reply';
 
 const isExpoGo = Constants.appOwnership === 'expo';
 
-const LISTEN_GRADIENT = ['#7A9066', '#C08A3E', '#5F7350', '#E5A95C', '#7A9066'] as const;
-
-function ListeningAura({ active }: { active: boolean }) {
+function ListeningAura({
+  active,
+  outer,
+  inner,
+}: {
+  active: boolean;
+  outer: string;
+  inner: string;
+}) {
   const pulse = useSharedValue(0);
   const pulseLate = useSharedValue(0);
 
@@ -105,13 +114,18 @@ function ListeningAura({ active }: { active: boolean }) {
 
   return (
     <>
-      <Animated.View style={[styles.ring, styles.ringOuter, outerStyle]} />
-      <Animated.View style={[styles.ring, styles.ringInner, innerStyle]} />
+      <Animated.View
+        style={[styles.ring, styles.ringOuter, { backgroundColor: outer }, outerStyle]}
+      />
+      <Animated.View
+        style={[styles.ring, styles.ringInner, { backgroundColor: inner }, innerStyle]}
+      />
     </>
   );
 }
 
 function AnimatedListeningOrb({ busy }: { busy: boolean }) {
+  const { colors } = useTheme();
   const spin = useSharedValue(0);
   const breathe = useSharedValue(0);
 
@@ -144,7 +158,7 @@ function AnimatedListeningOrb({ busy }: { busy: boolean }) {
     <Animated.View style={[styles.orbClip, breatheStyle]}>
       <Animated.View style={[styles.gradientSpin, spinStyle]}>
         <LinearGradient
-          colors={[...LISTEN_GRADIENT]}
+          colors={[...colors.listenGradient]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFill}
@@ -165,17 +179,19 @@ function AnimatedListeningOrb({ busy }: { busy: boolean }) {
  * Talk orb — stays open & keeps listening until the user closes it.
  */
 export function TalkOrb() {
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const { open, closeTalk, focusItemId, setFocusItemId } = useTalkOverlay();
+  const { open, closeTalk, talkFocus, setTalkFocus, focusItemId, focusExpenseId } =
+    useTalkOverlay();
   const router = useRouter();
   const pathname = usePathname();
   const { items, addItem, updateItem, removeItem, getById } = useInventory();
-  const { items: lastDoneItems, logDone, setReminder } = useLastDone();
+  const { items: lastDoneItems, logDone, setReminder, remove: removeLastDone } = useLastDone();
   const { members: householdMembers } = useHousehold();
-  const { expenses, addExpense } = useExpenses();
-  const { habits, addHabit, checkIn, findByTitle, getById: getHabitById, updateHabit } = useHabits();
-  const { packs: classPacks, addPack, logClass, findPack, getById: getClassPack, newestPack } = useClasses();
-  const { subscriptions, addSubscription } = useSubscriptions();
+  const { expenses, addExpense, updateExpense, removeExpense, getById: getExpenseById } = useExpenses();
+  const { habits, addHabit, checkIn, findByTitle, getById: getHabitById, updateHabit, removeHabit } = useHabits();
+  const { packs: classPacks, addPack, logClass, findPack, pickAttendance, getById: getClassPack, newestPack, removePack, updatePack } = useClasses();
+  const { subscriptions, addSubscription, updateSubscription, removeSubscription, getById: getSubscriptionById } = useSubscriptions();
   const householdPeople = useMemo(
     () => getHouseholdPeople(householdMembers),
     [householdMembers]
@@ -190,6 +206,7 @@ export function TalkOrb() {
         category: e.category,
         date: e.date,
         merchant: e.merchant,
+        personId: e.personId,
       })),
     [expenses]
   );
@@ -202,6 +219,8 @@ export function TalkOrb() {
         streak: currentStreak(h),
         doneToday: loggedOn(h, dayKey()),
         rate30: completionRate(h, 30),
+        assignedTo: h.assignedTo,
+        personId: h.personId,
       })),
     [habits]
   );
@@ -213,6 +232,7 @@ export function TalkOrb() {
         id: p.id,
         title: p.title,
         assignedTo: p.assignedTo,
+        personId: p.personId,
         total: p.total,
         used: usedCount(p),
         remaining: remainingCount(p) ?? undefined,
@@ -232,6 +252,7 @@ export function TalkOrb() {
         renewsOn: s.renewsOn,
         category: s.category,
         provider: s.provider,
+        personId: s.personId,
       })),
     [subscriptions]
   );
@@ -259,6 +280,7 @@ export function TalkOrb() {
   const lastDone = useMemo(
     () =>
       lastDoneItems.map((i) => ({
+        id: i.id,
         label: i.label,
         lastDoneAt: getLastDoneAt(i),
         remindAt: i.remindAt,
@@ -266,6 +288,7 @@ export function TalkOrb() {
         itemName: i.inventoryItemId
           ? items.find((x) => x.id === i.inventoryItemId)?.name
           : undefined,
+        assignedTo: i.assignedTo,
       })),
     [lastDoneItems, items]
   );
@@ -275,7 +298,6 @@ export function TalkOrb() {
   const [reply, setReply] = useState('');
   const [error, setError] = useState('');
   const [apiDown, setApiDown] = useState(false);
-  const [viaAi, setViaAi] = useState(false);
   const [speakReplies, setSpeakReplies] = useState(true);
   const openRef = useRef(open);
   openRef.current = open;
@@ -298,6 +320,10 @@ export function TalkOrb() {
   subscriptionsRef.current = subscriptionSummary;
   const focusItemIdRef = useRef<string | null>(focusItemId);
   focusItemIdRef.current = focusItemId;
+  const focusExpenseIdRef = useRef<string | null>(focusExpenseId);
+  focusExpenseIdRef.current = focusExpenseId;
+  const talkFocusRef = useRef<TalkFocus | null>(talkFocus);
+  talkFocusRef.current = talkFocus;
   const sessionActiveRef = useRef(false);
 
   useEffect(() => {
@@ -314,17 +340,29 @@ export function TalkOrb() {
     }
   }, []);
 
-  const goToItem = useCallback(
-    (id: string) => {
+  const goToTalkFocus = useCallback(
+    (focus: TalkFocus) => {
       stopSpeech();
-      setFocusItemId(id);
+      setTalkFocus(focus);
       closeTalk();
-      // Modal must unmount before stack navigation or push is dropped
+      const href = hrefForTalkFocus(focus);
       setTimeout(() => {
-        router.push(`/asset/${id}` as never);
+        router.push(href as never);
       }, 280);
     },
-    [closeTalk, router, setFocusItemId, stopSpeech]
+    [closeTalk, router, setTalkFocus, stopSpeech]
+  );
+  const goToItem = useCallback(
+    (id: string) => {
+      goToTalkFocus({ kind: 'item', id });
+    },
+    [goToTalkFocus]
+  );
+  const goToExpense = useCallback(
+    (id: string) => {
+      goToTalkFocus({ kind: 'expense', id });
+    },
+    [goToTalkFocus]
   );
   const transcriptRef = useRef('');
   const handledRef = useRef(false);
@@ -412,7 +450,6 @@ export function TalkOrb() {
       setHeard(text);
       setError('');
       setPhase('thinking');
-      setViaAi(false);
 
       const newestId = inventoryRef.current[0]?.id ?? null;
 
@@ -420,6 +457,8 @@ export function TalkOrb() {
       const local = resolveLocalIntent(text, {
         focusItemId: focusItemIdRef.current,
         fallbackItemId: newestId,
+        focusExpenseId: focusExpenseIdRef.current,
+        talkFocus: talkFocusRef.current,
       });
       if (local) {
         console.log('[Talk] local intent', text, local.actions.map((a) => a.type));
@@ -437,21 +476,43 @@ export function TalkOrb() {
           { addItem, updateItem, removeItem },
           'talk',
           {
+            lastUserText: text,
             fallbackFocusId: focusItemIdRef.current || newestId,
+            lastFocusExpenseId: focusExpenseIdRef.current,
+            lastTalkFocus: talkFocusRef.current,
             resolveItem: (id) => getById(id),
+            inventoryList: inventoryRef.current.map((i) => ({
+              id: i.id,
+              name: i.name,
+            })),
+            expensesList: expensesRef.current.map((e) => ({
+              id: e.id,
+              title: e.title,
+              merchant: e.merchant,
+            })),
+            lastDoneList: lastDoneRef.current
+              .filter((d) => d.id)
+              .map((d) => ({ id: d.id as string, label: d.label })),
           }
         );
-        if (applied.clearedFocus) setFocusItemId(null);
-        else if (applied.focusItemId) setFocusItemId(applied.focusItemId);
+        if (applied.talkFocus) setTalkFocus(applied.talkFocus);
+        else if (applied.clearedFocus) setTalkFocus(null);
         const localReply = composeAppliedReply({
           actions: local.actions,
           modelReply: local.reply,
           addedName: applied.lastAddedName,
           removedNames: applied.removedNames,
+          updatedIds: applied.updatedIds,
+          openExpenseId: applied.openExpenseId,
+          openItemId: applied.openItemId,
+          openTarget: applied.openTarget,
         });
         setReply(localReply);
-        setViaAi(false);
         setPhase('reply');
+        if (applied.openTarget) {
+          goToTalkFocus(applied.openTarget);
+          return;
+        }
         const openId = resolveOpenItemId({
           actions: local.actions,
           openItemId: applied.openItemId,
@@ -484,7 +545,11 @@ export function TalkOrb() {
           habits: habitsRef.current,
           classPacks: classPacksRef.current,
           subscriptions: subscriptionsRef.current,
-          session: { focusItemId: focusItemIdRef.current },
+          session: {
+            focusItemId: focusItemIdRef.current,
+            focusExpenseId: focusExpenseIdRef.current,
+            focus: talkFocusRef.current,
+          },
           household: householdPeople,
         });
         if (!openRef.current || !sessionActiveRef.current) return;
@@ -496,31 +561,65 @@ export function TalkOrb() {
             fallbackFocusId: focusItemIdRef.current || newestId,
             resolveItem: (id) => getById(id),
             lastUserText: text,
-            lastDone: { logDone, setReminder },
+            lastDone: { logDone, setReminder, remove: removeLastDone },
             household: householdMembers,
-            expenses: { addExpense },
-            subscriptions: { addSubscription },
+            expenses: {
+              addExpense,
+              updateExpense,
+              removeExpense,
+              getById: getExpenseById,
+            },
+            expensesList: expensesRef.current.map((e) => ({
+              id: e.id,
+              title: e.title,
+              merchant: e.merchant,
+            })),
+            subscriptions: {
+              addSubscription,
+              updateSubscription,
+              removeSubscription,
+              getById: getSubscriptionById,
+            },
+            subscriptionsList: subscriptionsRef.current.map((s) => ({
+              id: s.id,
+              title: s.title,
+            })),
             habits: {
               addHabit,
               updateHabit,
+              removeHabit,
               checkIn,
               findByTitle,
               getById: getHabitById,
             },
+            habitsList: habitsRef.current.map((h) => ({
+              id: h.id,
+              title: h.title,
+            })),
             classes: {
               addPack,
               logClass,
               findPack,
+              pickAttendance,
               getById: getClassPack,
               newestPack,
+              removePack,
+              updatePack,
             },
+            classPacksList: classPacksRef.current.map((p) => ({
+              id: p.id,
+              title: p.title,
+            })),
+            lastDoneList: lastDoneRef.current
+              .filter((d) => d.id)
+              .map((d) => ({ id: d.id as string, label: d.label })),
             inventoryList: items.map((i) => ({ id: i.id, name: i.name })),
+            lastFocusExpenseId: focusExpenseIdRef.current,
+            lastTalkFocus: talkFocusRef.current,
           }
         );
-        if (applied.clearedFocus) setFocusItemId(null);
-        else if (applied.focusItemId || applied.lastAddedId) {
-          setFocusItemId(applied.focusItemId || applied.lastAddedId);
-        }
+        if (applied.talkFocus) setTalkFocus(applied.talkFocus);
+        else if (applied.clearedFocus) setTalkFocus(null);
         const spoken = composeAppliedReply({
           actions: result.actions,
           modelReply: result.reply,
@@ -530,8 +629,19 @@ export function TalkOrb() {
           loggedDoneLabel: applied.loggedDoneLabel,
           loggedExpenseTitle: applied.loggedExpenseTitle,
           loggedExpenseAmount: applied.loggedExpenseAmount,
+          loggedExpenseMerchant: applied.loggedExpenseMerchant,
+          updatedExpense: applied.updatedExpense,
+          updatedIds: applied.updatedIds,
+          openExpenseId: applied.openExpenseId,
+          openItemId: applied.openItemId,
+          openTarget: applied.openTarget,
+          removedExpenseTitle: applied.removedExpenseTitle,
           loggedSubscriptionTitle: applied.loggedSubscriptionTitle,
           loggedSubscriptionAmount: applied.loggedSubscriptionAmount,
+          updatedSubscription: applied.updatedSubscription,
+          removedSubscriptionTitle: applied.removedSubscriptionTitle,
+          removedHabitTitle: applied.removedHabitTitle,
+          removedClassTitle: applied.removedClassTitle,
           habitCheckInTitle: applied.habitCheckInTitle,
           habitStreak: applied.habitStreak,
           habitCheckInDays: applied.habitCheckInDays,
@@ -539,8 +649,11 @@ export function TalkOrb() {
           classPackRemaining: applied.classPackRemaining,
           classPackTotal: applied.classPackTotal,
           classLoggedTitle: applied.classLoggedTitle,
+          classLogAttemptFor: applied.classLogAttemptFor,
           reminderLabel: applied.reminderLabel,
           reminderAt: applied.reminderAt,
+          removedLastDoneLabel: applied.removedLastDoneLabel,
+          updatedClassPack: applied.updatedClassPack,
         });
         console.log(
           '[Talk] ← actions',
@@ -556,7 +669,6 @@ export function TalkOrb() {
           { role: 'assistant' as const, content: spoken },
         ].slice(-12);
         setReply(spoken);
-        setViaAi(true);
         setPhase('reply');
 
         // If we deleted the item currently on screen, leave that page
@@ -567,6 +679,16 @@ export function TalkOrb() {
           if (onAsset) {
             router.replace('/(tabs)/spaces');
           }
+        }
+
+        if (applied.openTarget) {
+          goToTalkFocus(applied.openTarget);
+          return;
+        }
+
+        if (applied.openExpenseId) {
+          goToExpense(applied.openExpenseId);
+          return;
         }
 
         const openId = resolveOpenItemId({
@@ -589,7 +711,6 @@ export function TalkOrb() {
       } catch (err) {
         handledRef.current = false;
         setPhase('idle');
-        setViaAi(false);
         setError(
           err instanceof ChatAgentError
             ? err.message
@@ -615,7 +736,9 @@ export function TalkOrb() {
       afterReply,
       closeTalk,
       goToItem,
-      setFocusItemId,
+      goToExpense,
+      goToTalkFocus,
+      setTalkFocus,
       pathname,
       router,
     ]
@@ -650,18 +773,20 @@ export function TalkOrb() {
         return;
       }
       setPhase('listening');
-      // Bias ASR with the user's own inventory names/brands — not a hardcoded brand list
+      // Bias ASR from the user's own data only — not a fixed brand/store list
       const fromInventory = inventoryRef.current
-        .flatMap((i) => [i.brand, i.name, i.room])
-        .filter((s) => s && s !== 'Unknown' && s !== '—')
-        .slice(0, 24);
+        .flatMap((i) => [i.brand, i.name, i.room, i.purchasedFrom])
+        .filter((s): s is string => Boolean(s && s !== 'Unknown' && s !== '—'));
+      const fromExpenses = expensesRef.current
+        .flatMap((e) => [e.merchant, e.title])
+        .filter((s): s is string => Boolean(s && s !== 'Unknown' && s !== '—'));
       ExpoSpeechRecognitionModule.start({
         lang: 'en-US',
         interimResults: true,
         continuous: false,
         requiresOnDeviceRecognition: false,
         addsPunctuation: false,
-        contextualStrings: fromInventory,
+        contextualStrings: [...new Set([...fromInventory, ...fromExpenses])].slice(0, 40),
       });
     } catch {
       failListen('Couldn’t start listening — retrying…');
@@ -729,7 +854,6 @@ export function TalkOrb() {
       setHeard('');
       setReply('');
       setError('');
-      setViaAi(false);
       historyRef.current = [];
       // Keep focusItemId across Talk sessions — needed for “open the item”
     }
@@ -793,7 +917,7 @@ export function TalkOrb() {
         >
           <Pressable
             onPress={() => void toggleSpeakReplies()}
-            style={styles.voiceBtn}
+            style={[styles.voiceBtn, { backgroundColor: colors.surface }]}
             accessibilityLabel={
               speakReplies ? 'Mute spoken replies' : 'Unmute spoken replies'
             }
@@ -806,20 +930,27 @@ export function TalkOrb() {
           </Pressable>
           <Pressable
             onPress={close}
-            style={styles.closeBtn}
+            style={[styles.closeBtn, { backgroundColor: colors.surface }]}
             accessibilityLabel="Close Talk"
           >
             <X size={18} color={colors.ink} strokeWidth={2.4} />
-            <Text style={styles.closeBtnText}>Close</Text>
+            <Text style={[styles.closeBtnText, { color: colors.ink }]}>Close</Text>
           </Pressable>
         </View>
 
         {apiDown ? (
           <View
-            style={[styles.apiBanner, { top: insets.top + 58 }]}
+            style={[
+              styles.apiBanner,
+              {
+                top: insets.top + 58,
+                backgroundColor: colors.amberSoft,
+                borderColor: colors.amber,
+              },
+            ]}
             pointerEvents="none"
           >
-            <Text style={styles.apiBannerText}>
+            <Text style={[styles.apiBannerText, { color: colors.ink }]}>
               Chat service offline — Capture and local Talk still work on this device.
             </Text>
           </View>
@@ -840,7 +971,11 @@ export function TalkOrb() {
             {heard ? <Text style={styles.heard}>“{heard}”</Text> : null}
 
             <View style={styles.orbWrap}>
-              <ListeningAura active={orbLive} />
+              <ListeningAura
+                active={orbLive}
+                outer={colors.accentSoft}
+                inner={colors.amberSoft}
+              />
               <Pressable
                 onPress={onOrbPress}
                 style={styles.orbHit}
@@ -852,13 +987,14 @@ export function TalkOrb() {
                   <View
                     style={[
                       styles.orb,
-                      orbBusy && styles.orbBusy,
+                      { backgroundColor: colors.accent },
+                      orbBusy && { backgroundColor: colors.accentStrong },
                     ]}
                   >
                     {orbBusy ? (
-                      <ActivityIndicator color={colors.forestOn} />
+                      <ActivityIndicator color={colors.accentOn} />
                     ) : (
-                      <Mic size={32} color={colors.forestOn} strokeWidth={2} />
+                      <Mic size={32} color={colors.accentOn} strokeWidth={2} />
                     )}
                   </View>
                 )}
@@ -867,10 +1003,7 @@ export function TalkOrb() {
 
             <View style={styles.replySlot}>
               {reply ? (
-                <View style={styles.replyCard}>
-                  {viaAi ? <Text style={styles.viaAi}>Via AI</Text> : null}
-                  <Text style={styles.reply}>{reply}</Text>
-                </View>
+                <Text style={styles.reply}>{reply}</Text>
               ) : null}
               {error ? <Text style={styles.error}>{error}</Text> : null}
             </View>
@@ -891,51 +1024,59 @@ export function FloatingNav() {
   const router = useRouter();
   const pathname = usePathname();
   const { open, openTalk } = useTalkOverlay();
+  const { colors } = useTheme();
 
-  if (pathname.includes('capture') || pathname.includes('onboarding') || open) return null;
+  if (pathname.includes('capture') || pathname.includes('onboarding') || pathname.includes('/create') || open)
+    return null;
 
-  const onAskScreen =
-    (pathname === '/' || pathname.includes('(tabs)')) &&
-    !pathname.includes('spaces') &&
-    !pathname.includes('search') &&
-    !pathname.includes('done') &&
-    !pathname.includes('ai');
+  const onAskScreen = pathname.includes('/ask');
 
   return (
     <View
       style={[
         styles.dock,
-        { bottom: Math.max(insets.bottom, 12) + 8 },
+        { bottom: Math.max(insets.bottom, 12) + 10 },
       ]}
       pointerEvents="box-none"
     >
-      <DockBtn
-        label="Capture"
-        onPress={() => {
-          blurActiveElement();
-          router.push(rememberedCaptureHref());
-        }}
-        Icon={Camera}
-        primary
-      />
-      {onAskScreen ? null : (
+      <View
+        style={[
+          styles.dockChrome,
+          {
+            backgroundColor: colors.bgElevated,
+            borderColor: colors.line,
+          },
+        ]}
+      >
         <DockBtn
-          label="Ask"
+          label="Capture"
           onPress={() => {
             blurActiveElement();
-            router.navigate('/(tabs)' as never);
+            router.push(rememberedCaptureHref());
           }}
-          Icon={MessageCircle}
+          Icon={Camera}
+          primary
         />
-      )}
-      <DockBtn
-        label="Talk"
-        onPress={() => {
-          blurActiveElement();
-          openTalk();
-        }}
-        Icon={Mic}
-      />
+        {onAskScreen ? null : (
+          <DockBtn
+            label="Ask"
+            onPress={() => {
+              blurActiveElement();
+              void saveHomeSurface('ask');
+              router.navigate('/(tabs)/ask' as never);
+            }}
+            Icon={MessageCircle}
+          />
+        )}
+        <DockBtn
+          label="Talk"
+          onPress={() => {
+            blurActiveElement();
+            openTalk();
+          }}
+          Icon={Mic}
+        />
+      </View>
     </View>
   );
 }
@@ -952,12 +1093,16 @@ function DockBtn({
   primary?: boolean;
 }) {
   const filled = Boolean(primary);
+  const { colors } = useTheme();
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [
         styles.dockBtn,
-        filled && styles.dockBtnFilled,
+        {
+          backgroundColor: filled ? colors.accent : colors.surface,
+          borderColor: filled ? colors.accent : colors.line,
+        },
         pressed && { opacity: 0.88, transform: [{ scale: 0.96 }] },
       ]}
       accessibilityRole="button"
@@ -965,7 +1110,7 @@ function DockBtn({
     >
       <Icon
         size={20}
-        color={filled ? colors.forestOn : colors.slate}
+        color={filled ? colors.accentOn : colors.slate}
         strokeWidth={2.1}
       />
     </Pressable>
@@ -975,30 +1120,26 @@ function DockBtn({
 const styles = StyleSheet.create({
   dock: {
     position: 'absolute',
-    left: 16,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
     zIndex: 60,
+  },
+  dockChrome: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
+    padding: 6,
+    borderRadius: 32,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   dockBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.white,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#0B1220',
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
-  },
-  dockBtnFilled: {
-    backgroundColor: colors.forest,
-    borderColor: colors.forest,
   },
   orbRoot: {
     flex: 1,
@@ -1021,7 +1162,6 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: radius.full,
-    backgroundColor: colors.white,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1030,17 +1170,14 @@ const styles = StyleSheet.create({
     left: 20,
     right: 20,
     zIndex: 4,
-    backgroundColor: colors.amberSoft,
     borderRadius: radius.sm,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.amber,
   },
   apiBannerText: {
     fontFamily: fonts.sans,
-    fontSize: 13,
-    color: colors.ink,
+    fontSize: 16,
     textAlign: 'center',
   },
   closeBtn: {
@@ -1048,15 +1185,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    backgroundColor: colors.white,
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: radius.full,
   },
   closeBtnText: {
     fontFamily: fonts.sansSemi,
-    fontSize: 14,
-    color: colors.ink,
+    fontSize: 16,
   },
   orbStage: {
     flex: 1,
@@ -1071,7 +1206,7 @@ const styles = StyleSheet.create({
   },
   statusLabel: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
+    fontSize: 16,
     color: 'rgba(255,255,255,0.75)',
     marginBottom: spacing.md,
     textAlign: 'center',
@@ -1081,7 +1216,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sansMedium,
     fontSize: 18,
     lineHeight: 26,
-    color: colors.pure,
+    color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: spacing.md,
     width: '100%',
@@ -1093,32 +1228,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-start',
   },
-  replyCard: {
-    width: '100%',
-    backgroundColor: colors.white,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 14,
-  },
-  viaAi: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 11,
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
-    color: colors.forest,
-    marginBottom: 6,
-  },
   reply: {
     fontFamily: fonts.sans,
-    fontSize: 15,
-    lineHeight: 22,
-    color: colors.ink,
+    fontSize: 16,
+    lineHeight: 24,
+    color: 'rgba(255,255,255,0.88)',
     textAlign: 'center',
+    width: '100%',
   },
   error: {
     marginTop: spacing.md,
     fontFamily: fonts.sans,
-    fontSize: 14,
+    fontSize: 16,
     color: '#F6C77A',
     textAlign: 'center',
     width: '100%',
@@ -1137,12 +1258,10 @@ const styles = StyleSheet.create({
   ringOuter: {
     width: 150,
     height: 150,
-    backgroundColor: 'rgba(95, 115, 80, 0.28)',
   },
   ringInner: {
     width: 118,
     height: 118,
-    backgroundColor: 'rgba(192, 138, 62, 0.32)',
   },
   orbHit: {
     zIndex: 2,
@@ -1151,12 +1270,8 @@ const styles = StyleSheet.create({
     width: 84,
     height: 84,
     borderRadius: 42,
-    backgroundColor: colors.forest,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  orbBusy: {
-    backgroundColor: colors.forestBright,
   },
   orbClip: {
     width: 84,

@@ -53,7 +53,7 @@ import {
   Wrench,
   type LucideIcon,
 } from 'lucide-react-native';
-import { colors } from '@/constants/theme';
+import { useTheme } from '@/lib/ThemeContext';
 
 /**
  * Semantic LifeOS icons — relevant glyphs only.
@@ -139,15 +139,16 @@ export function AppIcon({
   tone?: Tone;
   style?: ViewStyle;
 }) {
+  const { colors } = useTheme();
   const Icon = ICON_MAP[name] ?? Package;
   const glyph = Math.round(size * 0.45);
   const bg =
     tone === 'forest'
-      ? colors.forest
+      ? colors.accent
       : tone === 'plain'
         ? 'transparent'
         : colors.surfaceSoft;
-  const fg = tone === 'forest' ? colors.forestOn : colors.forest;
+  const fg = tone === 'forest' ? colors.accentOn : colors.accent;
 
   return (
     <View

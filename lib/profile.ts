@@ -32,4 +32,5 @@ export async function saveLocalProfile(profile: LocalProfile): Promise<void> {
     locale: profile.locale?.trim() || DEFAULT_PROFILE.locale,
   };
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  void import('@/lib/cloud/sync').then((m) => m.scheduleCloudPush()).catch(() => undefined);
 }

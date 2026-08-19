@@ -8,7 +8,7 @@ import {
   type CaptureContextKind,
 } from '@/lib/captureContext';
 import { blurActiveElement } from '@/lib/a11y';
-import { colors } from '@/constants/theme';
+import { useTheme } from '@/lib/ThemeContext';
 
 /** Remembers module context while mounted + opens context-aware Capture. */
 export function CaptureContextButton({
@@ -23,6 +23,7 @@ export function CaptureContextButton({
   label?: string;
 }) {
   const router = useRouter();
+  const { colors } = useTheme();
 
   useEffect(() => {
     rememberCaptureContext(kind, { spaceId, room });
@@ -34,11 +35,15 @@ export function CaptureContextButton({
         blurActiveElement();
         router.push(captureHref({ kind, spaceId, room }));
       }}
-      style={({ pressed }) => [styles.btn, pressed && { opacity: 0.88 }]}
+      style={({ pressed }) => [
+        styles.btn,
+        { backgroundColor: colors.accent },
+        pressed && { opacity: 0.88 },
+      ]}
       accessibilityLabel={label}
       hitSlop={6}
     >
-      <Camera size={18} color={colors.forestOn} strokeWidth={2.2} />
+      <Camera size={18} color={colors.accentOn} strokeWidth={2.2} />
     </Pressable>
   );
 }
@@ -60,7 +65,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: colors.forest,
     alignItems: 'center',
     justifyContent: 'center',
   },

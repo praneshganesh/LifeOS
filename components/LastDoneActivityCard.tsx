@@ -11,9 +11,11 @@ import {
 } from '@/lib/lastDone';
 import {
   categorizeLastDone,
+  paintLastDoneCategory,
   type LastDoneCategory,
 } from '@/lib/lastDoneCategories';
-import { colors, fonts, radius, shadows, spacing } from '@/constants/theme';
+import { fonts, radius, shadows, spacing } from '@/constants/theme';
+import { useTheme } from '@/lib/ThemeContext';
 
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'] as const;
 /** Mid-size cells — weeks fit exactly to measured width (no clip). */
@@ -90,7 +92,8 @@ export function LastDoneActivityCard({
   onOpen?: () => void;
   compact?: boolean;
 }) {
-  const category = categorizeLastDone(item.label);
+  const { colors } = useTheme();
+  const category = paintLastDoneCategory(categorizeLastDone(item.label).id, colors);
   const [gridWidth, setGridWidth] = useState(0);
   const weeks = weeksForWidth(gridWidth);
   const { columns, monthMarks } = useContribution(item.logs, weeks);
@@ -110,7 +113,11 @@ export function LastDoneActivityCard({
   return (
     <Pressable
       onPress={onOpen}
-      style={({ pressed }) => [styles.card, pressed && { opacity: 0.96 }]}
+      style={({ pressed }) => [
+        styles.card,
+        { backgroundColor: colors.surface, borderColor: colors.line },
+        pressed && { opacity: 0.96 },
+      ]}
     >
       <View style={styles.header}>
         <View style={[styles.dot, { backgroundColor: category.color }]} />
@@ -138,7 +145,7 @@ export function LastDoneActivityCard({
       <View style={styles.gridWrap}>
         <View style={[styles.weekdayCol, { height: gridH }]}>
           {WEEKDAYS.map((d, i) => (
-            <Text key={`${d}-${i}`} style={styles.weekday}>
+            <Text key={`${d}-${i}`} style={[styles.weekday, { color: colors.faint }]}>
               {d}
             </Text>
           ))}
@@ -173,7 +180,7 @@ export function LastDoneActivityCard({
                   return (
                     <Text
                       key={`${m.label}-${m.index}`}
-                      style={[styles.monthLabel, { left }]}
+                      style={[styles.monthLabel, { left, color: colors.faint }]}
                     >
                       {m.label}
                     </Text>
@@ -191,23 +198,22 @@ export function LastDoneActivityCard({
 }
 
 export function LastDoneCategoryHeader({ category }: { category: LastDoneCategory }) {
+  const { colors } = useTheme();
   return (
     <View style={styles.catHead}>
       <Text style={styles.catEmoji}>{category.emoji}</Text>
-      <Text style={styles.catName}>{category.name}</Text>
+      <Text style={[styles.catName, { color: colors.ink }]}>{category.name}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.white,
     borderRadius: radius.md,
     paddingVertical: 10,
     paddingHorizontal: spacing.md,
     marginBottom: spacing.sm,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
     alignSelf: 'stretch',
     ...shadows.soft,
   },
@@ -224,13 +230,12 @@ const styles = StyleSheet.create({
   },
   title: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 16,
     lineHeight: 18,
     fontFamily: fonts.sansMedium,
   },
   lastInline: {
-    color: colors.mute,
-    fontSize: 11,
+    fontSize: 16,
   },
   logBtn: {
     width: 24,
@@ -251,10 +256,9 @@ const styles = StyleSheet.create({
   },
   weekday: {
     fontFamily: fonts.sans,
-    fontSize: 9,
+    fontSize: 16,
     lineHeight: CELL,
     height: CELL,
-    color: colors.faint,
     textAlign: 'center',
   },
   gridBody: {
@@ -282,9 +286,8 @@ const styles = StyleSheet.create({
   monthLabel: {
     position: 'absolute',
     fontFamily: fonts.sans,
-    fontSize: 10,
+    fontSize: 16,
     lineHeight: 14,
-    color: colors.faint,
   },
   catHead: {
     flexDirection: 'row',
@@ -294,12 +297,11 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   catEmoji: {
-    fontSize: 13,
+    fontSize: 16,
   },
   catName: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
-    color: colors.ink,
+    fontSize: 16,
     letterSpacing: -0.2,
   },
 });

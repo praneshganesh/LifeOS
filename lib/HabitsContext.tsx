@@ -35,7 +35,7 @@ type HabitsContextValue = {
   /** Toggle check-in for a day (default today). */
   checkIn: (id: string, date?: string) => Promise<Habit | null>;
   getById: (id: string) => Habit | undefined;
-  findByTitle: (title: string) => Habit | undefined;
+  findByTitle: (title: string, personId?: string) => Habit | undefined;
 };
 
 const HabitsContext = createContext<HabitsContextValue | null>(null);
@@ -82,8 +82,12 @@ export function HabitsProvider({ children }: { children: ReactNode }) {
 
   const addHabit = useCallback(
     async (input: NewHabitInput) => {
-      const existing = findHabitByTitle(habitsRef.current, input.title);
-      if (existing) {
+      const existing = findHabitByTitle(
+        habitsRef.current,
+        input.title,
+        input.personId
+      );
+      if (existing && (!input.personId || existing.personId === input.personId)) {
         // Idempotent — Talk check-ins must not spawn a second "Walked"
         if (
           input.inventoryItemId &&
@@ -144,7 +148,8 @@ export function HabitsProvider({ children }: { children: ReactNode }) {
   );
 
   const findByTitle = useCallback(
-    (title: string) => findHabitByTitle(habitsRef.current, title),
+    (title: string, personId?: string) =>
+      findHabitByTitle(habitsRef.current, title, personId),
     []
   );
 

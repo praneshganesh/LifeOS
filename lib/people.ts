@@ -5,6 +5,46 @@ export type PersonRef = {
   assignedTo: string;
 };
 
+/** Seed / empty profile — not a real given name. */
+export function isPlaceholderName(name: string | undefined): boolean {
+  return !name?.trim() || /^you$/i.test(name.trim());
+}
+
+/** The local “You” member — first-person Talk (“I attended”) binds here. */
+export function selfMember(
+  members: HouseholdMember[]
+): HouseholdMember | undefined {
+  if (!members.length) return undefined;
+  return (
+    members.find((m) => /you/i.test(m.relation)) ||
+    members.find((m) => m.permission === 'owner') ||
+    members.find((m) => m.role === 'adult' || m.role === 'parent')
+  );
+}
+
+/** Profile name, else the household self member. Never returns “You”. */
+export function resolveSelfDisplayName(
+  profileName: string | undefined,
+  members: HouseholdMember[]
+): string {
+  if (!isPlaceholderName(profileName)) return profileName!.trim();
+  const self = selfMember(members);
+  if (self && !isPlaceholderName(self.name)) return self.name.trim();
+  return '';
+}
+
+/** P from Pranesh, PG from Pranesh Ganesh. Empty when we only have “You”. */
+export function selfAvatarInitial(
+  profileName: string | undefined,
+  members: HouseholdMember[]
+): string {
+  const name = resolveSelfDisplayName(profileName, members);
+  const parts = name.split(/\s+/).filter(Boolean);
+  if (!parts.length) return '';
+  if (parts.length === 1) return parts[0]![0]!.toUpperCase();
+  return (parts[0]![0]! + parts[1]![0]!).toUpperCase();
+}
+
 /** Household list for chat context. */
 export function getHouseholdPeople(members: HouseholdMember[]): Array<{
   id: string;
@@ -85,7 +125,26 @@ export function resolvePersonMention(
     }
   }
 
+  const self = selfMember(members);
+  if (self && looksLikeFirstPersonSelf(t)) {
+    return { personId: self.id, assignedTo: self.name };
+  }
+
   return null;
+}
+
+/** “I attended / I walked / remind me” with no other person named. */
+export function looksLikeFirstPersonSelf(utterance: string): boolean {
+  const t = utterance.toLowerCase().trim();
+  if (!t) return false;
+  if (
+    /\b(my\s+)?(wife|husband|partner|spouse|son|daughter|kid|child|boy|girl)\b/.test(
+      t
+    )
+  ) {
+    return false;
+  }
+  return /^(i |i'm |i’m |i've |i’ve |i am |i have |remind me\b)/i.test(t);
 }
 
 function escapeRe(s: string) {
@@ -106,6 +165,8 @@ export function resolveAssignment(params: {
   personId?: string;
   utterance?: string;
   members: HouseholdMember[];
+  /** Habits / classes / reminders: unnamed first-person → You. Not for Things. */
+  preferSelf?: boolean;
 }): PersonRef | null {
   const members = params.members ?? [];
   if (!members.length) return null;
@@ -124,6 +185,11 @@ export function resolveAssignment(params: {
   if (name && name.length >= 2) {
     const hit = members.find((m) => m.name.trim().toLowerCase() === name);
     if (hit) return { personId: hit.id, assignedTo: hit.name };
+  }
+
+  if (params.preferSelf) {
+    const self = selfMember(members);
+    if (self) return { personId: self.id, assignedTo: self.name };
   }
 
   return null;

@@ -1,5 +1,6 @@
 import { View, StyleSheet, ViewStyle, Pressable } from 'react-native';
-import { colors, radius, shadows, spacing } from '@/constants/theme';
+import { radius, shadowsFor, spacing } from '@/constants/theme';
+import { useTheme } from '@/lib/ThemeContext';
 
 export function Card({
   children,
@@ -12,7 +13,14 @@ export function Card({
   onPress?: () => void;
   elevated?: boolean;
 }) {
-  const base = [styles.card, elevated && styles.elevated, style];
+  const { colors, resolved } = useTheme();
+  const shade = shadowsFor(resolved);
+  const base = [
+    styles.card,
+    { backgroundColor: colors.surface, borderColor: colors.line },
+    elevated ? shade.float : shade.card,
+    style,
+  ];
 
   if (onPress) {
     return (
@@ -33,14 +41,8 @@ export function Card({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.surface,
     borderRadius: radius.lg,
     padding: spacing.xl,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    ...shadows.card,
-  },
-  elevated: {
-    ...shadows.float,
   },
 });

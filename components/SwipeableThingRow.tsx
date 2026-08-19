@@ -10,7 +10,8 @@ import Animated, {
 import { Trash2 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Icon3DBadge, type Icon3DName } from '@/components/ui/Icon3D';
-import { colors, fonts, radius, spacing } from '@/constants/theme';
+import { fonts, radius, spacing } from '@/constants/theme';
+import { useTheme } from '@/lib/ThemeContext';
 import { blurActiveElement } from '@/lib/a11y';
 
 const ACTION_W = 88;
@@ -36,13 +37,18 @@ function RowFace({
   icon: Icon3DName;
   onPress: () => void;
 }) {
+  const { colors } = useTheme();
   return (
     <Pressable
       onPress={() => {
         blurActiveElement();
         onPress();
       }}
-      style={({ pressed }) => [styles.row, pressed && { opacity: 0.92 }]}
+      style={({ pressed }) => [
+        styles.row,
+        { backgroundColor: colors.surface },
+        pressed && { opacity: 0.92 },
+      ]}
       accessibilityRole="button"
       accessibilityLabel={name}
     >
@@ -67,6 +73,7 @@ function RowFace({
  * the text under the card’s left edge.
  */
 export function SwipeableThingRow({ name, subtitle, icon, onPress, onDelete }: Props) {
+  const { colors } = useTheme();
   const drag = useSharedValue(0);
   const start = useSharedValue(0);
   const [open, setOpen] = useState(false);
@@ -113,27 +120,47 @@ export function SwipeableThingRow({ name, subtitle, icon, onPress, onDelete }: P
   );
 
   if (!onDelete) {
-    return <View style={styles.shell}>{face}</View>;
+    return (
+      <View
+        style={[
+          styles.shell,
+          { backgroundColor: colors.surface, borderColor: colors.line },
+        ]}
+      >
+        {face}
+      </View>
+    );
   }
 
   return (
     <GestureDetector gesture={pan}>
-      <View style={styles.shell}>
+      <View
+        style={[
+          styles.shell,
+          { backgroundColor: colors.surface, borderColor: colors.line },
+        ]}
+      >
         <View style={styles.track}>
           <View style={styles.faceWrap}>{face}</View>
-          <Animated.View style={[styles.deleteClip, deleteClipStyle]}>
+          <Animated.View
+            style={[styles.deleteClip, { backgroundColor: colors.coral }, deleteClipStyle]}
+          >
             <Pressable
               onPress={() => {
                 blurActiveElement();
                 close();
                 onDelete();
               }}
-              style={({ pressed }) => [styles.deleteAction, pressed && { opacity: 0.9 }]}
+              style={({ pressed }) => [
+                styles.deleteAction,
+                { backgroundColor: colors.coral },
+                pressed && { opacity: 0.9 },
+              ]}
               accessibilityRole="button"
               accessibilityLabel="Delete"
             >
-              <Trash2 size={20} color={colors.pure} strokeWidth={2.2} />
-              <Text style={styles.deleteLabel}>Delete</Text>
+              <Trash2 size={20} color="#FFFFFF" strokeWidth={2.2} />
+            <Text style={[styles.deleteLabel, { color: '#FFFFFF' }]}>Delete</Text>
             </Pressable>
           </Animated.View>
         </View>
@@ -146,9 +173,7 @@ const styles = StyleSheet.create({
   shell: {
     borderRadius: radius.lg,
     overflow: 'hidden',
-    backgroundColor: colors.white,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
     marginBottom: spacing.sm,
   },
   track: {
@@ -165,7 +190,6 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
-    backgroundColor: colors.white,
     minHeight: 72,
   },
   copy: {
@@ -174,7 +198,6 @@ const styles = StyleSheet.create({
   },
   deleteClip: {
     overflow: 'hidden',
-    backgroundColor: colors.coral,
   },
   deleteAction: {
     width: ACTION_W,
@@ -185,7 +208,6 @@ const styles = StyleSheet.create({
   },
   deleteLabel: {
     fontFamily: fonts.sansMedium,
-    fontSize: 12,
-    color: colors.pure,
+    fontSize: 16,
   },
 });

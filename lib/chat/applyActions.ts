@@ -1,6 +1,6 @@
 import type { Icon3DName } from '@/components/ui/Icon3D';
 import type { InventoryItem } from '@/lib/InventoryContext';
-import { formatMoney, formatPurchasedFrom } from '@/lib/chat/prompt';
+import { formatMoney, formatPurchasedFrom, merchantFromUtterance } from '@/lib/chat/prompt';
 import { sanitizeManualUrl } from '@/lib/manualLink';
 import { timelineAfterMaintenance } from '@/lib/maintenanceLink';
 import type { HouseholdMember } from '@/lib/household';
@@ -16,6 +16,7 @@ import {
   classTitleFromUtterance,
   looksLikeClassAttendance,
   looksLikeClassEnrollment,
+  pickAttendancePack,
   remainingCount,
   usedCount,
   type ClassPack,
@@ -25,9 +26,15 @@ import {
   normalizeSubscriptionCategory,
   normalizeSubscriptionCycle,
   type NewSubscriptionInput,
+  type Subscription,
 } from '@/lib/subscriptions';
 import { resolveAssignment } from '@/lib/people';
-import type { ChatAction, ChatAddAction, ChatAgentResponse } from '@/lib/chat/types';
+import type { ChatAction, ChatAddAction, ChatAgentResponse, ChatUpdateAction } from '@/lib/chat/types';
+import {
+  looksLikeVagueDelete,
+  talkFocusKindFromUtterance,
+  type TalkFocus,
+} from '@/lib/chat/focus';
 import {
   looksLikeReminder,
   normalizeWarrantyExpiry,
@@ -50,29 +57,69 @@ type LastDoneApi = {
     id?: string;
     doneAt?: string;
     inventoryItemId?: string | null;
-  }) => Promise<{ label: string; inventoryItemId?: string; logs?: { doneAt: string }[] }>;
+    personId?: string | null;
+    assignedTo?: string | null;
+  }) => Promise<{
+    id: string;
+    label: string;
+    inventoryItemId?: string;
+    logs?: { doneAt: string }[];
+  }>;
   setReminder?: (input: {
     label: string;
     remindAt: string;
     inventoryItemId?: string | null;
-  }) => Promise<{ label: string; remindAt?: string; inventoryItemId?: string }>;
+    personId?: string | null;
+    assignedTo?: string | null;
+  }) => Promise<{
+    id: string;
+    label: string;
+    remindAt?: string;
+    inventoryItemId?: string;
+  }>;
+  remove?: (id: string) => Promise<void>;
 };
 
 type ExpensesApi = {
-  addExpense: (input: NewExpenseInput) => Promise<{ id: string; title: string; amount: number }>;
+  addExpense: (input: NewExpenseInput) => Promise<{
+    id: string;
+    title: string;
+    amount: number;
+    merchant?: string;
+  }>;
+  updateExpense: (
+    id: string,
+    patch: Partial<{
+      title: string;
+      amount: number;
+      currency: string;
+      category: ExpenseCategory;
+      date: string;
+      merchant: string;
+      note: string;
+    }>
+  ) => Promise<void>;
+  removeExpense?: (id: string) => Promise<void>;
+  getById?: (id: string) =>
+    | { id: string; title: string; amount: number; merchant?: string }
+    | undefined;
 };
 
 type SubscriptionsApi = {
   addSubscription: (
     input: NewSubscriptionInput
   ) => Promise<{ id: string; title: string; amount: number; currency: string; cycle: string }>;
+  updateSubscription?: (id: string, patch: Partial<Subscription>) => Promise<void>;
+  removeSubscription?: (id: string) => Promise<void>;
+  getById?: (id: string) => { id: string; title: string; amount: number } | undefined;
 };
 
 type HabitsApi = {
   addHabit: (input: NewHabitInput) => Promise<Habit>;
   updateHabit?: (id: string, patch: Partial<Habit>) => Promise<void>;
+  removeHabit?: (id: string) => Promise<void>;
   checkIn: (id: string, date?: string) => Promise<Habit | null>;
-  findByTitle: (title: string) => Habit | undefined;
+  findByTitle: (title: string, personId?: string) => Habit | undefined;
   getById: (id: string) => Habit | undefined;
 };
 
@@ -81,7 +128,13 @@ type ClassesApi = {
   logClass: (id: string, date?: string) => Promise<ClassPack | null>;
   findPack: (title: string, personId?: string) => ClassPack | undefined;
   getById: (id: string) => ClassPack | undefined;
+  removePack?: (id: string) => Promise<void>;
+  pickAttendance?: (opts: {
+    title?: string;
+    personId?: string;
+  }) => ClassPack | undefined;
   newestPack?: () => ClassPack | undefined;
+  updatePack?: (id: string, patch: Partial<ClassPack>) => Promise<void>;
 };
 
 const EXPENSE_CATEGORIES: ExpenseCategory[] = [
@@ -307,15 +360,31 @@ export type ApplyActionsResult = {
   removedNames: string[];
   updatedIds: string[];
   openItemId: string | null;
+  /** Expense to open this turn (show/open after spend — not a Thing). */
+  openExpenseId: string | null;
+  /** Any module to open this turn — Talk/Ask navigate from this. */
+  openTarget: TalkFocus | null;
   /** Best item to treat as conversation focus after this turn */
   focusItemId: string | null;
+  /** Last expense logged this turn — session focus for “show it”. */
+  loggedExpenseId: string | null;
+  /** Last module mutated this turn — session focus for show/update/delete. */
+  talkFocus: TalkFocus | null;
   /** True when focus item was deleted this turn */
   clearedFocus: boolean;
   loggedDoneLabel: string | null;
   loggedExpenseTitle: string | null;
   loggedExpenseAmount: string | null;
+  loggedExpenseMerchant: string | null;
+  /** Existing expense was patched this turn (not a new log). */
+  updatedExpense: boolean;
   loggedSubscriptionTitle: string | null;
   loggedSubscriptionAmount: string | null;
+  updatedSubscription: boolean;
+  removedExpenseTitle: string | null;
+  removedSubscriptionTitle: string | null;
+  removedHabitTitle: string | null;
+  removedClassTitle: string | null;
   habitCheckInTitle: string | null;
   habitStreak: number | null;
   /** Distinct days marked in this turn (for natural multi-day replies). */
@@ -324,8 +393,11 @@ export type ApplyActionsResult = {
   classPackRemaining: number | null;
   classPackTotal: number | null;
   classLoggedTitle: string | null;
+  classLogAttemptFor: string | null;
   reminderLabel: string | null;
   reminderAt: string | null;
+  removedLastDoneLabel: string | null;
+  updatedClassPack: boolean;
 };
 
 /**
@@ -347,6 +419,15 @@ export async function applyChatActions(
     habits?: HabitsApi;
     classes?: ClassesApi;
     inventoryList?: { id: string; name: string }[];
+    expensesList?: { id: string; title: string; merchant?: string }[];
+    subscriptionsList?: { id: string; title: string }[];
+    habitsList?: { id: string; title: string }[];
+    classPacksList?: { id: string; title: string }[];
+    lastDoneList?: { id: string; label: string }[];
+    /** Prior-turn expense so “show it” opens juice, not the old TV. */
+    lastFocusExpenseId?: string | null;
+    /** Last module Talk touched — vague show/delete/update uses this. */
+    lastTalkFocus?: TalkFocus | null;
   }
 ): Promise<ApplyActionsResult> {
   let lastAddedId: string | null = null;
@@ -356,13 +437,28 @@ export async function applyChatActions(
   const removedNames: string[] = [];
   const updatedIds: string[] = [];
   let openItemId: string | null = null;
+  let openExpenseId: string | null = null;
+  let openTarget: TalkFocus | null = null;
   let focusItemId: string | null = null;
+  let talkFocus: TalkFocus | null =
+    options?.lastTalkFocus ??
+    (options?.lastFocusExpenseId
+      ? { kind: 'expense', id: options.lastFocusExpenseId }
+      : null);
   let clearedFocus = false;
   let loggedDoneLabel: string | null = null;
+  let loggedExpenseId: string | null = null;
   let loggedExpenseTitle: string | null = null;
   let loggedExpenseAmount: string | null = null;
+  let loggedExpenseMerchant: string | null = null;
+  let updatedExpense = false;
   let loggedSubscriptionTitle: string | null = null;
   let loggedSubscriptionAmount: string | null = null;
+  let updatedSubscription = false;
+  let removedExpenseTitle: string | null = null;
+  let removedSubscriptionTitle: string | null = null;
+  let removedHabitTitle: string | null = null;
+  let removedClassTitle: string | null = null;
   let habitCheckInTitle: string | null = null;
   let habitStreak: number | null = null;
   const habitCheckInDateSet = new Set<string>();
@@ -370,13 +466,42 @@ export async function applyChatActions(
   let classPackRemaining: number | null = null;
   let classPackTotal: number | null = null;
   let classLoggedTitle: string | null = null;
+  let classLogAttemptFor: string | null = null;
   let reminderLabel: string | null = null;
   let reminderAt: string | null = null;
+  let removedLastDoneLabel: string | null = null;
+  let updatedClassPack = false;
   const fallback = options?.fallbackFocusId ?? null;
   const seenRemove = new Set<string>();
   const lastUserText = options?.lastUserText;
   const household = options?.household ?? [];
+  const lastExpenseFocus =
+    options?.lastTalkFocus?.kind === 'expense'
+      ? options.lastTalkFocus.id
+      : options?.lastTalkFocus
+        ? null
+        : options?.lastFocusExpenseId || null;
   const list = ensureTalkActions(Array.isArray(actions) ? actions : [], lastUserText);
+
+  const remember = (kind: TalkFocus['kind'], id?: string | null) => {
+    if (!id) return;
+    talkFocus = { kind, id };
+    if (kind === 'item') focusItemId = id;
+    if (kind === 'expense') loggedExpenseId = loggedExpenseId || id;
+  };
+  const open = (target: TalkFocus) => {
+    openTarget = target;
+    talkFocus = target;
+    if (target.kind === 'item') {
+      openItemId = target.id;
+      focusItemId = target.id;
+    } else if (target.kind === 'expense') {
+      openExpenseId = target.id;
+      openItemId = null;
+    } else {
+      openItemId = null;
+    }
+  };
 
   for (const action of list) {
     if (!action || action.type === 'none') continue;
@@ -387,7 +512,7 @@ export async function applyChatActions(
       lastAddedId = item.id;
       lastAddedName = item.name;
       lastAssignedTo = item.assignedTo ?? null;
-      focusItemId = item.id;
+      remember('item', item.id);
       console.log(
         '[LifeOS chat] applied add_item',
         item.id,
@@ -399,6 +524,105 @@ export async function applyChatActions(
       continue;
     }
     if (action.type === 'update_item' && action.id) {
+      const existingItem = options?.resolveItem?.(action.id);
+      const expensePatch = expensePatchFromItemUpdate(action.patch);
+      const expenseTargetId =
+        !existingItem && options?.expenses
+          ? resolveExpenseUpdateId({
+              actionId: action.id,
+              lastUserText,
+              expensesList: options.expensesList,
+              lastFocusExpenseId: lastExpenseFocus,
+              getById: options.expenses.getById,
+              hasPatch: Object.keys(expensePatch).length > 0,
+            })
+          : null;
+
+      if (expenseTargetId && options?.expenses?.updateExpense && Object.keys(expensePatch).length) {
+        await options.expenses.updateExpense(expenseTargetId, expensePatch);
+        const row =
+          options.expenses.getById?.(expenseTargetId) ||
+          options.expensesList?.find((e) => e.id === expenseTargetId);
+        loggedExpenseId = expenseTargetId;
+        loggedExpenseTitle = expensePatch.title || row?.title || null;
+        if (expensePatch.amount != null) {
+          const cur = expensePatch.currency || 'AED';
+          loggedExpenseAmount =
+            formatMoney(`${cur} ${expensePatch.amount}`) || `${cur} ${expensePatch.amount}`;
+        }
+        if (expensePatch.merchant) loggedExpenseMerchant = expensePatch.merchant;
+        else if (row && 'merchant' in row) loggedExpenseMerchant = row.merchant || null;
+        updatedExpense = true;
+        remember('expense', expenseTargetId);
+        console.log(
+          '[LifeOS chat] remapped update_item → update_expense',
+          expenseTargetId,
+          expensePatch
+        );
+        continue;
+      }
+
+      if (!existingItem && options?.subscriptions?.updateSubscription) {
+        const subId =
+          (options.subscriptions.getById?.(action.id)
+            ? action.id
+            : undefined) ||
+          idFromTitleList(lastUserText, options.subscriptionsList) ||
+          (talkFocus?.kind === 'subscription' ? talkFocus.id : undefined);
+        const subPatch: Parameters<
+          NonNullable<SubscriptionsApi['updateSubscription']>
+        >[1] = {};
+        if (expensePatch.amount != null) subPatch.amount = expensePatch.amount;
+        if (expensePatch.currency) subPatch.currency = expensePatch.currency;
+        if (action.patch?.name?.trim()) subPatch.title = titleCase(action.patch.name);
+        if (subId && Object.keys(subPatch).length) {
+          await options.subscriptions.updateSubscription(subId, subPatch);
+          const row =
+            options.subscriptions.getById?.(subId) ||
+            options.subscriptionsList?.find((s) => s.id === subId);
+          loggedSubscriptionTitle = subPatch.title || row?.title || null;
+          if (subPatch.amount != null) {
+            const cur = String(subPatch.currency || 'AED');
+            loggedSubscriptionAmount =
+              formatMoney(`${cur} ${subPatch.amount}`) || `${cur} ${subPatch.amount}`;
+          }
+          updatedSubscription = true;
+          remember('subscription', subId);
+          console.log('[LifeOS chat] remapped update_item → update_subscription', subId);
+          continue;
+        }
+      }
+
+      if (!existingItem && options?.classes?.updatePack) {
+        const pack =
+          options.classes.getById(action.id) ||
+          (idFromTitleList(lastUserText, options.classPacksList)
+            ? options.classes.getById(
+                idFromTitleList(lastUserText, options.classPacksList)!
+              )
+            : undefined) ||
+          (talkFocus?.kind === 'class' ? options.classes.getById(talkFocus.id) : undefined);
+        const totalN =
+          classTotalFromUtterance(lastUserText) ||
+          (action.patch?.price != null ? Math.round(Number(parseAmount(action.patch.price))) : 0);
+        if (pack && Number.isFinite(totalN) && totalN > 0) {
+          await options.classes.updatePack(pack.id, { total: totalN });
+          const next = options.classes.getById(pack.id) || { ...pack, total: totalN };
+          classPackTitle = next.title;
+          classPackRemaining = remainingCount(next);
+          classPackTotal = next.total;
+          updatedClassPack = true;
+          remember('class', pack.id);
+          console.log('[LifeOS chat] remapped update_item → update_class_pack', pack.id);
+          continue;
+        }
+      }
+
+      if (!existingItem && options?.resolveItem) {
+        console.log('[LifeOS chat] skip update_item — not in inventory', action.id);
+        continue;
+      }
+
       const patch: Partial<InventoryItem> = {};
       if (action.patch?.brand != null && action.patch.brand !== '') {
         patch.brand = titleCase(action.patch.brand);
@@ -449,35 +673,358 @@ export async function applyChatActions(
       if (Object.keys(patch).length) {
         await api.updateItem(action.id, patch);
         updatedIds.push(action.id);
-        focusItemId = action.id;
+        remember('item', action.id);
         console.log('[LifeOS chat] applied update_item', action.id, patch);
       }
       continue;
     }
-    if (action.type === 'remove_item' && action.id) {
-      if (seenRemove.has(action.id)) continue;
-      seenRemove.add(action.id);
-      const existing = options?.resolveItem?.(action.id);
-      if (!existing) {
-        console.log('[LifeOS chat] skip remove_item — not in inventory', action.id);
+    if (action.type === 'update_expense' && action.id && options?.expenses?.updateExpense) {
+      const patch: Parameters<ExpensesApi['updateExpense']>[1] = {};
+      if (action.patch?.title?.trim()) patch.title = titleCase(action.patch.title);
+      if (action.patch?.amount != null && action.patch.amount !== '') {
+        const amount = parseAmount(action.patch.amount);
+        if (Number.isFinite(amount) && amount > 0) patch.amount = amount;
+      }
+      if (action.patch?.currency?.trim()) {
+        patch.currency = action.patch.currency.trim().toUpperCase();
+      } else if (action.patch?.amount != null) {
+        const cur = currencyFromAmountRaw(action.patch.amount);
+        if (cur) patch.currency = cur;
+      }
+      if (action.patch?.category?.trim()) {
+        patch.category = normalizeExpenseCategory(action.patch.category);
+      }
+      if (action.patch?.date?.trim()) {
+        const d = normalizeDateField(action.patch.date);
+        if (d) patch.date = d;
+      }
+      if (action.patch?.merchant != null && action.patch.merchant !== '') {
+        patch.merchant =
+          formatPurchasedFrom(action.patch.merchant) || action.patch.merchant.trim();
+      }
+      if (action.patch?.note?.trim()) patch.note = action.patch.note.trim();
+
+      let id = action.id.trim();
+      if (!options.expenses.getById?.(id)) {
+        id =
+          resolveExpenseUpdateId({
+            actionId: id,
+            lastUserText,
+            expensesList: options.expensesList,
+            lastFocusExpenseId: lastExpenseFocus,
+            getById: options.expenses.getById,
+            hasAmountPatch: patch.amount != null,
+            hasPatch: Object.keys(patch).length > 0,
+          }) || id;
+      }
+      if (!Object.keys(patch).length) {
+        console.log('[LifeOS chat] skip update_expense — empty patch');
         continue;
       }
-      await api.removeItem(action.id);
-      removedIds.push(action.id);
-      removedNames.push(existing.name);
-      if (fallback === action.id || focusItemId === action.id) {
-        clearedFocus = true;
-        focusItemId = null;
+      if (options.expenses.getById && !options.expenses.getById(id)) {
+        console.log('[LifeOS chat] skip update_expense — not found', id);
+        continue;
       }
-      console.log('[LifeOS chat] applied remove_item', action.id, existing.name);
+      await options.expenses.updateExpense(id, patch);
+      const row = options.expenses.getById?.(id);
+      loggedExpenseId = id;
+      loggedExpenseTitle = patch.title || row?.title || null;
+      if (patch.amount != null) {
+        const cur = patch.currency || 'AED';
+        loggedExpenseAmount =
+          formatMoney(`${cur} ${patch.amount}`) || `${cur} ${patch.amount}`;
+      }
+      loggedExpenseMerchant = patch.merchant || row?.merchant || null;
+      updatedExpense = true;
+      remember('expense', id);
+      console.log('[LifeOS chat] applied update_expense', id, patch);
       continue;
     }
-    if (action.type === 'open_item') {
-      const id = (action.id || fallback || '').trim();
+    if (action.type === 'remove_expense' && options?.expenses?.removeExpense) {
+      const id =
+        resolveExpenseUpdateId({
+          actionId: String(action.id || '').trim(),
+          lastUserText: `${lastUserText || ''} ${action.title || ''}`,
+          expensesList: options.expensesList,
+          lastFocusExpenseId: lastExpenseFocus,
+          getById: options.expenses.getById,
+          hasPatch: true,
+        }) || String(action.id || '').trim();
+      const row =
+        options.expenses.getById?.(id) ||
+        options.expensesList?.find((e) => e.id === id);
+      if (!id || (!row && options.expenses.getById)) {
+        console.log('[LifeOS chat] skip remove_expense — not found', action.id);
+        continue;
+      }
+      await options.expenses.removeExpense(id);
+      removedExpenseTitle = row?.title || action.title?.trim() || 'expense';
+      if (talkFocus?.kind === 'expense' && talkFocus.id === id) {
+        talkFocus = null;
+        clearedFocus = true;
+      }
+      console.log('[LifeOS chat] applied remove_expense', id, removedExpenseTitle);
+      continue;
+    }
+    if (action.type === 'open_expense') {
+      const id =
+        String(action.id || '').trim() ||
+        loggedExpenseId ||
+        lastExpenseFocus ||
+        expenseIdFromUtterance(lastUserText, options?.expensesList) ||
+        '';
       if (id) {
-        openItemId = id;
-        focusItemId = id;
-        console.log('[LifeOS chat] open_item', id, action.id ? '' : '(fallback focus)');
+        open({ kind: 'expense', id });
+        console.log('[LifeOS chat] open_expense', id);
+      } else {
+        console.log('[LifeOS chat] skip open_expense — no id');
+      }
+      continue;
+    }
+    if (action.type === 'remove_item') {
+      const actionId = String(action.id || '').trim();
+      if (actionId && seenRemove.has(actionId)) continue;
+      if (actionId) seenRemove.add(actionId);
+      const existing = actionId ? options?.resolveItem?.(actionId) : undefined;
+      if (existing && actionId) {
+        await api.removeItem(actionId);
+        removedIds.push(actionId);
+        removedNames.push(existing.name);
+        if (fallback === actionId || talkFocus?.id === actionId) {
+          clearedFocus = true;
+          focusItemId = null;
+          talkFocus = null;
+        }
+        console.log('[LifeOS chat] applied remove_item', actionId, existing.name);
+        continue;
+      }
+      const expenseHit =
+        (actionId
+          ? options?.expenses?.getById?.(actionId) ||
+            options?.expensesList?.find((e) => e.id === actionId)
+          : undefined) ||
+        (expenseIdFromUtterance(lastUserText, options?.expensesList)
+          ? options?.expensesList?.find(
+              (e) => e.id === expenseIdFromUtterance(lastUserText, options?.expensesList)
+            )
+          : undefined) ||
+        (looksLikeVagueDelete(lastUserText) && talkFocus?.kind === 'expense'
+          ? options?.expensesList?.find((e) => e.id === talkFocus?.id) ||
+            options?.expenses?.getById?.(talkFocus.id)
+          : undefined);
+      if (expenseHit && options?.expenses?.removeExpense) {
+        await options.expenses.removeExpense(expenseHit.id);
+        removedExpenseTitle = expenseHit.title;
+        if (talkFocus?.id === expenseHit.id) {
+          talkFocus = null;
+          clearedFocus = true;
+        }
+        console.log('[LifeOS chat] remapped remove_item → remove_expense', expenseHit.id);
+        continue;
+      }
+      const subHit =
+        (actionId
+          ? options?.subscriptions?.getById?.(actionId) ||
+            options?.subscriptionsList?.find((s) => s.id === actionId)
+          : undefined) ||
+        (idFromTitleList(lastUserText, options?.subscriptionsList)
+          ? options?.subscriptionsList?.find(
+              (s) => s.id === idFromTitleList(lastUserText, options?.subscriptionsList)
+            )
+          : undefined) ||
+        (looksLikeVagueDelete(lastUserText) && talkFocus?.kind === 'subscription'
+          ? options?.subscriptionsList?.find((s) => s.id === talkFocus?.id) ||
+            options?.subscriptions?.getById?.(talkFocus.id)
+          : undefined);
+      if (subHit && options?.subscriptions?.removeSubscription) {
+        await options.subscriptions.removeSubscription(subHit.id);
+        removedSubscriptionTitle = subHit.title;
+        if (talkFocus?.id === subHit.id) {
+          talkFocus = null;
+          clearedFocus = true;
+        }
+        console.log('[LifeOS chat] remapped remove_item → remove_subscription', subHit.id);
+        continue;
+      }
+      const habitHit =
+        (actionId ? options?.habits?.getById(actionId) : undefined) ||
+        (idFromTitleList(lastUserText, options?.habitsList)
+          ? options?.habits?.getById(
+              idFromTitleList(lastUserText, options?.habitsList)!
+            )
+          : undefined) ||
+        (looksLikeVagueDelete(lastUserText) && talkFocus?.kind === 'habit'
+          ? options?.habits?.getById(talkFocus.id)
+          : undefined);
+      if (habitHit && options?.habits?.removeHabit) {
+        await options.habits.removeHabit(habitHit.id);
+        removedHabitTitle = habitHit.title;
+        if (talkFocus?.id === habitHit.id) {
+          talkFocus = null;
+          clearedFocus = true;
+        }
+        console.log('[LifeOS chat] remapped remove_item → remove_habit', habitHit.id);
+        continue;
+      }
+      const packHit =
+        (actionId ? options?.classes?.getById(actionId) : undefined) ||
+        (idFromTitleList(lastUserText, options?.classPacksList)
+          ? options?.classes?.getById(
+              idFromTitleList(lastUserText, options?.classPacksList)!
+            )
+          : undefined) ||
+        (looksLikeVagueDelete(lastUserText) && talkFocus?.kind === 'class'
+          ? options?.classes?.getById(talkFocus.id)
+          : undefined);
+      if (packHit && options?.classes?.removePack) {
+        await options.classes.removePack(packHit.id);
+        removedClassTitle = packHit.title;
+        if (talkFocus?.id === packHit.id) {
+          talkFocus = null;
+          clearedFocus = true;
+        }
+        console.log('[LifeOS chat] remapped remove_item → remove_class_pack', packHit.id);
+        continue;
+      }
+      const lastDoneHit =
+        (actionId
+          ? options?.lastDoneList?.find((d) => d.id === actionId)
+          : undefined) ||
+        (idFromLabelList(lastUserText, options?.lastDoneList)
+          ? options?.lastDoneList?.find(
+              (d) => d.id === idFromLabelList(lastUserText, options?.lastDoneList)
+            )
+          : undefined) ||
+        (looksLikeVagueDelete(lastUserText) && talkFocus?.kind === 'lastDone'
+          ? options?.lastDoneList?.find((d) => d.id === talkFocus?.id)
+          : undefined);
+      if (lastDoneHit && options?.lastDone?.remove) {
+        await options.lastDone.remove(lastDoneHit.id);
+        removedLastDoneLabel = lastDoneHit.label;
+        if (talkFocus?.id === lastDoneHit.id) {
+          talkFocus = null;
+          clearedFocus = true;
+        }
+        console.log('[LifeOS chat] remapped remove_item → remove_last_done', lastDoneHit.id);
+        continue;
+      }
+      console.log('[LifeOS chat] skip remove_item — not in inventory', actionId);
+      continue;
+    }
+    if (
+      action.type === 'open_item' ||
+      action.type === 'open_habit' ||
+      action.type === 'open_subscription' ||
+      action.type === 'open_class' ||
+      action.type === 'open_last_done'
+    ) {
+      const namedThing = inventoryIdFromUtterance(
+        lastUserText,
+        options?.inventoryList
+      );
+      const vagueShow = looksLikeShowLast(lastUserText);
+      const spokenKind = talkFocusKindFromUtterance(lastUserText);
+      const expenseFocus = loggedExpenseId || lastExpenseFocus || null;
+      const prior = talkFocus;
+      const wantsExpense = looksLikeShowExpense(lastUserText);
+
+      if (namedThing && spokenKind !== 'expense') {
+        open({ kind: 'item', id: namedThing });
+        console.log('[LifeOS chat] open_item', namedThing, '(named)');
+        continue;
+      }
+      if (wantsExpense && expenseFocus) {
+        open({ kind: 'expense', id: expenseFocus });
+        console.log('[LifeOS chat] open_expense', expenseFocus);
+        continue;
+      }
+      const kindOpen: TalkFocus | null =
+        action.type === 'open_habit' && (action.id || (prior?.kind === 'habit' ? prior.id : ''))
+          ? { kind: 'habit', id: String(action.id || prior?.id || '') }
+          : action.type === 'open_subscription' &&
+              (action.id || (prior?.kind === 'subscription' ? prior.id : ''))
+            ? { kind: 'subscription', id: String(action.id || prior?.id || '') }
+          : action.type === 'open_class' &&
+              (action.id || (prior?.kind === 'class' ? prior.id : ''))
+            ? { kind: 'class', id: String(action.id || prior?.id || '') }
+          : action.type === 'open_last_done' &&
+              (action.id || (prior?.kind === 'lastDone' ? prior.id : ''))
+            ? { kind: 'lastDone', id: String(action.id || prior?.id || '') }
+            : null;
+      if (kindOpen?.id) {
+        open(kindOpen);
+        console.log('[LifeOS chat] open', kindOpen.kind, kindOpen.id);
+        continue;
+      }
+      if (spokenKind && prior?.kind === spokenKind) {
+        open(prior);
+        console.log('[LifeOS chat] open last focus', prior.kind, prior.id);
+        continue;
+      }
+      if (spokenKind === 'habit') {
+        const hid =
+          String(action.id || '').trim() ||
+          idFromTitleList(lastUserText, options?.habitsList) ||
+          (prior?.kind === 'habit' ? prior.id : '');
+        if (hid) {
+          open({ kind: 'habit', id: hid });
+          continue;
+        }
+      }
+      if (spokenKind === 'subscription') {
+        const sid =
+          String(action.id || '').trim() ||
+          idFromTitleList(lastUserText, options?.subscriptionsList) ||
+          (prior?.kind === 'subscription' ? prior.id : '');
+        if (sid) {
+          open({ kind: 'subscription', id: sid });
+          continue;
+        }
+      }
+      if (spokenKind === 'class') {
+        const cid =
+          String(action.id || '').trim() ||
+          idFromTitleList(lastUserText, options?.classPacksList) ||
+          (prior?.kind === 'class' ? prior.id : '');
+        if (cid) {
+          open({ kind: 'class', id: cid });
+          continue;
+        }
+      }
+      if (spokenKind === 'lastDone') {
+        const lid =
+          String(action.id || '').trim() ||
+          idFromLabelList(lastUserText, options?.lastDoneList) ||
+          (prior?.kind === 'lastDone' ? prior.id : '');
+        if (lid) {
+          open({ kind: 'lastDone', id: lid });
+          continue;
+        }
+      }
+      // Vague “show me / show it” after ANY module → that record, never a stale TV.
+      if (vagueShow && !namedThing) {
+        if (prior) {
+          open(prior);
+          console.log('[LifeOS chat] open last talk focus', prior.kind, prior.id);
+        } else {
+          openItemId = null;
+          console.log('[LifeOS chat] vague show — no talk focus');
+        }
+        continue;
+      }
+      if (wantsExpense && !namedThing) {
+        openItemId = null;
+        console.log('[LifeOS chat] open_expense missing — no expense focus');
+        continue;
+      }
+      if (action.type !== 'open_item') {
+        console.log('[LifeOS chat] skip open — no id for', action.type);
+        continue;
+      }
+      const id = (namedThing || action.id || (prior?.kind === 'item' ? prior.id : '') || '').trim();
+      if (id) {
+        open({ kind: 'item', id });
+        console.log('[LifeOS chat] open_item', id, action.id ? '' : '(focus)');
       } else {
         console.warn('[LifeOS chat] open_item missing id and no focus fallback');
       }
@@ -493,6 +1040,7 @@ export async function applyChatActions(
         inventoryItemId: inventoryItemId ?? null,
       });
       loggedDoneLabel = saved.label;
+      remember('lastDone', saved.id);
       if (inventoryItemId) {
         const inv = options.resolveItem?.(inventoryItemId);
         if (inv) {
@@ -523,13 +1071,23 @@ export async function applyChatActions(
       const inventoryItemId =
         action.inventoryItemId?.trim() ||
         inventoryIdFromUtterance(lastUserText, options.inventoryList);
+      const person = resolveAssignment({
+        assignedTo: action.assignedTo,
+        personId: action.personId,
+        utterance: lastUserText,
+        members: household,
+        preferSelf: true,
+      });
       const saved = await options.lastDone.setReminder({
         label,
         remindAt,
         inventoryItemId: inventoryItemId ?? null,
+        personId: person?.personId ?? null,
+        assignedTo: person?.assignedTo ?? null,
       });
       reminderLabel = saved.label;
       reminderAt = saved.remindAt || remindAt;
+      remember('lastDone', saved.id);
       if (inventoryItemId) focusItemId = inventoryItemId;
       console.log('[LifeOS chat] applied set_reminder', saved.label, remindAt);
       continue;
@@ -545,22 +1103,42 @@ export async function applyChatActions(
           currencyFromAmountRaw(action.amount)) ??
         'AED';
       const date = action.date ? normalizeDateField(action.date) : undefined;
+      const merchant =
+        formatPurchasedFrom(action.merchant) ||
+        merchantFromUtterance(lastUserText) ||
+        undefined;
+      const person = resolveAssignment({
+        assignedTo: action.assignedTo,
+        personId: action.personId,
+        utterance: lastUserText,
+        members: household,
+      });
       const saved = await options.expenses.addExpense({
         title: action.title.trim(),
         amount,
         currency,
         category: normalizeExpenseCategory(
-          action.category || `${action.title} ${action.merchant || ''}`
+          action.category || `${action.title} ${merchant || ''}`
         ),
         date,
-        merchant: action.merchant?.trim() || undefined,
+        merchant,
         note: action.note?.trim() || undefined,
         inventoryItemId: action.inventoryItemId?.trim() || undefined,
+        personId: person?.personId,
         source: 'talk',
       });
+      loggedExpenseId = saved.id;
       loggedExpenseTitle = saved.title;
+      loggedExpenseMerchant = saved.merchant || null;
       loggedExpenseAmount = formatMoney(`${currency} ${amount}`) || `${currency} ${amount}`;
-      console.log('[LifeOS chat] applied add_expense', saved.id, saved.title, amount);
+      remember('expense', saved.id);
+      console.log(
+        '[LifeOS chat] applied add_expense',
+        saved.id,
+        saved.title,
+        amount,
+        merchant || ''
+      );
       continue;
     }
     if (
@@ -581,6 +1159,12 @@ export async function applyChatActions(
       const renewsOn = action.renewsOn
         ? normalizeDateField(action.renewsOn)
         : undefined;
+      const person = resolveAssignment({
+        assignedTo: action.assignedTo,
+        personId: action.personId,
+        utterance: lastUserText,
+        members: household,
+      });
       const saved = await options.subscriptions.addSubscription({
         title: action.title.trim(),
         amount,
@@ -592,11 +1176,13 @@ export async function applyChatActions(
         ),
         provider: action.provider?.trim() || undefined,
         note: action.note?.trim() || undefined,
+        personId: person?.personId,
         source: 'talk',
       });
       loggedSubscriptionTitle = saved.title;
       loggedSubscriptionAmount =
         formatMoney(`${currency} ${amount}`) || `${currency} ${amount}`;
+      remember('subscription', saved.id);
       console.log(
         '[LifeOS chat] applied add_subscription',
         saved.id,
@@ -606,18 +1192,93 @@ export async function applyChatActions(
       );
       continue;
     }
+    if (action.type === 'update_subscription' && options?.subscriptions?.updateSubscription) {
+      const id =
+        String(action.id || '').trim() ||
+        idFromTitleList(lastUserText, options.subscriptionsList) ||
+        '';
+      const row =
+        options.subscriptions.getById?.(id) ||
+        options.subscriptionsList?.find((s) => s.id === id);
+      const patch: Parameters<NonNullable<SubscriptionsApi['updateSubscription']>>[1] = {};
+      if (action.patch?.title?.trim()) patch.title = titleCase(action.patch.title);
+      if (action.patch?.amount != null && action.patch.amount !== '') {
+        const amount = parseAmount(action.patch.amount);
+        if (Number.isFinite(amount) && amount > 0) patch.amount = amount;
+      }
+      if (action.patch?.currency?.trim()) {
+        patch.currency = action.patch.currency.trim().toUpperCase();
+      }
+      if (action.patch?.cycle?.trim()) {
+        patch.cycle = normalizeSubscriptionCycle(action.patch.cycle);
+      }
+      if (action.patch?.renewsOn?.trim()) {
+        const d = normalizeDateField(action.patch.renewsOn);
+        if (d) patch.renewsOn = d;
+      }
+      if (action.patch?.category?.trim()) {
+        patch.category = normalizeSubscriptionCategory(action.patch.category);
+      }
+      if (action.patch?.provider?.trim()) patch.provider = action.patch.provider.trim();
+      if (action.patch?.note?.trim()) patch.note = action.patch.note.trim();
+      if (!id || !Object.keys(patch).length) {
+        console.log('[LifeOS chat] skip update_subscription — missing id/patch');
+        continue;
+      }
+      await options.subscriptions.updateSubscription(id, patch);
+      loggedSubscriptionTitle = patch.title || row?.title || 'subscription';
+      if (patch.amount != null) {
+        const cur = String(patch.currency || 'AED');
+        loggedSubscriptionAmount =
+          formatMoney(`${cur} ${patch.amount}`) || `${cur} ${patch.amount}`;
+      }
+      updatedSubscription = true;
+      remember('subscription', id);
+      console.log('[LifeOS chat] applied update_subscription', id, patch);
+      continue;
+    }
+    if (action.type === 'remove_subscription' && options?.subscriptions?.removeSubscription) {
+      const id =
+        String(action.id || '').trim() ||
+        idFromTitleList(`${lastUserText || ''} ${action.title || ''}`, options.subscriptionsList) ||
+        '';
+      const row =
+        options.subscriptions.getById?.(id) ||
+        options.subscriptionsList?.find((s) => s.id === id);
+      if (!id) {
+        console.log('[LifeOS chat] skip remove_subscription — not found');
+        continue;
+      }
+      await options.subscriptions.removeSubscription(id);
+      removedSubscriptionTitle = row?.title || action.title?.trim() || 'subscription';
+      if (talkFocus?.kind === 'subscription' && talkFocus.id === id) {
+        talkFocus = null;
+        clearedFocus = true;
+      }
+      console.log('[LifeOS chat] applied remove_subscription', id);
+      continue;
+    }
     if (action.type === 'habit_check_in' && action.title?.trim() && options?.habits) {
-      // Keep spoken form lightly cased for display; matching uses normalizeHabitKey
       const title = titleCase(action.title.trim());
       const date =
         (action.date ? normalizeDateField(action.date) : undefined) || dayKey();
       const linkId = action.inventoryItemId?.trim() || undefined;
-      let habit = options.habits.findByTitle(action.title.trim())
-        || options.habits.findByTitle(title);
+      const person = resolveAssignment({
+        assignedTo: action.assignedTo,
+        personId: action.personId,
+        utterance: lastUserText,
+        members: household,
+        preferSelf: true,
+      });
+      let habit =
+        options.habits.findByTitle(action.title.trim(), person?.personId) ||
+        options.habits.findByTitle(title, person?.personId);
       if (!habit && action.createIfMissing !== false) {
         habit = await options.habits.addHabit({
           title,
           why: action.why?.trim() || undefined,
+          personId: person?.personId,
+          assignedTo: person?.assignedTo,
           inventoryItemId: linkId,
           syncLastDone: linkId ? true : undefined,
         });
@@ -648,19 +1309,59 @@ export async function applyChatActions(
             label: habit.title,
             inventoryItemId,
             doneAt: date,
+            personId: habit.personId,
+            assignedTo: habit.assignedTo,
           });
         }
       }
       habitCheckInTitle = habit.title;
+      lastAssignedTo = habit.assignedTo ?? lastAssignedTo;
       habitStreak = currentStreak(habit);
       habitCheckInDateSet.add(date);
+      remember('habit', habit.id);
       console.log(
         '[LifeOS chat] applied habit_check_in',
         habit.id,
         habit.title,
         date,
-        `streak ${habitStreak}`
+        `streak ${habitStreak}`,
+        habit.assignedTo ? `→ ${habit.assignedTo}` : ''
       );
+      continue;
+    }
+    if (action.type === 'remove_habit' && options?.habits?.removeHabit) {
+      const person = resolveAssignment({
+        assignedTo: undefined,
+        personId: undefined,
+        utterance: lastUserText,
+        members: household,
+        preferSelf: true,
+      });
+      const byId = action.id ? options.habits.getById(action.id) : undefined;
+      const byTitle =
+        (action.title && options.habits.findByTitle(action.title, person?.personId)) ||
+        (lastUserText && options.habits.findByTitle(lastUserText, person?.personId));
+      const habit =
+        byId ||
+        byTitle ||
+        options.habitsList?.find((h) => h.id === action.id) ||
+        (idFromTitleList(`${lastUserText || ''} ${action.title || ''}`, options.habitsList)
+          ? options.habits.getById(
+              idFromTitleList(`${lastUserText || ''} ${action.title || ''}`, options.habitsList)!
+            )
+          : undefined);
+      if (!habit) {
+        console.log('[LifeOS chat] skip remove_habit — not found');
+        continue;
+      }
+      await options.habits.removeHabit(habit.id);
+      removedHabitTitle = habit.title;
+      if (talkFocus?.kind === 'habit' && talkFocus.id === habit.id) {
+        talkFocus = null;
+        clearedFocus = true;
+      }
+      console.log('[LifeOS chat] applied remove_habit', habit.id, habit.title);
+      continue;
     }
 
     if (action.type === 'add_class_pack' && action.title?.trim() && options?.classes) {
@@ -676,6 +1377,7 @@ export async function applyChatActions(
         personId: action.personId,
         utterance: lastUserText,
         members: household,
+        preferSelf: true,
       });
       const pack = await options.classes.addPack({
         title,
@@ -690,6 +1392,7 @@ export async function applyChatActions(
       classPackRemaining = remainingCount(pack);
       classPackTotal = pack.total;
       lastAssignedTo = pack.assignedTo ?? lastAssignedTo;
+      remember('class', pack.id);
       console.log(
         '[LifeOS chat] applied add_class_pack',
         pack.id,
@@ -706,15 +1409,28 @@ export async function applyChatActions(
         personId: action.personId,
         utterance: lastUserText,
         members: household,
+        preferSelf: true,
       });
+      classLogAttemptFor = person?.assignedTo ?? classLogAttemptFor;
       const named =
         classTitleFromUtterance(lastUserText) || action.title?.trim() || undefined;
       const byId = action.id ? options.classes.getById(action.id) : undefined;
-      const titled = named
-        ? options.classes.findPack(named, person?.personId)
-        : undefined;
+      const byIdOk =
+        byId &&
+        (!person?.personId ||
+          !byId.personId ||
+          byId.personId === person.personId)
+          ? byId
+          : undefined;
       const pack =
-        byId || titled || (!named ? options.classes.newestPack?.() : undefined);
+        byIdOk ||
+        (options.classes.pickAttendance
+          ? options.classes.pickAttendance({
+              title: named,
+              personId: person?.personId,
+            })
+          : pickAttendancePack([], { title: named, personId: person?.personId })) ||
+        (!named && !person?.personId ? options.classes.newestPack?.() : undefined);
       if (!pack) {
         console.log('[LifeOS chat] skip log_class — pack not found', action.title);
         continue;
@@ -726,14 +1442,104 @@ export async function applyChatActions(
         classPackRemaining = remainingCount(updated);
         classPackTotal = updated.total;
         lastAssignedTo = updated.assignedTo ?? lastAssignedTo;
+        remember('class', updated.id);
         console.log(
           '[LifeOS chat] applied log_class',
           updated.id,
           updated.title,
           date,
-          `${usedCount(updated)}/${updated.total}`
+          `${usedCount(updated)}/${updated.total}`,
+          updated.assignedTo ? `→ ${updated.assignedTo}` : ''
         );
       }
+      continue;
+    }
+    if (action.type === 'remove_class_pack' && options?.classes?.removePack) {
+      const person = resolveAssignment({
+        utterance: lastUserText,
+        members: household,
+        preferSelf: true,
+      });
+      const byId = action.id ? options.classes.getById(action.id) : undefined;
+      const titled = action.title?.trim() || classTitleFromUtterance(lastUserText);
+      const pack =
+        byId ||
+        (titled ? options.classes.findPack(titled, person?.personId) : undefined) ||
+        (idFromTitleList(`${lastUserText || ''} ${action.title || ''}`, options.classPacksList)
+          ? options.classes.getById(
+              idFromTitleList(`${lastUserText || ''} ${action.title || ''}`, options.classPacksList)!
+            )
+          : undefined);
+      if (!pack) {
+        console.log('[LifeOS chat] skip remove_class_pack — not found');
+        continue;
+      }
+      await options.classes.removePack(pack.id);
+      removedClassTitle = pack.title;
+      if (talkFocus?.kind === 'class' && talkFocus.id === pack.id) {
+        talkFocus = null;
+        clearedFocus = true;
+      }
+      console.log('[LifeOS chat] applied remove_class_pack', pack.id, pack.title);
+      continue;
+    }
+    if (action.type === 'update_class_pack' && options?.classes?.updatePack) {
+      const titled = action.title?.trim() || classTitleFromUtterance(lastUserText);
+      const pack =
+        (action.id ? options.classes.getById(action.id) : undefined) ||
+        (titled ? options.classes.findPack(titled) : undefined) ||
+        (talkFocus?.kind === 'class' ? options.classes.getById(talkFocus.id) : undefined);
+      if (!pack) {
+        console.log('[LifeOS chat] skip update_class_pack — not found');
+        continue;
+      }
+      const patch: Partial<ClassPack> = {};
+      if (action.patch?.title?.trim()) patch.title = titleCase(action.patch.title);
+      if (action.patch?.total != null && action.patch.total !== '') {
+        const n = Math.round(Number(action.patch.total));
+        if (Number.isFinite(n) && n > 0) patch.total = n;
+      }
+      if (action.patch?.startsOn?.trim()) {
+        const d = normalizeDateField(String(action.patch.startsOn));
+        if (d) patch.startsOn = d;
+      }
+      if (action.patch?.endsOn?.trim()) {
+        const d = normalizeDateField(String(action.patch.endsOn));
+        if (d) patch.endsOn = d;
+      }
+      if (!Object.keys(patch).length) {
+        console.log('[LifeOS chat] skip update_class_pack — empty patch');
+        continue;
+      }
+      await options.classes.updatePack(pack.id, patch);
+      const next = options.classes.getById(pack.id) || { ...pack, ...patch };
+      classPackTitle = next.title;
+      classPackRemaining = remainingCount(next);
+      classPackTotal = next.total;
+      updatedClassPack = true;
+      remember('class', pack.id);
+      console.log('[LifeOS chat] applied update_class_pack', pack.id, patch);
+      continue;
+    }
+    if (action.type === 'remove_last_done' && options?.lastDone?.remove) {
+      const id =
+        String(action.id || '').trim() ||
+        idFromLabelList(`${lastUserText || ''} ${action.label || ''}`, options.lastDoneList) ||
+        (talkFocus?.kind === 'lastDone' ? talkFocus.id : '') ||
+        '';
+      const row = options.lastDoneList?.find((d) => d.id === id);
+      if (!id) {
+        console.log('[LifeOS chat] skip remove_last_done — not found');
+        continue;
+      }
+      await options.lastDone.remove(id);
+      removedLastDoneLabel = row?.label || action.label?.trim() || 'activity';
+      if (talkFocus?.kind === 'lastDone' && talkFocus.id === id) {
+        talkFocus = null;
+        clearedFocus = true;
+      }
+      console.log('[LifeOS chat] applied remove_last_done', id, removedLastDoneLabel);
+      continue;
     }
   }
 
@@ -750,13 +1556,24 @@ export async function applyChatActions(
     removedNames,
     updatedIds,
     openItemId,
+    openExpenseId,
+    openTarget,
     focusItemId,
+    talkFocus: clearedFocus && !talkFocus ? null : talkFocus,
+    loggedExpenseId,
     clearedFocus,
     loggedDoneLabel,
     loggedExpenseTitle,
     loggedExpenseAmount,
+    loggedExpenseMerchant,
+    updatedExpense,
     loggedSubscriptionTitle,
     loggedSubscriptionAmount,
+    updatedSubscription,
+    removedExpenseTitle,
+    removedSubscriptionTitle,
+    removedHabitTitle,
+    removedClassTitle,
     habitCheckInTitle,
     habitStreak,
     habitCheckInDays: habitCheckInDateSet.size,
@@ -764,9 +1581,161 @@ export async function applyChatActions(
     classPackRemaining,
     classPackTotal,
     classLoggedTitle,
+    classLogAttemptFor,
     reminderLabel,
     reminderAt,
+    removedLastDoneLabel,
+    updatedClassPack,
   };
+}
+
+function expensePatchFromItemUpdate(
+  patch?: ChatUpdateAction['patch']
+): Parameters<ExpensesApi['updateExpense']>[1] {
+  const out: Parameters<ExpensesApi['updateExpense']>[1] = {};
+  if (!patch) return out;
+  if (patch.price != null && patch.price !== '') {
+    const amount = parseAmount(patch.price);
+    if (Number.isFinite(amount) && amount > 0) out.amount = amount;
+    const cur = currencyFromAmountRaw(patch.price);
+    if (cur) out.currency = cur;
+    else if (/\b(dirhams?|aed|dhs)\b/i.test(String(patch.price))) out.currency = 'AED';
+  }
+  if (patch.purchasedFrom != null && patch.purchasedFrom !== '') {
+    out.merchant =
+      formatPurchasedFrom(patch.purchasedFrom) || patch.purchasedFrom.trim();
+  }
+  if (patch.name != null && patch.name !== '') {
+    out.title = titleCase(patch.name);
+  }
+  if (patch.category != null && patch.category !== '') {
+    out.category = normalizeExpenseCategory(patch.category);
+  }
+  if (patch.purchaseDate != null && patch.purchaseDate !== '') {
+    const d = normalizeDateField(patch.purchaseDate);
+    if (d) out.date = d;
+  }
+  return out;
+}
+
+function idFromTitleList(
+  text: string | undefined,
+  list?: { id: string; title: string }[]
+): string | undefined {
+  if (!text?.trim() || !list?.length) return undefined;
+  const t = text.toLowerCase();
+  const scored = list
+    .map((row) => {
+      const title = row.title.toLowerCase();
+      if (!title) return null;
+      if (t.includes(title)) return { id: row.id, score: title.length };
+      const words = title.split(/\s+/).filter((w) => w.length > 2);
+      if (words.length && words.every((w) => t.includes(w))) {
+        return { id: row.id, score: title.length };
+      }
+      return null;
+    })
+    .filter(Boolean) as { id: string; score: number }[];
+  scored.sort((a, b) => b.score - a.score);
+  return scored[0]?.id;
+}
+
+function idFromLabelList(
+  text: string | undefined,
+  list?: { id: string; label: string }[]
+): string | undefined {
+  if (!text?.trim() || !list?.length) return undefined;
+  return idFromTitleList(
+    text,
+    list.map((row) => ({ id: row.id, title: row.label }))
+  );
+}
+
+function classTotalFromUtterance(text?: string): number | undefined {
+  if (!text?.trim()) return undefined;
+  const m = text.match(
+    /(\d+)\s*(classes|sessions|lessons|class|session|lesson)\b/i
+  );
+  if (!m) return undefined;
+  const n = Number(m[1]);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
+function expenseIdFromUtterance(
+  text: string | undefined,
+  list?: { id: string; title: string; merchant?: string }[]
+): string | undefined {
+  return idFromTitleList(text, list);
+}
+
+function resolveExpenseUpdateId(params: {
+  actionId: string;
+  lastUserText?: string;
+  expensesList?: { id: string; title: string; merchant?: string }[];
+  lastFocusExpenseId?: string | null;
+  getById?: ExpensesApi['getById'];
+  hasAmountPatch?: boolean;
+  hasPatch?: boolean;
+}): string | null {
+  const {
+    actionId,
+    lastUserText,
+    expensesList,
+    lastFocusExpenseId,
+    getById,
+    hasAmountPatch,
+    hasPatch,
+  } = params;
+  if (getById?.(actionId)) return actionId;
+  if (expensesList?.some((e) => e.id === actionId)) return actionId;
+  const fromSpeech = expenseIdFromUtterance(lastUserText, expensesList);
+  if (fromSpeech) return fromSpeech;
+  const canUseFocus = hasPatch || hasAmountPatch;
+  if (canUseFocus && lastFocusExpenseId) {
+    if (
+      !getById ||
+      getById(lastFocusExpenseId) ||
+      expensesList?.some((e) => e.id === lastFocusExpenseId)
+    ) {
+      return lastFocusExpenseId;
+    }
+  }
+  return null;
+}
+
+/** Utterance clearly about an expense (not a Thing). */
+export function looksLikeShowExpense(text?: string): boolean {
+  if (!text?.trim()) return false;
+  const t = text.trim().toLowerCase().replace(/[’']/g, "'");
+  return (
+    /\b(expense|spend|spending|purchase|receipt)\b/.test(t) ||
+    /\b(last|latest|recent)\s+(expense|spend|purchase)\b/.test(t) ||
+    /\bmy\s+(expense|spend|purchase)\b/.test(t)
+  );
+}
+
+/** “Show it / show me / open that / show my last expense” without naming a product. */
+export function looksLikeShowLast(text?: string): boolean {
+  if (!text?.trim()) return false;
+  const t = text.trim().toLowerCase().replace(/[’']/g, "'");
+  if (looksLikeShowExpense(t)) return true;
+  if (
+    /^(show|open|see|view)(\s+me)?(\s+please)?\s*[.!?]?$/.test(t) ||
+    /^(can you\s+)?(show|open|see|view)(\s+me)?(\s+please)?\s*[.!?]?$/.test(t)
+  ) {
+    return true;
+  }
+  return (
+    /^(show|open|see|view)\s+(it|that|this|the\s+(item|expense|one|habit|subscription|class|activity))\b/.test(t) ||
+    /^(show|open)\s+the\s+(item|expense|habit|subscription|class|activity)\b/.test(t) ||
+    /^(can you )?(show|open)\s+(me\s+)?(it|that|this)\b/.test(t) ||
+    /^(show|open)\s+me\s+(the\s+)?(my\s+)?(last\s+|latest\s+|recent\s+)?(item|expense|one|it|that|this|spend|purchase|habit|subscription|class|activity)\b/.test(
+      t
+    ) ||
+    /\b(show|open|see|view)\s+(me\s+)?(my\s+)?(last\s+|latest\s+|recent\s+)?(expense|spend|purchase|habit|subscription|class pack|activity)\b/.test(
+      t
+    )
+  );
 }
 
 function inventoryIdFromUtterance(
@@ -787,7 +1756,10 @@ function ensureTalkActions(
   actions: ChatAction[],
   lastUserText?: string
 ): ChatAction[] {
-  const list = actions.filter((a) => a && a.type !== 'none');
+  let list = actions.filter((a) => a && a.type !== 'none');
+  if (looksLikeClassEnrollment(lastUserText)) {
+    list = list.filter((a) => a.type !== 'habit_check_in');
+  }
   const types = new Set(list.map((a) => a.type));
   if (looksLikeClassEnrollment(lastUserText) && !types.has('add_class_pack')) {
     const title = classTitleFromUtterance(lastUserText) || 'Class';
@@ -821,16 +1793,29 @@ function sanitizeReply(reply: string, actions: ChatAction[]) {
     return trimmed;
   }
   const types = actions.map((a) => a.type);
+  if (types.includes('open_expense')) return 'Opening that expense.';
+  if (types.includes('open_habit')) return 'Opening that habit.';
+  if (types.includes('open_subscription')) return 'Opening that subscription.';
+  if (types.includes('open_class')) return 'Opening that class pack.';
+  if (types.includes('open_last_done')) return 'Opening that activity.';
   if (types.includes('open_item')) return 'Opening that item.';
   if (types.includes('add_item')) return 'Added to your inventory.';
   if (types.includes('add_expense')) return 'Saved that expense.';
+  if (types.includes('update_expense')) return 'Updated that expense.';
+  if (types.includes('remove_expense')) return 'Deleted that expense.';
   if (types.includes('add_subscription')) return 'Added that subscription.';
+  if (types.includes('update_subscription')) return 'Updated that subscription.';
+  if (types.includes('remove_subscription')) return 'Removed that subscription.';
   if (types.includes('habit_check_in')) return 'Got it.';
+  if (types.includes('remove_habit')) return 'Removed that habit.';
   if (types.includes('add_class_pack')) return 'Added that class pack.';
   if (types.includes('log_class')) return 'Logged that class.';
+  if (types.includes('remove_class_pack')) return 'Removed that class pack.';
+  if (types.includes('update_class_pack')) return 'Updated that class pack.';
   if (types.includes('update_item')) return 'Updated.';
   if (types.includes('log_done')) return 'Marked that as done.';
   if (types.includes('set_reminder')) return 'Reminder set.';
+  if (types.includes('remove_last_done')) return 'Removed that activity.';
   if (types.includes('remove_item')) return 'Removed from your inventory.';
   return 'Anything else?';
 }

@@ -1,4 +1,4 @@
-import { colors } from '@/constants/theme';
+import type { ThemeColors } from '@/constants/theme';
 import { localDayKey } from '@/lib/dates';
 
 export type HabitCategoryId =
@@ -29,38 +29,52 @@ export const HABIT_CATEGORIES: Record<HabitCategoryId, HabitCategory> = {
     id: 'focus',
     name: 'Focus',
     emoji: '🎯',
-    color: colors.sky,
-    soft: colors.skySoft,
+    color: '#4A6F8F',
+    soft: 'rgba(74, 111, 143, 0.16)',
   },
   home: {
     id: 'home',
     name: 'Home',
     emoji: '🏠',
-    color: colors.forestBright,
-    soft: colors.forestSoft,
+    color: '#4F6840',
+    soft: 'rgba(79, 104, 64, 0.16)',
   },
   money: {
     id: 'money',
     name: 'Money',
     emoji: '💰',
-    color: colors.amber,
-    soft: colors.amberSoft,
+    color: '#B4782E',
+    soft: 'rgba(180, 120, 46, 0.16)',
   },
   mind: {
     id: 'mind',
     name: 'Mind',
     emoji: '🧘',
-    color: colors.violet,
-    soft: colors.violetSoft,
+    color: '#6E6088',
+    soft: 'rgba(110, 96, 136, 0.16)',
   },
   other: {
     id: 'other',
     name: 'Other',
     emoji: '✨',
-    color: colors.slate,
-    soft: colors.surfaceSoft,
+    color: '#54493E',
+    soft: '#F1EBE1',
   },
 };
+
+/** Category chips follow the active palette (not a frozen Linen snapshot). */
+export function paintHabitCategory(
+  id: HabitCategoryId,
+  c: ThemeColors
+): HabitCategory {
+  const base = HABIT_CATEGORIES[id];
+  if (id === 'health') return { ...base, color: c.coral, soft: c.coralSoft };
+  if (id === 'focus') return { ...base, color: c.sky, soft: c.skySoft };
+  if (id === 'home') return { ...base, color: c.accentStrong, soft: c.accentSoft };
+  if (id === 'money') return { ...base, color: c.amber, soft: c.amberSoft };
+  if (id === 'mind') return { ...base, color: c.violet, soft: c.violetSoft };
+  return { ...base, color: c.slate, soft: c.surfaceSoft };
+}
 
 export type HabitLog = {
   id: string;
@@ -74,6 +88,8 @@ export type Habit = {
   why?: string;
   categoryId: HabitCategoryId;
   logs: HabitLog[];
+  personId?: string;
+  assignedTo?: string;
   /** Optional link to a Thing — check-in can also log Last Done on that item. */
   inventoryItemId?: string;
   /** When true (default if linked), check-in appends a Last Done log for the linked Thing. */
@@ -85,6 +101,8 @@ export type NewHabitInput = {
   title: string;
   why?: string;
   categoryId?: HabitCategoryId;
+  personId?: string;
+  assignedTo?: string;
   inventoryItemId?: string;
   syncLastDone?: boolean;
   id?: string;
@@ -131,6 +149,8 @@ export function createHabit(input: NewHabitInput): Habit {
     why,
     categoryId: cat.id,
     logs: [],
+    personId: input.personId,
+    assignedTo: input.assignedTo?.trim() || undefined,
     inventoryItemId: input.inventoryItemId,
     syncLastDone:
       input.syncLastDone ?? (input.inventoryItemId ? true : undefined),
@@ -158,6 +178,8 @@ export function normalizeHabit(raw: unknown): Habit | null {
     categoryId:
       o.categoryId && o.categoryId in HABIT_CATEGORIES ? o.categoryId : cat.id,
     logs,
+    personId: typeof o.personId === 'string' ? o.personId : undefined,
+    assignedTo: typeof o.assignedTo === 'string' ? o.assignedTo : undefined,
     inventoryItemId: o.inventoryItemId,
     syncLastDone:
       typeof o.syncLastDone === 'boolean'
@@ -289,18 +311,37 @@ export function normalizeHabitKey(title: string): string {
   return parts.join(' ').replace(/\s+/g, ' ').trim();
 }
 
-export function findHabitByTitle(
-  habits: Habit[],
-  title: string
-): Habit | undefined {
+function habitTitleHits(habits: Habit[], title: string): Habit[] {
   const key = normalizeHabitKey(title);
-  if (!key) return undefined;
-  const exact = habits.find((h) => normalizeHabitKey(h.title) === key);
-  if (exact) return exact;
-  return habits.find((h) => {
+  if (!key) return [];
+  const exact = habits.filter((h) => normalizeHabitKey(h.title) === key);
+  if (exact.length) return exact;
+  return habits.filter((h) => {
     const hk = normalizeHabitKey(h.title);
     return hk.includes(key) || key.includes(hk);
   });
+}
+
+function newestHabit(habits: Habit[]): Habit | undefined {
+  return [...habits].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+}
+
+export function findHabitByTitle(
+  habits: Habit[],
+  title: string,
+  personId?: string
+): Habit | undefined {
+  const hits = habitTitleHits(habits, title);
+  if (!hits.length) return undefined;
+  if (personId) {
+    const mine = hits.filter((h) => h.personId === personId);
+    if (mine.length) return newestHabit(mine);
+    const open = hits.filter((h) => !h.personId);
+    if (open.length === 1) return open[0];
+    return undefined;
+  }
+  if (hits.length === 1) return hits[0];
+  return undefined;
 }
 
 /** Merge same-activity duplicates (e.g. four "Walked" from Talk races). */
@@ -317,7 +358,7 @@ export function mergeDuplicateHabits(habits: Habit[]): {
   );
 
   for (const h of ordered) {
-    const key = normalizeHabitKey(h.title) || h.id;
+    const key = `${normalizeHabitKey(h.title) || h.id}::${h.personId || ''}`;
     const existing = byKey.get(key);
     if (!existing) {
       byKey.set(key, h);
@@ -332,6 +373,8 @@ export function mergeDuplicateHabits(habits: Habit[]): {
       ...existing,
       title: existing.title.length <= h.title.length ? existing.title : h.title,
       why: existing.why || h.why,
+      personId: existing.personId || h.personId,
+      assignedTo: existing.assignedTo || h.assignedTo,
       inventoryItemId: existing.inventoryItemId || h.inventoryItemId,
       syncLastDone:
         existing.syncLastDone ?? h.syncLastDone ?? undefined,

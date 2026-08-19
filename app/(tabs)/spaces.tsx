@@ -9,7 +9,7 @@ import {
 import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { Plus } from 'lucide-react-native';
+import { Plus, User } from 'lucide-react-native';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { Card } from '@/components/ui/Card';
@@ -35,8 +35,10 @@ import {
   spaceIdByKind,
 } from '@/lib/moduleFilters';
 import { loadLocalProfile } from '@/lib/profile';
+import { selfAvatarInitial } from '@/lib/people';
 import { blurActiveElement } from '@/lib/a11y';
-import { colors, fonts, radius, shadows, spacing } from '@/constants/theme';
+import { fonts, radius, shadows, spacing } from '@/constants/theme';
+import { useTheme } from '@/lib/ThemeContext';
 
 type AddItem = {
   title: string;
@@ -60,6 +62,7 @@ type ModuleRow = {
 };
 
 export default function SpacesScreen() {
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { spaces } = useSpaces();
@@ -72,7 +75,8 @@ export default function SpacesScreen() {
   const { subscriptions } = useSubscriptions();
   const scrollRef = useRef<ScrollView>(null);
   const [addOpen, setAddOpen] = useState(false);
-  const [profileLetter, setProfileLetter] = useState('Y');
+  const [profileName, setProfileName] = useState('');
+  const profileLetter = selfAvatarInitial(profileName, members);
 
   const addGroups = useMemo((): AddGroup[] => {
     const spaceIdFor = (kind: 'home' | 'vehicle' | 'documents' | 'family') =>
@@ -156,10 +160,7 @@ export default function SpacesScreen() {
     useCallback(() => {
       scrollRef.current?.scrollTo({ y: 0, animated: false });
       setAddOpen(false);
-      void loadLocalProfile().then((p) => {
-        const ch = p.displayName.trim().charAt(0).toUpperCase();
-        setProfileLetter(ch || 'Y');
-      });
+      void loadLocalProfile().then((p) => setProfileName(p.displayName));
     }, [])
   );
 
@@ -227,7 +228,6 @@ export default function SpacesScreen() {
           count: lastDoneItems.length,
         },
         { title: 'Family', subtitle: 'People & pets', icon: 'family', href: '/family', count: members.length },
-        { title: 'Vault', subtitle: 'Emergency access', icon: 'key', href: '/vault' },
       ],
     },
     {
@@ -259,21 +259,25 @@ export default function SpacesScreen() {
           </View>
           <Pressable
             onPress={openAdd}
-            style={styles.addBtn}
+            style={[styles.addBtn, { backgroundColor: colors.accent }]}
             accessibilityLabel="Add"
           >
-            <Plus size={20} color={colors.forestOn} strokeWidth={2.2} />
+            <Plus size={20} color={colors.accentOn} strokeWidth={2.2} />
           </Pressable>
           <Pressable
             onPress={() => router.push('/profile' as Href)}
-            style={styles.profileBtn}
+            style={[styles.profileBtn, { backgroundColor: colors.ink }]}
             accessibilityLabel="Profile"
           >
-            <Text style={styles.profileLetter}>{profileLetter}</Text>
+            {profileLetter ? (
+              <Text style={[styles.profileLetter, { color: colors.onInk }]}>{profileLetter}</Text>
+            ) : (
+              <User size={16} color={colors.onInk} strokeWidth={1.8} />
+            )}
           </Pressable>
         </View>
 
-        <Text style={[styles.sectionTitle, { marginTop: spacing.lg }]}>Spaces</Text>
+        <Text style={[styles.sectionTitle, { marginTop: spacing.lg, color: colors.ink }]}>Spaces</Text>
         <View style={styles.grid}>
           {spaces.map((space, index) => {
             const count = items.filter((i) => i.spaceId === space.id).length;
@@ -290,8 +294,8 @@ export default function SpacesScreen() {
                   <View style={styles.cardTop}>
                     <Icon3DBadge name={space.icon} size={48} />
                     {count > 0 ? (
-                      <View style={styles.countPill}>
-                        <Text style={styles.countPillText}>{count}</Text>
+                      <View style={[styles.countPill, { backgroundColor: colors.accentSoft }]}>
+                        <Text style={[styles.countPillText, { color: colors.accent }]}>{count}</Text>
                       </View>
                     ) : null}
                   </View>
@@ -312,7 +316,7 @@ export default function SpacesScreen() {
             key={group.title}
             entering={FadeInDown.delay(120 + groupIndex * 50).springify().damping(18)}
           >
-            <Text style={[styles.sectionTitle, { marginTop: spacing.xxl }]}>
+            <Text style={[styles.sectionTitle, { marginTop: spacing.xxl, color: colors.ink }]}>
               {group.title}
             </Text>
             <ListCard>
@@ -338,13 +342,19 @@ export default function SpacesScreen() {
         animationType="fade"
         onRequestClose={closeAdd}
       >
-        <Pressable style={styles.sheetScrim} onPress={closeAdd}>
+        <Pressable style={[styles.sheetScrim, { backgroundColor: colors.overlay }]} onPress={closeAdd}>
           <Pressable
-            style={[styles.sheet, { maxHeight: '88%' }]}
+            style={[
+              styles.sheet,
+              {
+                maxHeight: '88%',
+                backgroundColor: colors.bgElevated,
+              },
+            ]}
             onPress={(e) => e.stopPropagation()}
           >
-            <View style={styles.sheetHandle} />
-            <Text style={styles.sheetTitle}>Add</Text>
+            <View style={[styles.sheetHandle, { backgroundColor: colors.lineStrong }]} />
+            <Text style={[styles.sheetTitle, { color: colors.ink }]}>Add</Text>
             <ScrollView
               showsVerticalScrollIndicator={false}
               bounces={false}
@@ -354,18 +364,29 @@ export default function SpacesScreen() {
             >
               {addGroups.map((group) => (
                 <View key={group.title} style={styles.sheetGroup}>
-                  <Text style={styles.sheetGroupTitle}>{group.title}</Text>
+                  <Text style={[styles.sheetGroupTitle, { color: colors.ink }]}>{group.title}</Text>
                   <Text variant="caption" style={styles.sheetGroupHint}>
                     {group.hint}
                   </Text>
-                  <View style={styles.sheetCard}>
+                  <View
+                    style={[
+                      styles.sheetCard,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.line,
+                      },
+                    ]}
+                  >
                     {group.items.map((item, index) => (
                       <Pressable
                         key={item.title}
                         onPress={() => pickAdd(item.href)}
                         style={({ pressed }) => [
                           styles.sheetRow,
-                          index < group.items.length - 1 && styles.sheetRowBorder,
+                          index < group.items.length - 1 && [
+                            styles.sheetRowBorder,
+                            { borderBottomColor: colors.line },
+                          ],
                           pressed && { opacity: 0.85 },
                         ]}
                       >
@@ -406,7 +427,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: colors.forest,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 4,
@@ -415,13 +435,11 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: colors.ink,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 4,
   },
   profileLetter: {
-    color: colors.white,
     fontWeight: '600',
     fontSize: 16,
   },
@@ -429,7 +447,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sansSemi,
     fontSize: 19,
     lineHeight: 24,
-    color: colors.ink,
     letterSpacing: -0.3,
     marginBottom: spacing.md,
   },
@@ -455,22 +472,18 @@ const styles = StyleSheet.create({
     height: 22,
     paddingHorizontal: 7,
     borderRadius: radius.full,
-    backgroundColor: colors.forestSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
   countPillText: {
     fontFamily: fonts.sansSemi,
-    fontSize: 12,
-    color: colors.forest,
+    fontSize: 16,
   },
   sheetScrim: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: colors.overlay,
   },
   sheet: {
-    backgroundColor: colors.bgElevated,
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
     paddingTop: spacing.sm,
@@ -481,14 +494,12 @@ const styles = StyleSheet.create({
     width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: colors.lineStrong,
     marginBottom: spacing.md,
   },
   sheetTitle: {
     fontFamily: fonts.sansSemi,
     fontSize: 20,
     lineHeight: 24,
-    color: colors.ink,
     letterSpacing: -0.3,
     marginBottom: spacing.md,
     paddingHorizontal: spacing.lg,
@@ -499,9 +510,8 @@ const styles = StyleSheet.create({
   },
   sheetGroupTitle: {
     fontFamily: fonts.sansSemi,
-    fontSize: 15,
+    fontSize: 16,
     lineHeight: 20,
-    color: colors.ink,
     letterSpacing: -0.2,
   },
   sheetGroupHint: {
@@ -509,10 +519,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   sheetCard: {
-    backgroundColor: colors.white,
     borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
     overflow: 'hidden',
     ...shadows.soft,
   },
@@ -525,6 +533,5 @@ const styles = StyleSheet.create({
   },
   sheetRowBorder: {
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
   },
 });

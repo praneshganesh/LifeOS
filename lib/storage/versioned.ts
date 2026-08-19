@@ -5,6 +5,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
  * Legacy bare JSON (array/object) is accepted and rewritten on first load.
  */
 
+/**
+ * Versioned AsyncStorage envelopes for F2.
+ * Legacy bare JSON (array/object) is accepted and rewritten on first load.
+ */
+
 export type VersionedEnvelope<T> = {
   v: number;
   data: T;
@@ -69,6 +74,7 @@ export async function saveVersioned<T>(
 ): Promise<void> {
   const envelope: VersionedEnvelope<T> = { v: version, data };
   await AsyncStorage.setItem(key, JSON.stringify(envelope));
+  void import('@/lib/cloud/sync').then((m) => m.scheduleCloudPush()).catch(() => undefined);
 }
 
 /** Convenience for array stores (inventory, expenses, …). */

@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useTheme } from '@/lib/ThemeContext';
+import { useMemo, useEffect, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -15,7 +16,7 @@ import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { Icon3DBadge, type Icon3DName } from '@/components/ui/Icon3D';
 import { useSpaces, type SpaceKind } from '@/lib/SpacesContext';
-import { colors, fonts, radius, spacing } from '@/constants/theme';
+import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
 
 const KINDS: { id: SpaceKind; label: string; icon: Icon3DName }[] = [
   { id: 'home', label: 'Home', icon: 'house' },
@@ -27,6 +28,8 @@ const KINDS: { id: SpaceKind; label: string; icon: Icon3DName }[] = [
 const HOME_ICONS: Icon3DName[] = ['house', 'holiday', 'building'];
 
 export default function EditSpaceScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -234,7 +237,8 @@ export default function EditSpaceScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   content: {
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.md,
@@ -251,7 +255,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
+    fontSize: 16,
     color: colors.mute,
     marginBottom: 8,
     marginTop: spacing.md,
@@ -287,7 +291,7 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
+    fontSize: 16,
     color: colors.slate,
   },
   chipTextOn: {
@@ -318,12 +322,12 @@ const styles = StyleSheet.create({
   },
   roomName: {
     fontFamily: fonts.sans,
-    fontSize: 15,
+    fontSize: 16,
     color: colors.ink,
   },
   removeText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
+    fontSize: 16,
     color: colors.amber,
   },
   addRoomRow: {
@@ -340,7 +344,7 @@ const styles = StyleSheet.create({
   },
   addRoomBtnText: {
     fontFamily: fonts.sansSemi,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.forestOn,
   },
   save: {
@@ -362,7 +366,8 @@ const styles = StyleSheet.create({
   },
   deleteText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 15,
+    fontSize: 16,
     color: colors.amber,
   },
 });
+}

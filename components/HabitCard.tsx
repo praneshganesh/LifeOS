@@ -9,7 +9,7 @@ import {
 import { Check } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import {
-  HABIT_CATEGORIES,
+  paintHabitCategory,
   completionRate,
   currentStreak,
   loggedOn,
@@ -22,7 +22,8 @@ import {
   cellSizeForWidth,
   type CalendarCell,
 } from '@/lib/habitHeatmap';
-import { colors, fonts, radius, shadows, spacing } from '@/constants/theme';
+import { fonts, radius, shadows, spacing } from '@/constants/theme';
+import { useTheme } from '@/lib/ThemeContext';
 
 const MONTH_LABEL_W = 28;
 const GAP = 2;
@@ -52,6 +53,7 @@ function DayCell({
   interactive: boolean;
   onToggle?: (dateKey: string) => void;
 }) {
+  const { colors } = useTheme();
   if (cell.state === 'invalid') {
     return (
       <View
@@ -69,7 +71,7 @@ function DayCell({
         width: size,
         height: size,
         borderRadius: 1.5,
-        backgroundColor: done ? colors.forestBright : colors.lineStrong,
+        backgroundColor: done ? colors.accentStrong : colors.lineStrong,
       }}
     />
   );
@@ -104,6 +106,7 @@ function HabitYearCalendar({
   onToggleDay?: (dateKey: string) => void;
   compact?: boolean;
 }) {
+  const { colors } = useTheme();
   const [innerW, setInnerW] = useState(0);
   const model = useMemo(
     () => buildHabitYearCalendar(habit.logs, year),
@@ -113,12 +116,12 @@ function HabitYearCalendar({
   // Measure the days track only (month labels sit outside). Fill that width — no artificial cap.
   const trackBudget = Math.max(0, innerW - MONTH_LABEL_W);
   const cell = cellSizeForWidth(trackBudget, GAP, {
-    min: compact ? 5 : 7,
+    min: 16,
     max: 48,
   });
   const trackW = daysTrackWidth(cell, GAP);
   const ready = trackBudget > 0;
-  const labelFs = Math.max(8, Math.min(11, cell - 1));
+  const labelFs = 16;
 
   function onLayout(e: LayoutChangeEvent) {
     const w = Math.floor(e.nativeEvent.layout.width);
@@ -149,6 +152,7 @@ function HabitYearCalendar({
                       width: DAY_TICK_BOX,
                       fontSize: labelFs,
                       lineHeight: labelFs + 2,
+                      color: colors.mute,
                     },
                   ]}
                 >
@@ -168,7 +172,7 @@ function HabitYearCalendar({
                 allowFontScaling={false}
                 style={[
                   styles.monthLabel,
-                  { height: cell, lineHeight: cell, fontSize: labelFs },
+                  { height: cell, lineHeight: cell, fontSize: labelFs, color: colors.mute },
                 ]}
               >
                 {row.label}
@@ -189,7 +193,7 @@ function HabitYearCalendar({
 
           <Text variant="caption" style={styles.yearCaption}>
             {habit.logs.length
-              ? `${year} · green = done`
+              ? `${year} · filled = done`
               : `${year} · tap a day to mark done`}
           </Text>
         </>
@@ -215,7 +219,8 @@ export function HabitCard({
   interactive?: boolean;
   year?: number;
 }) {
-  const category = HABIT_CATEGORIES[habit.categoryId];
+  const { colors } = useTheme();
+  const category = paintHabitCategory(habit.categoryId, colors);
   const viewYear = year ?? new Date().getFullYear();
   const doneToday = loggedOn(habit);
   const streak = currentStreak(habit);
@@ -232,6 +237,10 @@ export function HabitCard({
           {habit.why ? (
             <Text variant="caption" numberOfLines={1} style={styles.why}>
               {habit.why}
+            </Text>
+          ) : habit.assignedTo ? (
+            <Text variant="caption" numberOfLines={1} style={styles.why}>
+              {habit.assignedTo}
             </Text>
           ) : null}
         </View>
@@ -274,34 +283,41 @@ export function HabitCard({
     return (
       <Pressable
         onPress={onOpen}
-        style={({ pressed }) => [styles.card, pressed && { opacity: 0.96 }]}
+        style={({ pressed }) => [
+          styles.card,
+          { backgroundColor: colors.surface, borderColor: colors.line },
+          pressed && { opacity: 0.96 },
+        ]}
       >
         {body}
       </Pressable>
     );
   }
 
-  return <View style={styles.card}>{body}</View>;
+  return (
+    <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+      {body}
+    </View>
+  );
 }
 
 export function HabitCategoryHeader({ category }: { category: HabitCategory }) {
+  const { colors } = useTheme();
   return (
     <View style={styles.catHead}>
       <Text style={styles.catEmoji}>{category.emoji}</Text>
-      <Text style={styles.catName}>{category.name}</Text>
+      <Text style={[styles.catName, { color: colors.ink }]}>{category.name}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.white,
     borderRadius: radius.md,
     paddingVertical: 10,
     paddingHorizontal: spacing.md,
     marginBottom: spacing.sm,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
     alignSelf: 'stretch',
     overflow: 'hidden',
     ...shadows.soft,
@@ -318,17 +334,15 @@ const styles = StyleSheet.create({
     borderRadius: 3.5,
   },
   title: {
-    fontSize: 14,
+    fontSize: 16,
     lineHeight: 18,
     fontFamily: fonts.sansMedium,
   },
   why: {
-    color: colors.mute,
     marginTop: 1,
   },
   meta: {
-    color: colors.mute,
-    fontSize: 11,
+    fontSize: 16,
   },
   logBtn: {
     width: 24,
@@ -359,20 +373,17 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     fontFamily: fonts.sans,
-    color: colors.mute,
     textAlign: 'center',
     includeFontPadding: false,
   },
   monthLabel: {
     width: MONTH_LABEL_W,
     fontFamily: fonts.sans,
-    color: colors.mute,
     includeFontPadding: false,
   },
   yearCaption: {
     marginTop: 6,
-    color: colors.faint,
-    fontSize: 11,
+    fontSize: 16,
   },
   catHead: {
     flexDirection: 'row',
@@ -382,12 +393,11 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   catEmoji: {
-    fontSize: 13,
+    fontSize: 16,
   },
   catName: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
-    color: colors.ink,
+    fontSize: 16,
     letterSpacing: -0.2,
   },
 });
