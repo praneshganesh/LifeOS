@@ -17,6 +17,7 @@ import { Text } from '@/components/ui/Text';
 import { Icon3DBadge, type Icon3DName } from '@/components/ui/Icon3D';
 import { useSpaces, type SpaceKind } from '@/lib/SpacesContext';
 import { messageForPlanLimit } from '@/lib/planLimits';
+import { useToast } from '@/lib/ToastContext';
 import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
 
 const KINDS: { id: SpaceKind; label: string; icon: Icon3DName; hint: string }[] = [
@@ -34,6 +35,7 @@ export default function NewSpaceScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { addSpace } = useSpaces();
+  const { showToast } = useToast();
   const [name, setName] = useState('');
   const [meta, setMeta] = useState('');
   const [kind, setKind] = useState<SpaceKind>('home');
@@ -52,6 +54,7 @@ export default function NewSpaceScreen() {
         icon: kind === 'home' ? icon : undefined,
         withDefaultRooms: kind === 'home',
       });
+      showToast('Space added');
       router.replace(`/space/${space.id}`);
     } catch (err) {
       Alert.alert('Couldn’t add space', messageForPlanLimit(err) || 'Try again.');
@@ -145,6 +148,9 @@ export default function NewSpaceScreen() {
           >
             <Text style={styles.saveText}>{saving ? 'Creating…' : 'Create space'}</Text>
           </Pressable>
+          {!name.trim() ? (
+            <Text style={styles.saveHint}>Add a name to create the space.</Text>
+          ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
     </Screen>
@@ -237,6 +243,13 @@ function makeStyles(colors: ThemeColors) {
     fontFamily: fonts.sansSemi,
     fontSize: 16,
     color: colors.forestOn,
+  },
+  saveHint: {
+    fontFamily: fonts.sans,
+    fontSize: 14,
+    color: colors.mute,
+    textAlign: 'center',
+    marginTop: spacing.sm,
   },
 });
 }

@@ -65,6 +65,52 @@ describe('expense/subscription dedupe', () => {
     );
   });
 
+  it('matches merchant + amount + date when title differs', () => {
+    const list = [
+      {
+        id: '1',
+        title: 'Ikea purchase',
+        amount: 32.9,
+        currency: 'AED',
+        category: 'home' as const,
+        date: '2026-08-08',
+        merchant: 'Ikea',
+        createdAt: '',
+      },
+    ];
+    assert.ok(
+      findDuplicateExpense(list, {
+        title: 'Random title',
+        amount: 32.9,
+        date: '2026-08-08',
+        merchant: 'IKEA',
+        currency: 'AED',
+      })
+    );
+  });
+
+  it('matches receipt transaction ref', () => {
+    const list = [
+      {
+        id: '1',
+        title: 'IKEA',
+        amount: 32.9,
+        currency: 'AED',
+        category: 'home' as const,
+        date: '2026-01-01',
+        receiptRef: '330095405',
+        createdAt: '',
+      },
+    ];
+    assert.ok(
+      findDuplicateExpense(list, {
+        title: 'Different',
+        amount: 99,
+        receiptRef: '330095405',
+      })
+    );
+  });
+
   it('matches same subscription title amount cycle', () => {
     const list = [
       {
@@ -642,6 +688,49 @@ describe('applyChatActions', () => {
     assert.equal(packs[0]?.assignedTo, 'Aarav');
     assert.equal(result.classPackTitle, 'Skating');
     assert.equal(result.classPackRemaining, 24);
+  });
+
+  it('rename_person finds the member even when ASR mangles the from name', async () => {
+    const updates: { id: string; name?: string }[] = [];
+    const result = await applyChatActions(
+      // Stored member is "Sara" but ASR transcribed the correction as "Sarah".
+      [{ type: 'rename_person', from: 'Sarah', to: 'Saara' }] as ChatAction[],
+      {
+        addItem: async () => {
+          throw new Error('unused');
+        },
+        updateItem: async () => {},
+        removeItem: async () => {},
+      },
+      'talk',
+      {
+        lastUserText: 'her name is spelled with double A',
+        household: [
+          {
+            id: 'fm-kid',
+            name: 'Sara',
+            role: 'child',
+            relation: 'Daughter',
+            avatarLetter: 'S',
+            icon: 'school',
+            permission: 'viewer',
+            createdAt: new Date().toISOString(),
+          },
+        ],
+        people: {
+          addMember: async () => {
+            throw new Error('rename must never create a new member');
+          },
+          updateMember: async (id, patch) => {
+            updates.push({ id, name: patch.name });
+          },
+        },
+      }
+    );
+    assert.equal(updates[0]?.id, 'fm-kid');
+    assert.equal(updates[0]?.name, 'Saara');
+    assert.equal(result.renamedPersonFrom, 'Sara');
+    assert.equal(result.renamedPersonTo, 'Saara');
   });
 
   it('creates a swimming pack when enroll has no session count', async () => {

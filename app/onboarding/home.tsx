@@ -1,6 +1,7 @@
 import { useTheme } from '@/lib/ThemeContext';
 import { useMemo, useState } from 'react';
 import {
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -37,7 +38,7 @@ export default function OnboardingHome() {
           meta: home?.meta === 'Your place' ? 'Your place' : home?.meta,
         });
       }
-      router.push('/onboarding/family');
+      router.push('/onboarding/currency');
     } finally {
       setSaving(false);
     }
@@ -48,8 +49,12 @@ export default function OnboardingHome() {
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <View style={[styles.body, { paddingBottom: Math.max(insets.bottom, 16) + 8 }]}>
-        <Text style={styles.step}>Step 1 of 4</Text>
+      <Pressable
+        style={[styles.body, { paddingBottom: Math.max(insets.bottom, 16) + 8 }]}
+        onPress={Keyboard.dismiss}
+        accessible={false}
+      >
+        <Text style={styles.step}>Step 1 of 5</Text>
         <Text style={styles.title}>What do you call home?</Text>
         <Text style={styles.lead}>
           Spaces hold rooms and Things. You can rename this anytime in Settings.
@@ -78,7 +83,7 @@ export default function OnboardingHome() {
             <Text style={styles.skip}>Keep “Home” for now</Text>
           </Pressable>
         </View>
-      </View>
+      </Pressable>
     </KeyboardAvoidingView>
   );
 }
@@ -101,8 +106,9 @@ function makeStyles(colors: ThemeColors) {
   },
   title: {
     fontFamily: fonts.sansSemi,
-    fontSize: 26,
-    letterSpacing: -0.5,
+    fontSize: 22,
+    lineHeight: 28,
+    letterSpacing: -0.4,
     color: colors.ink,
     marginBottom: spacing.sm,
   },

@@ -1,4 +1,5 @@
 import { useTheme } from '@/lib/ThemeContext';
+import { useToast } from '@/lib/ToastContext';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Platform,
@@ -38,6 +39,7 @@ export default function SearchScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { items: inventory, removeItem, getById } = useInventory();
+  const { showError } = useToast();
   const { spaces } = useSpaces();
   const { expenses } = useExpenses();
   const { habits } = useHabits();
@@ -58,7 +60,7 @@ export default function SearchScreen() {
     if (!getById(assetId)) return;
     const ok = await confirmDelete(name);
     if (!ok) return;
-    await removeItem(assetId);
+    await removeItem(assetId).catch(() => showError('Couldn’t delete — try again.'));
   }
 
   const spaceNameById = useMemo(
@@ -119,7 +121,7 @@ export default function SearchScreen() {
       >
         <Text variant="title">Search</Text>
         <Text variant="body" style={styles.lead}>
-          Things, docs, spend, habits, classes, people — on this device.
+          Things, docs, spend, habits, classes, people — all in one place.
         </Text>
 
         <View style={styles.inputCard}>

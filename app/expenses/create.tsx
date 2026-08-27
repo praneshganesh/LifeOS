@@ -14,7 +14,11 @@ import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
+import { DateField } from '@/components/ui/DateField';
 import { useExpenses } from '@/lib/ExpensesContext';
+import { useToast } from '@/lib/ToastContext';
+import { useCurrency } from '@/lib/CurrencyContext';
+import { sanitizeAmountInput } from '@/lib/currency';
 import {
   EXPENSE_CATEGORIES,
   parseAmount,
@@ -31,14 +35,18 @@ export default function ExpenseFormScreen() {
   const { editId: editParam } = useLocalSearchParams<{ editId?: string }>();
   const editId = Array.isArray(editParam) ? editParam[0] : editParam;
   const { addExpense, updateExpense, getById } = useExpenses();
+  const { showToast, showError } = useToast();
+  const { currency: defaultCurrency } = useCurrency();
   const existing = editId ? getById(editId) : undefined;
   const editing = Boolean(existing);
+  const currency = existing?.currency || defaultCurrency;
 
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
   const [merchant, setMerchant] = useState('');
   const [category, setCategory] = useState<ExpenseCategory>('other');
   const [date, setDate] = useState(localDayKey());
+  const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [hydrated, setHydrated] = useState(!editId);
 
@@ -54,6 +62,7 @@ export default function ExpenseFormScreen() {
     setMerchant(e.merchant || '');
     setCategory(e.category);
     setDate(e.date || localDayKey());
+    setNote(e.note || '');
     setHydrated(true);
   }, [editId, getById]);
 
@@ -68,22 +77,30 @@ export default function ExpenseFormScreen() {
         await updateExpense(existing.id, {
           title: title.trim(),
           amount: amountNum,
+          currency,
           category,
           date: date.trim() || localDayKey(),
           merchant: merchant.trim() || undefined,
+          note: note.trim() || undefined,
         });
+        showToast('Expense updated');
         router.replace(`/expenses/${existing.id}` as Href);
       } else {
         const expense = await addExpense({
           title: title.trim(),
           amount: amountNum,
+          currency,
           category,
           date: date.trim() || undefined,
           merchant: merchant.trim() || undefined,
+          note: note.trim() || undefined,
           source: 'manual',
         });
+        showToast('Expense logged');
         router.replace(`/expenses/${expense.id}` as Href);
       }
+    } catch {
+      showError('Couldn’t save the expense — try again.');
     } finally {
       setSaving(false);
     }
@@ -132,10 +149,10 @@ export default function ExpenseFormScreen() {
             autoFocus={!editing}
           />
 
-          <Text style={styles.label}>Amount (AED)</Text>
+          <Text style={styles.label}>Amount ({currency})</Text>
           <TextInput
             value={amount}
-            onChangeText={setAmount}
+            onChangeText={(t) => setAmount(sanitizeAmountInput(t))}
             placeholder="0.00"
             placeholderTextColor={colors.faint}
             style={styles.input}
@@ -151,14 +168,16 @@ export default function ExpenseFormScreen() {
             style={styles.input}
           />
 
-          <Text style={styles.label}>Date (YYYY-MM-DD)</Text>
+          <Text style={styles.label}>Date</Text>
+          <DateField value={date} onChange={setDate} />
+
+          <Text style={styles.label}>Note (optional)</Text>
           <TextInput
-            value={date}
-            onChangeText={setDate}
-            placeholder="2026-08-10"
+            value={note}
+            onChangeText={setNote}
+            placeholder="e.g. Split with Maya"
             placeholderTextColor={colors.faint}
             style={styles.input}
-            autoCapitalize="none"
           />
 
           <Text style={styles.label}>Category</Text>
@@ -186,6 +205,13 @@ export default function ExpenseFormScreen() {
               {saving ? 'Saving…' : editing ? 'Save changes' : 'Save expense'}
             </Text>
           </Pressable>
+          {!canSave ? (
+            <Text style={styles.saveHint}>
+              {!title.trim()
+                ? 'Add what this was for to save.'
+                : 'Enter an amount above 0 to save.'}
+            </Text>
+          ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
     </Screen>
@@ -195,7 +221,8 @@ export default function ExpenseFormScreen() {
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
   content: {
-    padding: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xs,
   },
   label: {
     fontFamily: fonts.sansMedium,
@@ -253,7 +280,14 @@ function makeStyles(colors: ThemeColors) {
   saveText: {
     fontFamily: fonts.sansSemi,
     fontSize: 16,
-    color: colors.pure,
+    color: colors.forestOn,
+  },
+  saveHint: {
+    fontFamily: fonts.sans,
+    fontSize: 14,
+    color: colors.mute,
+    textAlign: 'center',
+    marginTop: spacing.sm,
   },
 });
 }

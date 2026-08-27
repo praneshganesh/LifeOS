@@ -1,5 +1,6 @@
 import { localDayKey } from '@/lib/dates';
 import type { Icon3DName } from '@/components/ui/Icon3D';
+import { getRuntimeDefaultCurrency } from '@/lib/currency';
 
 export type ExpenseCategory =
   | 'food'
@@ -26,6 +27,8 @@ export type Expense = {
   note?: string;
   /** Local receipt image URI */
   receiptUri?: string;
+  /** POS slip / transaction id from OCR — used to block re-scans */
+  receiptRef?: string;
   /** Optional link to a Thing */
   inventoryItemId?: string;
   personId?: string;
@@ -42,6 +45,7 @@ export type NewExpenseInput = {
   merchant?: string;
   note?: string;
   receiptUri?: string;
+  receiptRef?: string;
   inventoryItemId?: string;
   personId?: string;
   source?: Expense['source'];
@@ -83,17 +87,20 @@ export function parseAmount(raw: string | number | undefined | null): number {
 
 export function formatAmount(
   amount: number,
-  currency = 'AED',
+  currency?: string,
   locale?: string
 ): string {
+  const cur =
+    (currency && currency.trim().toUpperCase()) ||
+    getRuntimeDefaultCurrency();
   try {
     return new Intl.NumberFormat(locale, {
       style: 'currency',
-      currency,
+      currency: cur,
       maximumFractionDigits: 2,
     }).format(amount);
   } catch {
-    return `${currency} ${amount.toFixed(2)}`;
+    return `${cur} ${amount.toFixed(2)}`;
   }
 }
 
@@ -112,12 +119,13 @@ export function createExpense(input: NewExpenseInput): Expense {
     id: input.id ?? `exp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     title,
     amount: input.amount,
-    currency: (input.currency || 'AED').toUpperCase(),
+    currency: (input.currency || getRuntimeDefaultCurrency()).toUpperCase(),
     category: input.category || 'other',
     date: input.date || today,
     merchant: input.merchant?.trim() || undefined,
     note: input.note?.trim() || undefined,
     receiptUri: input.receiptUri,
+    receiptRef: input.receiptRef?.trim() || undefined,
     inventoryItemId: input.inventoryItemId,
     personId: input.personId,
     source: input.source || 'manual',
@@ -125,22 +133,53 @@ export function createExpense(input: NewExpenseInput): Expense {
   };
 }
 
-/** Same title + amount + day → treat as duplicate (Talk retries). */
+/** Lowercase alphanumeric merchant key for fuzzy receipt matching. */
+export function normalizeMerchantKey(raw: string | undefined): string {
+  return (raw || '')
+    .toLowerCase()
+    .replace(/\s+purchase$/i, '')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+/** Same receipt → treat as duplicate (capture re-scans, Talk retries). */
 export function findDuplicateExpense(
   list: Expense[],
-  input: Pick<NewExpenseInput, 'title' | 'amount' | 'date' | 'currency'>
+  input: Pick<
+    NewExpenseInput,
+    'title' | 'amount' | 'date' | 'currency' | 'merchant' | 'receiptRef'
+  >
 ): Expense | undefined {
-  const title = (input.title || '').trim().toLowerCase();
+  const ref = (input.receiptRef || '').trim();
+  if (ref) {
+    const byRef = list.find((e) => e.receiptRef === ref);
+    if (byRef) return byRef;
+  }
+
   const date = (input.date || localDayKey()).slice(0, 10);
-  const currency = (input.currency || 'AED').toUpperCase();
+  const currency = input.currency?.trim().toUpperCase();
   const amount = Number(input.amount);
-  if (!title || !Number.isFinite(amount)) return undefined;
+  if (!Number.isFinite(amount)) return undefined;
+
+  const merchantKey = normalizeMerchantKey(input.merchant);
+  if (merchantKey) {
+    const byMerchant = list.find(
+      (e) =>
+        normalizeMerchantKey(e.merchant || e.title) === merchantKey &&
+        e.date.slice(0, 10) === date &&
+        Math.abs(e.amount - amount) < 0.005 &&
+        (!currency || e.currency.toUpperCase() === currency)
+    );
+    if (byMerchant) return byMerchant;
+  }
+
+  const title = (input.title || '').trim().toLowerCase();
+  if (!title) return undefined;
   return list.find(
     (e) =>
       e.title.trim().toLowerCase() === title &&
       e.date.slice(0, 10) === date &&
-      e.currency.toUpperCase() === currency &&
-      Math.abs(e.amount - amount) < 0.005
+      Math.abs(e.amount - amount) < 0.005 &&
+      (!currency || e.currency.toUpperCase() === currency)
   );
 }
 
@@ -187,12 +226,13 @@ export function normalizeExpense(raw: unknown): Expense | null {
     id: o.id,
     title: String(o.title),
     amount: o.amount,
-    currency: (o.currency || 'AED').toUpperCase(),
+    currency: (o.currency || getRuntimeDefaultCurrency()).toUpperCase(),
     category: (o.category as ExpenseCategory) || 'other',
     date: o.date || o.createdAt?.slice(0, 10) || localDayKey(),
     merchant: o.merchant,
     note: o.note,
     receiptUri: o.receiptUri,
+    receiptRef: o.receiptRef,
     inventoryItemId: o.inventoryItemId,
     personId: o.personId,
     source: o.source || 'manual',

@@ -50,13 +50,13 @@ export default function PlanSettingsScreen() {
       ? daysLeft > 0
         ? `Trial — ${daysLeft} day${daysLeft === 1 ? '' : 's'} left of ${TRIAL_DAYS}. Full Pro.`
         : 'Trial ended. Billing needs an Apple Developer account — nothing is locked yet.'
-      : `You’re on ${plan.name} (local). App Store billing comes later.`;
+      : `You’re on ${plan.name}. App Store billing comes later.`;
 
   async function selectPlan(id: PlanId) {
     if (id === planId) return;
     Alert.alert(
-      'Local plan only',
-      'App Store billing isn’t connected yet (needs Apple Developer / DUNS). This only switches the on-device label — no charge.'
+      'Plan preview',
+      'App Store billing isn’t connected yet (needs Apple Developer / DUNS). This only switches the plan label — no charge.'
     );
     const next: PlanPrefs = {
       planId: id,
@@ -68,7 +68,7 @@ export default function PlanSettingsScreen() {
 
   return (
     <ModuleScreen title="Plan & billing" subtitle={subtitle}>
-      <ModuleSection label="On this device">
+      <ModuleSection label="Your usage">
         <ListCard>
           <MeterRow title="Things" meter={meters.assets} colors={colors} />
           <MeterRow title="Homes" meter={meters.homes} colors={colors} />
@@ -109,7 +109,7 @@ export default function PlanSettingsScreen() {
               {current ? (
                 <Text style={[styles.current, { color: colors.forest }]}>Current</Text>
               ) : (
-                <Text style={[styles.cta, { color: colors.slate }]}>Preview on this device</Text>
+                <Text style={[styles.cta, { color: colors.slate }]}>Preview this plan</Text>
               )}
             </Pressable>
           );

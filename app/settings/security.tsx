@@ -87,7 +87,7 @@ export default function SecuritySettingsScreen() {
           return;
         }
         const result = await LocalAuthentication.authenticateAsync({
-          promptMessage: 'Confirm to enable LifeOS lock',
+          promptMessage: 'Confirm to enable Saavi lock',
           disableDeviceFallback: false,
         });
         if (!result.success) return;
@@ -104,7 +104,7 @@ export default function SecuritySettingsScreen() {
   return (
     <ModuleScreen
       title="Security"
-      subtitle="Biometrics stay on this device — LifeOS never sees your Face ID data."
+      subtitle="Biometrics stay on this device — Saavi never sees your Face ID data."
     >
       <ModuleSection label="Device">
         <ListCard>
@@ -114,7 +114,7 @@ export default function SecuritySettingsScreen() {
               Platform.OS === 'web'
                 ? 'Not available on web'
                 : hardwareOk
-                  ? 'Unlock LifeOS after launch or auto-lock'
+                  ? 'Unlock Saavi after launch or auto-lock'
                   : 'Set up biometrics in system Settings'
             }
             value={prefs.biometrics}

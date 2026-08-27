@@ -1,5 +1,6 @@
 import { localDayKey } from '@/lib/dates';
 import type { Icon3DName } from '@/components/ui/Icon3D';
+import { getRuntimeDefaultCurrency } from '@/lib/currency';
 import { formatAmount, parseAmount } from '@/lib/expenses';
 
 export type SubscriptionCycle = 'weekly' | 'monthly' | 'yearly';
@@ -106,7 +107,7 @@ export function createSubscription(input: NewSubscriptionInput): Subscription {
     id: input.id ?? `sub-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     title,
     amount: input.amount,
-    currency: (input.currency || 'AED').toUpperCase(),
+    currency: (input.currency || getRuntimeDefaultCurrency()).toUpperCase(),
     cycle,
     renewsOn: input.renewsOn || defaultRenewsOn(cycle),
     category: input.category || guessSubscriptionCategory(title),
@@ -127,15 +128,15 @@ export function findDuplicateSubscription(
 ): Subscription | undefined {
   const title = (input.title || '').trim().toLowerCase();
   const cycle = input.cycle || 'monthly';
-  const currency = (input.currency || 'AED').toUpperCase();
+  const currency = input.currency?.trim().toUpperCase();
   const amount = Number(input.amount);
   if (!title || !Number.isFinite(amount)) return undefined;
   return list.find(
     (s) =>
       s.title.trim().toLowerCase() === title &&
       s.cycle === cycle &&
-      s.currency.toUpperCase() === currency &&
-      Math.abs(s.amount - amount) < 0.005
+      Math.abs(s.amount - amount) < 0.005 &&
+      (!currency || s.currency.toUpperCase() === currency)
   );
 }
 
@@ -211,7 +212,7 @@ export function normalizeSubscription(raw: unknown): Subscription | null {
     id: o.id,
     title: String(o.title),
     amount: o.amount,
-    currency: (o.currency || 'AED').toUpperCase(),
+    currency: (o.currency || getRuntimeDefaultCurrency()).toUpperCase(),
     cycle,
     renewsOn: o.renewsOn || defaultRenewsOn(cycle),
     category: normalizeSubscriptionCategory(o.category),

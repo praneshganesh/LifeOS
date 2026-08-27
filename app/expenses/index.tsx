@@ -7,6 +7,7 @@ import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { ListCard, ListRow, StatStrip } from '@/components/ui/ListKit';
 import { Text } from '@/components/ui/Text';
 import { useExpenses } from '@/lib/ExpensesContext';
+import { getRuntimeDefaultCurrency } from '@/lib/currency';
 import {
   currentMonthKey,
   expensesInMonth,
@@ -27,12 +28,12 @@ export default function ExpensesScreen() {
   const thisMonth = useMemo(() => expensesInMonth(expenses, month), [expenses, month]);
   const monthTotal = sumExpenses(thisMonth);
   const byCategory = useMemo(() => totalsByCategory(thisMonth).slice(0, 4), [thisMonth]);
-  const currency = thisMonth[0]?.currency || expenses[0]?.currency || 'AED';
+  const currency = thisMonth[0]?.currency || expenses[0]?.currency || getRuntimeDefaultCurrency();
 
   return (
     <ModuleScreen
       title="Expenses"
-      subtitle="Spend on this device — Talk insights come next."
+      subtitle="Your spending, logged from receipts and Talk."
       right={
         <Pressable
           onPress={() => router.push('/expenses/create' as Href)}

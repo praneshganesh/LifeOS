@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
@@ -22,11 +23,15 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { FileText, Image as ImageIcon, RefreshCw, X } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
+import { OptionalDateField } from '@/components/ui/DateField';
 import { blurActiveElement } from '@/lib/a11y';
 import { localDayKey } from '@/lib/dates';
+import { parseDateInput } from '@/lib/lastDone';
 import { recognizeImage } from '@/lib/ocr/recognize';
 import {
   extractReceiptHints,
+  extractReceiptRef,
+  receiptTitleFromOcr,
   suggestReceiptDestination,
   type ReceiptSaveDestination,
 } from '@/lib/ocr/receiptHints';
@@ -34,7 +39,10 @@ import { useInventory } from '@/lib/InventoryContext';
 import { useExpenses } from '@/lib/ExpensesContext';
 import { messageForPlanLimit } from '@/lib/planLimits';
 import { persistLocalMediaUri } from '@/lib/mediaPersist';
-import { guessExpenseCategory, parseAmount } from '@/lib/expenses';
+import { pickFileWeb } from '@/lib/pickFileWeb';
+import { guessExpenseCategory, parseAmount, findDuplicateExpense, formatAmount, type Expense, type NewExpenseInput } from '@/lib/expenses';
+import { currencyFromSpokenText, sanitizeAmountInput } from '@/lib/currency';
+import { useCurrency } from '@/lib/CurrencyContext';
 import { resolveCapturePreset } from '@/lib/captureContext';
 import {
   findTalkMatches,
@@ -84,7 +92,8 @@ export default function CaptureModal() {
       : 'photo';
   const forcedLink = Boolean(linkItemId);
   const { addItem, updateItem, items, getById } = useInventory();
-  const { addExpense } = useExpenses();
+  const { addExpense, expenses } = useExpenses();
+  const { currency: defaultCurrency } = useCurrency();
   const linkedItem = linkItemId ? getById(linkItemId) : undefined;
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
@@ -114,6 +123,8 @@ export default function CaptureModal() {
   const [receiptLooksLike, setReceiptLooksLike] = useState(false);
   const [ocrText, setOcrText] = useState('');
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [duplicateExpense, setDuplicateExpense] = useState<Expense | null>(null);
   const [matchCandidates, setMatchCandidates] = useState<TalkMatch[]>([]);
   const [linkedStubId, setLinkedStubId] = useState<string | null>(null);
   const [browseStubs, setBrowseStubs] = useState(false);
@@ -163,11 +174,84 @@ export default function CaptureModal() {
     setSaveDestination('thing');
     setReceiptLooksLike(false);
     setBrowseStubs(false);
+    setSaveError('');
+    setDuplicateExpense(null);
+  }
+
+  function expenseDraftFromForm(): Pick<
+    NewExpenseInput,
+    'title' | 'amount' | 'date' | 'currency' | 'merchant' | 'receiptRef'
+  > | null {
+    const amountNum = parseAmount(price);
+    if (!Number.isFinite(amountNum) || amountNum <= 0) return null;
+    const merchant = purchasedFrom.trim() || brand.trim();
+    return {
+      title: name.trim() || `${merchant || 'Expense'} purchase`,
+      amount: amountNum,
+      date: purchaseDate.trim() || localDayKey(),
+      currency:
+        currencyFromSpokenText(price) ||
+        currencyFromSpokenText(ocrText) ||
+        defaultCurrency,
+      merchant,
+      receiptRef: extractReceiptRef(ocrText),
+    };
+  }
+
+  function refreshDuplicateCheck() {
+    const draft = expenseDraftFromForm();
+    if (!draft) {
+      setDuplicateExpense(null);
+      return;
+    }
+    setDuplicateExpense(findDuplicateExpense(expenses, draft) ?? null);
+  }
+
+  useEffect(() => {
+    if (phase !== 'review') return;
+    refreshDuplicateCheck();
+  }, [
+    phase,
+    expenses,
+    price,
+    purchasedFrom,
+    brand,
+    name,
+    purchaseDate,
+    ocrText,
+  ]);
+
+  function applyReceiptFromOcr(
+    text: string,
+    hints: ReturnType<typeof extractReceiptHints>
+  ) {
+    const nextName = receiptTitleFromOcr(text, hints);
+    setName(nextName);
+    setIsDocument(false);
+    setDocKind('unknown');
+    if (hints.brand) setBrand(hints.brand);
+    if (hints.serial) setSerial(hints.serial);
+    if (hints.price) setPrice(hints.price);
+    if (hints.purchaseDate) setPurchaseDate(hints.purchaseDate);
+    if (hints.merchant) setPurchasedFrom(hints.merchant);
+    setReceiptLooksLike(true);
+    const dest =
+      attachKind === 'receipt' && hints.price
+        ? suggestReceiptDestination({ ...hints, looksLikeReceipt: true })
+        : attachKind === 'receipt'
+          ? 'both'
+          : suggestReceiptDestination(hints);
+    setSaveDestination(dest);
+    if (dest === 'document') setIsDocument(true);
+    setStatus('Receipt read on device — confirm amount and log as expense.');
+    setOcrNote('On-device OCR. Pick Expense (or both) — then save.');
+    proposeTalkLinks(nextName, hints.brand || '', text);
+    return nextName;
   }
 
   function applyContextDefaults(asDocument: boolean) {
     setIsDocument(asDocument);
-    if (!asDocument && !forcedLink) {
+    if (!asDocument && !forcedLink && !receiptLooksLike) {
       setName(preset.defaultName);
       setBrand('');
     }
@@ -205,6 +289,25 @@ export default function CaptureModal() {
 
     const result = await recognizeImage(uri);
     setOcrText(result.text || '');
+    // Surface OCR failure — otherwise blank fields read as "found nothing"
+    // when the engine never ran at all.
+    if (result.engine === 'none') {
+      setOcrNote(
+        'Couldn’t read the photo automatically — fill in the details below and save.'
+      );
+    }
+    const receiptHints = extractReceiptHints(result.text);
+    // Policy schedules and IDs also contain "total/amount" + prices — don't
+    // let those route to Expense just because they mention money.
+    const looksLikeDocInstead = /\b(policy|premium|passport|emirates\s*id|identity\s*card|certificate)\b/i.test(
+      result.text
+    );
+    const receiptFirst =
+      receiptHints.looksLikeReceipt &&
+      !looksLikeDocInstead &&
+      (receiptHints.price ||
+        receiptHints.merchant ||
+        /\b(invoice|receipt|tax\s*invoice)\b/i.test(result.text));
 
     if (forcedLink && linkedItem) {
       // Attach to existing item — keep identity, enrich from OCR when useful
@@ -228,9 +331,15 @@ export default function CaptureModal() {
         }
       }
       setOcrNote(
-        `Attaching ${attachKind === 'receipt' ? 'receipt' : 'photo'} to ${linkedItem.name}. Text stays on this device.`
+        `Attaching ${attachKind === 'receipt' ? 'receipt' : 'photo'} to ${linkedItem.name}.`
       );
       setStatus(`Ready to attach to ${linkedItem.name}`);
+      setPhase('review');
+      return;
+    }
+
+    if (receiptFirst) {
+      applyReceiptFromOcr(result.text, receiptHints);
       setPhase('review');
       return;
     }
@@ -272,41 +381,17 @@ export default function CaptureModal() {
     } else {
       applyContextDefaults(false);
       setDocKind('unknown');
-      const hints = extractReceiptHints(result.text);
-      let nextName = preset.defaultName;
-      let nextBrand = '';
-      if (hints.name) {
-        nextName = hints.name;
-        setName(hints.name);
-      }
-      if (hints.brand) {
-        nextBrand = hints.brand;
-        setBrand(hints.brand);
-      }
-      if (hints.serial) setSerial(hints.serial);
-      if (hints.price) setPrice(hints.price);
-      if (hints.purchaseDate) setPurchaseDate(hints.purchaseDate);
-      if (hints.merchant) setPurchasedFrom(hints.merchant);
-      if (hints.looksLikeReceipt || attachKind === 'receipt') {
-        setReceiptLooksLike(true);
-        const dest =
-          attachKind === 'receipt' && hints.price
-            ? suggestReceiptDestination({ ...hints, looksLikeReceipt: true })
-            : attachKind === 'receipt'
-              ? 'both'
-              : suggestReceiptDestination(hints);
-        setSaveDestination(dest);
-        if (dest === 'document') setIsDocument(true);
-        setStatus('Receipt text read on device — choose how to file it.');
-        setOcrNote(
-          'On-device OCR. Pick Thing, Expense, both, or Document — then save.'
-        );
+      // attachKind === 'receipt' is explicit user intent and overrides the
+      // policy/ID keyword guard; bare hints do not.
+      if ((receiptHints.looksLikeReceipt && !looksLikeDocInstead) || attachKind === 'receipt') {
+        applyReceiptFromOcr(result.text, receiptHints);
       } else {
+        setName(preset.defaultName);
         setReceiptLooksLike(false);
         setSaveDestination('thing');
         setStatus(`No document MRZ found — saving to ${preset.label}.`);
+        proposeTalkLinks(preset.defaultName, '', result.text);
       }
-      proposeTalkLinks(nextName, nextBrand, result.text);
     }
 
     setPhase('review');
@@ -332,6 +417,14 @@ export default function CaptureModal() {
 
   async function pickImage() {
     try {
+      if (Platform.OS === 'web') {
+        // Own input with a no-HEIC accept list — iOS then converts library
+        // photos to JPEG on pick. expo-image-picker's image/* hands us raw
+        // HEIC that neither the browser nor Tesseract can decode.
+        const picked = await pickFileWeb();
+        if (picked?.uri) await processUri(picked.uri);
+        return;
+      }
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) {
         Alert.alert(
@@ -355,6 +448,24 @@ export default function CaptureModal() {
 
   async function pickDocument() {
     try {
+      if (Platform.OS === 'web') {
+        // Same no-HEIC accept list as pickImage, plus PDFs.
+        const picked = await pickFileWeb({ acceptPdf: true });
+        if (!picked?.uri) return;
+        if (picked.mimeType.includes('pdf')) {
+          setPhotoUri(picked.uri);
+          setIsDocument(true);
+          setDocKind('unknown');
+          setName(
+            picked.fileName?.replace(/\.pdf$/i, '') || preset.defaultName
+          );
+          setOcrNote('PDF stored. Open a photo of the ID page for MRZ reading.');
+          setPhase('review');
+          return;
+        }
+        await processUri(picked.uri);
+        return;
+      }
       const res = await DocumentPicker.getDocumentAsync({
         type: ['image/*', 'application/pdf'],
         copyToCacheDirectory: true,
@@ -378,9 +489,15 @@ export default function CaptureModal() {
     }
   }
 
-  async function save() {
+  function dismissCaptureAfterSave() {
+    if (router.canGoBack()) router.back();
+    else router.replace('/(tabs)' as Href);
+  }
+
+  async function save(opts?: { scanAnother?: boolean }) {
     if (saving) return;
     setSaving(true);
+    setSaveError('');
     try {
       const asDocument =
         isDocument || (!forcedLink && saveDestination === 'document');
@@ -417,7 +534,11 @@ export default function CaptureModal() {
             : preset.category;
 
       const fields = {
-        name: name.trim() || preset.defaultName,
+        name:
+          name.trim() ||
+          (receiptLooksLike
+            ? receiptTitleFromOcr(ocrText, extractReceiptHints(ocrText))
+            : preset.defaultName),
         brand: brand.trim() || (asDocument ? 'Document' : 'Unknown'),
         serial: serial.trim() || docNumber.trim() || '—',
         price: price.trim() || '—',
@@ -488,85 +609,52 @@ export default function CaptureModal() {
         Number.isFinite(amountNum) &&
         amountNum > 0;
 
+      const expenseDraft = expenseDraftFromForm();
+      if (shouldExpense && expenseDraft) {
+        const dup = findDuplicateExpense(expenses, expenseDraft);
+        if (dup) {
+          setDuplicateExpense(dup);
+          setSaveError('This receipt is already logged.');
+          return;
+        }
+      }
+
       if (shouldExpense) {
         const expense = await addExpense({
           title: fields.name,
           amount: amountNum,
-          currency: /\bUSD\b/i.test(fields.price) ? 'USD' : 'AED',
+          currency:
+            currencyFromSpokenText(fields.price) ||
+            currencyFromSpokenText(ocrText) ||
+            defaultCurrency,
           category: guessExpenseCategory(
             `${fields.name} ${fields.purchasedFrom || ''} ${fields.category}`
           ),
           date: fields.purchaseDate,
           merchant: fields.purchasedFrom,
           receiptUri: fields.imageUri,
+          receiptRef: expenseDraft?.receiptRef,
           inventoryItemId: savedId ?? undefined,
           source: 'capture',
         });
         expenseId = expense.id;
       } else if (expenseOnly) {
-        Alert.alert('Add a price', 'Expense-only save needs an amount.');
+        setSaveError('Add an amount in Price — expense needs a number greater than zero.');
         return;
       }
 
       blurActiveElement();
-      if (forcedLink && savedId) {
-        Alert.alert(
-          attachKind === 'receipt' ? 'Receipt attached' : 'Photo attached',
-          fields.name,
-          [
-            {
-              text: 'View item',
-              onPress: () => router.replace(`/asset/${savedId}` as Href),
-            },
-            {
-              text: 'Done',
-              style: 'cancel',
-              onPress: () => {
-                if (router.canGoBack()) router.back();
-                else router.replace(`/asset/${savedId}` as Href);
-              },
-            },
-          ]
-        );
-      } else if (expenseOnly && expenseId) {
-        Alert.alert('Expense logged', fields.name, [
-          {
-            text: 'Capture another',
-            onPress: () => resetToCamera(),
-          },
-          {
-            text: 'View expense',
-            onPress: () => router.replace(`/expenses/${expenseId}` as Href),
-          },
-          {
-            text: 'Done',
-            style: 'cancel',
-            onPress: () => {
-              if (router.canGoBack()) router.back();
-              else router.replace('/expenses' as Href);
-            },
-          },
-        ]);
-      } else if (savedId) {
-        Alert.alert('Saved on this device', fields.name, [
-          {
-            text: 'Capture another',
-            onPress: () => resetToCamera(),
-          },
-          {
-            text: 'View item',
-            onPress: () => router.replace(`/asset/${savedId}` as Href),
-          },
-          {
-            text: 'Done',
-            style: 'cancel',
-            onPress: () => {
-              if (router.canGoBack()) router.back();
-              else router.replace('/(tabs)' as Href);
-            },
-          },
-        ]);
+
+      if (opts?.scanAnother) {
+        resetToCamera();
+        setStatus('Ready for the next receipt.');
+        setOcrNote('Previous entry saved.');
+        return;
       }
+
+      // Capture is a full-screen modal — dismiss back to Today/Ask instead of
+      // pushing detail screens the user has to claw back from.
+      dismissCaptureAfterSave();
     } catch (err) {
       console.error('Save failed', err);
       Alert.alert('Couldn’t save', messageForPlanLimit(err) || 'Try again in a moment.');
@@ -584,8 +672,8 @@ export default function CaptureModal() {
       <View style={[styles.black, styles.centered, { paddingTop: insets.top }]}>
         <Text style={styles.permTitle}>Camera access needed</Text>
         <Text style={styles.permBody}>
-          Capture for {preset.label}. You can also upload a photo or PDF — text stays on
-          this device.
+          Capture for {preset.label}. You can also upload a photo or PDF — text is
+          read automatically.
         </Text>
         <Pressable
           onPress={() => void requestPermission()}
@@ -618,7 +706,12 @@ export default function CaptureModal() {
 
   if (phase === 'review' && photoUri) {
     return (
-      <View style={[styles.reviewRoot, { paddingTop: insets.top + 8 }]}>
+      // KAV so the absolute-positioned save bar lifts above the keyboard —
+      // otherwise editing a lower field leaves Save unreachable.
+      <KeyboardAvoidingView
+        style={[styles.reviewRoot, { paddingTop: insets.top + 8 }]}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
         <View style={styles.reviewTop}>
           <Pressable onPress={resetToCamera} hitSlop={8}>
             <Text style={styles.reviewLink}>Retake</Text>
@@ -632,6 +725,7 @@ export default function CaptureModal() {
         <ScrollView
           contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
           <Image source={{ uri: photoUri }} style={styles.preview} />
 
@@ -639,21 +733,28 @@ export default function CaptureModal() {
             <Text style={styles.contextChipText}>
               {forcedLink && linkedItem
                 ? `Attach to ${linkedItem.name}`
-                : `Saving to ${preset.label}`}
+                : receiptLooksLike &&
+                    (saveDestination === 'expense' || saveDestination === 'both')
+                  ? 'Logging expense'
+                  : receiptLooksLike
+                    ? 'From receipt'
+                    : `Saving to ${preset.label}`}
             </Text>
             <Text style={styles.contextChipMeta}>
               {forcedLink
                 ? attachKind === 'receipt'
-                  ? 'Receipt · stays on this device'
-                  : 'Photo · stays on this device'
-                : `${preset.room}${preset.category ? ` · ${preset.category}` : ''}`}
+                  ? 'Receipt'
+                  : 'Photo'
+                : receiptLooksLike
+                  ? purchasedFrom || name || 'Receipt scan'
+                  : `${preset.room}${preset.category ? ` · ${preset.category}` : ''}`}
             </Text>
           </View>
 
           <View style={styles.privacyBanner}>
             <Text style={styles.privacyText}>
               {ocrNote ||
-                'Check the fields, then save. Text stays on this device.'}
+                'Check the fields, then save.'}
             </Text>
           </View>
 
@@ -661,7 +762,7 @@ export default function CaptureModal() {
             <View style={styles.matchCard}>
               <Text style={styles.matchTitle}>Link to a Talk item?</Text>
               <Text style={styles.matchLead}>
-                Added on the go earlier — confirm to attach this receipt. Matched on-device.
+                Added on the go earlier — confirm to attach this receipt. Matched automatically.
               </Text>
               {matchCandidates.map((m) => {
                 const on = linkedStubId === m.item.id;
@@ -740,7 +841,7 @@ export default function CaptureModal() {
             // Keep attach flow light — no enterprise form dump
             <>
               {(!price || price === '—') && attachKind === 'receipt' ? (
-                <Field label="Price (optional)" value={price} onChange={setPrice} placeholder="AED 0" />
+                <Field label="Price (optional)" value={price} onChange={(t) => setPrice(sanitizeAmountInput(t))} placeholder={`${defaultCurrency} 0`} />
               ) : null}
               {attachKind === 'receipt' && (!purchasedFrom || purchasedFrom === '') ? (
                 <Field
@@ -757,27 +858,38 @@ export default function CaptureModal() {
               {isDocument ? (
                 <>
                   <Field label="Full name" value={fullName} onChange={setFullName} />
-                  <Field label="Document number" value={docNumber} onChange={setDocNumber} />
+                  <Field
+                    label="Document number"
+                    value={docNumber}
+                    onChange={setDocNumber}
+                    autoCorrect={false}
+                    autoCapitalize="characters"
+                  />
                   <Field label="Nationality" value={nationality} onChange={setNationality} />
-                  <Field label="Date of birth" value={dob} onChange={setDob} placeholder="YYYY-MM-DD" />
-                  <Field label="Expiry" value={expiry} onChange={setExpiry} placeholder="YYYY-MM-DD" />
+                  <DateRow label="Date of birth" value={dob} onChange={setDob} />
+                  <DateRow label="Expiry" value={expiry} onChange={setExpiry} />
                 </>
               ) : (
                 <>
                   <Field label="Brand" value={brand} onChange={setBrand} />
-                  <Field label="Serial" value={serial} onChange={setSerial} />
-                  <Field label="Price" value={price} onChange={setPrice} placeholder="AED 0" />
+                  <Field
+                    label="Serial"
+                    value={serial}
+                    onChange={setSerial}
+                    autoCorrect={false}
+                    autoCapitalize="characters"
+                  />
+                  <Field label="Price" value={price} onChange={(t) => setPrice(sanitizeAmountInput(t))} placeholder={`${defaultCurrency} 0`} />
                   <Field
                     label="Bought from"
                     value={purchasedFrom}
                     onChange={setPurchasedFrom}
                     placeholder="Amazon, Sharaf DG…"
                   />
-                  <Field
+                  <DateRow
                     label="Purchase date"
                     value={purchaseDate}
                     onChange={setPurchaseDate}
-                    placeholder="YYYY-MM-DD"
                   />
                 </>
               )}
@@ -829,18 +941,47 @@ export default function CaptureModal() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.expenseTitle}>Also log as expense</Text>
                 <Text style={styles.expenseHint}>
-                  Keeps spend in Expenses when there’s a price — on this device.
+                  Keeps spend in Expenses when there’s a price.
                 </Text>
               </View>
             </Pressable>
           ) : null}
 
+          {duplicateExpense &&
+          (saveDestination === 'expense' || saveDestination === 'both') ? (
+            <View style={styles.duplicateCard}>
+              <Text style={styles.duplicateTitle}>Already logged</Text>
+              <Text style={styles.duplicateBody}>
+                {formatAmount(duplicateExpense.amount, duplicateExpense.currency)} at{' '}
+                {duplicateExpense.merchant || duplicateExpense.title} on{' '}
+                {duplicateExpense.date.slice(0, 10)}. Scan a different receipt.
+              </Text>
+              <Pressable
+                onPress={() =>
+                  router.replace(`/expenses/${duplicateExpense.id}` as Href)
+                }
+                hitSlop={8}
+              >
+                <Text style={styles.duplicateLink}>View existing entry</Text>
+              </Pressable>
+            </View>
+          ) : null}
+
         </ScrollView>
 
         <View style={[styles.saveBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+          {saveError ? (
+            <Text style={styles.saveError}>{saveError}</Text>
+          ) : null}
           <Pressable
             onPress={() => void save()}
-            disabled={saving}
+            disabled={
+              saving ||
+              Boolean(
+                duplicateExpense &&
+                  (saveDestination === 'expense' || saveDestination === 'both')
+              )
+            }
             style={({ pressed }) => [
               styles.saveBtn,
               pressed && { opacity: 0.92 },
@@ -857,7 +998,9 @@ export default function CaptureModal() {
                   : linkedStubId
                     ? 'Link & save'
                     : saveDestination === 'expense'
-                      ? 'Log expense'
+                      ? duplicateExpense
+                        ? 'Already logged'
+                        : 'Log expense'
                       : saveDestination === 'both'
                         ? 'Save Thing & expense'
                         : saveDestination === 'document'
@@ -865,8 +1008,20 @@ export default function CaptureModal() {
                           : 'Save'}
             </Text>
           </Pressable>
+          {(receiptLooksLike || attachKind === 'receipt') &&
+          !forcedLink &&
+          (saveDestination === 'expense' || saveDestination === 'both') &&
+          !duplicateExpense ? (
+            <Pressable
+              onPress={() => void save({ scanAnother: true })}
+              disabled={saving}
+              style={({ pressed }) => [styles.saveSecondary, pressed && { opacity: 0.75 }]}
+            >
+              <Text style={styles.saveSecondaryText}>Log & scan another</Text>
+            </Pressable>
+          ) : null}
         </View>
-      </View>
+      </KeyboardAvoidingView>
     );
   }
 
@@ -945,11 +1100,15 @@ function Field({
   value,
   onChange,
   placeholder,
+  autoCorrect,
+  autoCapitalize,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
+  autoCorrect?: boolean;
+  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
 }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -961,7 +1120,33 @@ function Field({
         onChangeText={onChange}
         placeholder={placeholder}
         placeholderTextColor={colors.faint}
+        autoCorrect={autoCorrect}
+        autoCapitalize={autoCapitalize}
         style={styles.input}
+      />
+    </View>
+  );
+}
+
+function DateRow({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  return (
+    <View style={styles.field}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <OptionalDateField
+        // OCR can leave non-ISO junk here — show it as "not set" so the
+        // picker always round-trips a clean YYYY-MM-DD.
+        value={parseDateInput(value) ? value : ''}
+        onChange={onChange}
       />
     </View>
   );
@@ -1324,6 +1509,32 @@ function makeStyles(colors: ThemeColors) {
     paddingHorizontal: spacing.md,
     paddingVertical: 12,
   },
+  duplicateCard: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.amberSoft,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.amber,
+  },
+  duplicateTitle: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 16,
+    color: colors.ink,
+  },
+  duplicateBody: {
+    fontFamily: fonts.sans,
+    fontSize: 16,
+    color: colors.slate,
+    marginTop: 4,
+  },
+  duplicateLink: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 16,
+    color: colors.forest,
+    marginTop: 10,
+  },
   saveBar: {
     position: 'absolute',
     left: 0,
@@ -1335,9 +1546,15 @@ function makeStyles(colors: ThemeColors) {
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.line,
   },
+  saveError: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 16,
+    color: colors.coral,
+    marginBottom: 8,
+  },
   saveBtn: {
     marginHorizontal: 0,
-    marginTop: spacing.xl,
+    marginTop: 0,
     height: 50,
     borderRadius: radius.sm,
     backgroundColor: colors.forest,
@@ -1348,6 +1565,16 @@ function makeStyles(colors: ThemeColors) {
     fontFamily: fonts.sansMedium,
     fontSize: 16,
     color: colors.forestOn,
+  },
+  saveSecondary: {
+    alignItems: 'center',
+    paddingVertical: 10,
+    marginTop: 4,
+  },
+  saveSecondaryText: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 16,
+    color: colors.forest,
   },
 });
 }

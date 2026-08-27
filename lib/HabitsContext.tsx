@@ -50,11 +50,13 @@ export function HabitsProvider({ children }: { children: ReactNode }) {
   /** Always-current list so Talk check-ins don't race and spawn duplicates. */
   const habitsRef = useRef<Habit[]>([]);
 
-  const commit = useCallback((next: Habit[]) => {
+  // Awaited commit: callers only resolve once the write is on disk, so a
+  // failed write rejects instead of the UI reporting a save that never stuck.
+  const commit = useCallback(async (next: Habit[]) => {
     const sorted = sortHabits(next);
     habitsRef.current = sorted;
     setHabits(sorted);
-    void saveVersionedArray(STORAGE_KEY, SCHEMA_VERSION, sorted);
+    await saveVersionedArray(STORAGE_KEY, SCHEMA_VERSION, sorted);
     return sorted;
   }, []);
 
@@ -98,7 +100,7 @@ export function HabitsProvider({ children }: { children: ReactNode }) {
             inventoryItemId: input.inventoryItemId,
             syncLastDone: existing.syncLastDone ?? true,
           };
-          commit(
+          await commit(
             habitsRef.current.map((h) => (h.id === existing.id ? patched : h))
           );
           return patched;
@@ -106,7 +108,7 @@ export function HabitsProvider({ children }: { children: ReactNode }) {
         return existing;
       }
       const habit = createHabit(input);
-      commit([habit, ...habitsRef.current]);
+      await commit([habit, ...habitsRef.current]);
       return habit;
     },
     [commit]
@@ -114,7 +116,7 @@ export function HabitsProvider({ children }: { children: ReactNode }) {
 
   const updateHabit = useCallback(
     async (id: string, patch: Partial<Habit>) => {
-      commit(
+      await commit(
         habitsRef.current.map((h) => (h.id === id ? { ...h, ...patch, id: h.id } : h))
       );
     },
@@ -123,7 +125,7 @@ export function HabitsProvider({ children }: { children: ReactNode }) {
 
   const removeHabit = useCallback(
     async (id: string) => {
-      commit(habitsRef.current.filter((h) => h.id !== id));
+      await commit(habitsRef.current.filter((h) => h.id !== id));
     },
     [commit]
   );
@@ -136,7 +138,7 @@ export function HabitsProvider({ children }: { children: ReactNode }) {
         updated = toggleLogForDay(h, date);
         return updated;
       });
-      commit(next);
+      await commit(next);
       return updated;
     },
     [commit]

@@ -10,16 +10,13 @@ type Props = {
 
 const NATIVE_DRIVER = Platform.OS !== 'web';
 
-/**
- * In-app brand beat — HDR house lockup on an HDR wave field (BT.2100 PQ jpeg).
- */
+/** In-app brand beat — HDR lockup on the linen field, no pattern behind it. */
 export function BrandSplash({ onFinished }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const opacity = useRef(new Animated.Value(0)).current;
-  const lift = useRef(new Animated.Value(10)).current;
-  const markScale = useRef(new Animated.Value(0.94)).current;
-  const field = useRef(new Animated.Value(0.35)).current;
+  const lift = useRef(new Animated.Value(8)).current;
+  const scale = useRef(new Animated.Value(0.96)).current;
   const finishedRef = useRef(false);
 
   useEffect(() => {
@@ -29,40 +26,33 @@ export function BrandSplash({ onFinished }: Props) {
       onFinished();
     };
 
-    const failSafe = setTimeout(finish, 2800);
+    const failSafe = setTimeout(finish, 2600);
 
     const enter = Animated.parallel([
       Animated.timing(opacity, {
         toValue: 1,
-        duration: 480,
+        duration: 420,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: NATIVE_DRIVER,
       }),
       Animated.timing(lift, {
         toValue: 0,
-        duration: 560,
+        duration: 500,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: NATIVE_DRIVER,
       }),
-      Animated.spring(markScale, {
+      Animated.spring(scale, {
         toValue: 1,
         friction: 8,
-        tension: 70,
-        useNativeDriver: NATIVE_DRIVER,
-      }),
-      Animated.timing(field, {
-        toValue: 1,
-        duration: 800,
-        easing: Easing.out(Easing.quad),
+        tension: 72,
         useNativeDriver: NATIVE_DRIVER,
       }),
     ]);
 
-    const hold = Animated.delay(1100);
-
+    const hold = Animated.delay(900);
     const exit = Animated.timing(opacity, {
       toValue: 0,
-      duration: 400,
+      duration: 360,
       easing: Easing.in(Easing.cubic),
       useNativeDriver: NATIVE_DRIVER,
     });
@@ -76,31 +66,24 @@ export function BrandSplash({ onFinished }: Props) {
       clearTimeout(failSafe);
       seq.stop();
     };
-  }, [field, lift, markScale, onFinished, opacity]);
+  }, [lift, onFinished, opacity, scale]);
 
   return (
-    <View style={styles.root} accessibilityLabel="LifeOS">
-      <Animated.Image
-        source={require('@/assets/brand/lifeos-splash-waves-hdr.jpg')}
-        style={[styles.waves, { opacity: field }]}
-        resizeMode="cover"
-      />
+    <View style={styles.root} accessibilityLabel="Saavi">
       <Animated.View
         style={[
           styles.center,
           {
             opacity,
-            transform: [{ translateY: lift }],
+            transform: [{ translateY: lift }, { scale }],
           },
         ]}
       >
-        <Animated.View style={{ transform: [{ scale: markScale }] }}>
-          <Image
-            source={require('@/assets/brand/lifeos-logo-hdr-home.jpg')}
-            style={styles.mark}
-            resizeMode="contain"
-          />
-        </Animated.View>
+        <Image
+          source={require('@/assets/brand/lifeos-logo-hdr-home.jpg')}
+          style={styles.mark}
+          resizeMode="contain"
+        />
       </Animated.View>
     </View>
   );
@@ -115,17 +98,12 @@ function makeStyles(colors: ThemeColors) {
       justifyContent: 'center',
       zIndex: 100,
     },
-    waves: {
-      ...StyleSheet.absoluteFill,
-      width: '100%',
-      height: '100%',
-    },
     center: {
       alignItems: 'center',
     },
     mark: {
-      width: 300,
-      height: 300,
+      width: 280,
+      height: 280,
     },
   });
 }

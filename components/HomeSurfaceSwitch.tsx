@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import { Text } from '@/components/ui/Text';
-import { fonts, radius } from '@/constants/theme';
+import { fonts } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
 import { blurActiveElement } from '@/lib/a11y';
 import {
@@ -10,7 +10,6 @@ import {
 } from '@/lib/homeSurface';
 
 export function HomeSurfaceSwitch({ value }: { value: HomeSurface }) {
-  const { colors } = useTheme();
   const router = useRouter();
 
   function go(next: HomeSurface) {
@@ -21,24 +20,18 @@ export function HomeSurfaceSwitch({ value }: { value: HomeSurface }) {
   }
 
   return (
-    <View
-      style={[
-        styles.track,
-        { backgroundColor: colors.surfaceSoft, borderColor: colors.line },
-      ]}
-      accessibilityRole="tablist"
-    >
-      <Seg
+    <View style={styles.row} accessibilityRole="tablist">
+      <Tab
         label="Today"
         active={value === 'today'}
         onPress={() => go('today')}
       />
-      <Seg label="Ask" active={value === 'ask'} onPress={() => go('ask')} />
+      <Tab label="Ask" active={value === 'ask'} onPress={() => go('ask')} />
     </View>
   );
 }
 
-function Seg({
+function Tab({
   label,
   active,
   onPress,
@@ -51,47 +44,48 @@ function Seg({
   return (
     <Pressable
       onPress={onPress}
+      hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
       accessibilityRole="tab"
       accessibilityState={{ selected: active }}
-      style={[
-        styles.seg,
-        active && {
-          backgroundColor: colors.surface,
-          borderColor: colors.lineStrong,
-        },
-      ]}
+      style={({ pressed }) => [styles.tab, { opacity: pressed ? 0.7 : 1 }]}
     >
       <Text
         style={[
           styles.label,
-          { color: active ? colors.ink : colors.mute },
+          { color: active ? colors.ink : colors.faint },
         ]}
       >
         {label}
       </Text>
+      <View
+        style={[
+          styles.marker,
+          { backgroundColor: active ? colors.accent : 'transparent' },
+        ]}
+      />
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  track: {
+  row: {
     flexDirection: 'row',
-    alignSelf: 'flex-start',
-    borderRadius: radius.full,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 3,
-    gap: 2,
+    alignItems: 'flex-end',
+    gap: 18,
   },
-  seg: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: radius.full,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'transparent',
+  tab: {
+    alignItems: 'center',
   },
   label: {
     fontFamily: fonts.sansSemi,
-    fontSize: 16,
-    letterSpacing: -0.2,
+    fontSize: 21,
+    lineHeight: 26,
+    letterSpacing: -0.5,
+  },
+  marker: {
+    width: 16,
+    height: 3,
+    borderRadius: 2,
+    marginTop: 3,
   },
 });

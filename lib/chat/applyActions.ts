@@ -3,7 +3,11 @@ import type { InventoryItem } from '@/lib/InventoryContext';
 import { formatMoney, formatPurchasedFrom, merchantFromUtterance } from '@/lib/chat/prompt';
 import { sanitizeManualUrl } from '@/lib/manualLink';
 import { timelineAfterMaintenance } from '@/lib/maintenanceLink';
-import type { HouseholdMember } from '@/lib/household';
+import {
+  avatarLetterFromName,
+  type HouseholdMember,
+  type NewHouseholdMemberInput,
+} from '@/lib/household';
 import {
   parseAmount,
   type ExpenseCategory,
@@ -12,6 +16,7 @@ import {
 import type { Habit, NewHabitInput } from '@/lib/habits';
 import { currentStreak, dayKey, loggedOn, shouldSyncLastDone } from '@/lib/habits';
 import {
+  classDeadlineFromUtterance,
   classPackFromUtterance,
   classTitleFromUtterance,
   looksLikeClassAttendance,
@@ -28,7 +33,11 @@ import {
   type NewSubscriptionInput,
   type Subscription,
 } from '@/lib/subscriptions';
-import { resolveAssignment } from '@/lib/people';
+import { fuzzyMatchMember, resolveAssignment } from '@/lib/people';
+import {
+  currencyFromSpokenText,
+  getRuntimeDefaultCurrency,
+} from '@/lib/currency';
 import type { ChatAction, ChatAddAction, ChatAgentResponse, ChatUpdateAction } from '@/lib/chat/types';
 import {
   looksLikeVagueDelete,
@@ -165,13 +174,23 @@ function normalizeExpenseCategory(raw?: string): ExpenseCategory {
   return 'other';
 }
 
-function currencyFromAmountRaw(raw: string | number | undefined): string {
-  if (typeof raw === 'number') return 'AED';
-  const s = String(raw || '');
-  if (/\b(usd|dollars?|\$)\b/i.test(s)) return 'USD';
-  if (/\b(eur|euros?|€)\b/i.test(s)) return 'EUR';
-  if (/\b(gbp|pounds?|£)\b/i.test(s)) return 'GBP';
-  return 'AED';
+function currencyFromAmountRaw(raw: string | number | undefined): string | undefined {
+  return currencyFromSpokenText(raw);
+}
+
+function resolveActionCurrency(
+  explicit: string | undefined,
+  amountRaw: string | number | undefined,
+  utterance: string | undefined,
+  fallback: string
+): string {
+  const fromAction = explicit?.trim().toUpperCase();
+  if (fromAction && /^[A-Z]{3}$/.test(fromAction)) return fromAction;
+  return (
+    currencyFromSpokenText(amountRaw) ||
+    currencyFromSpokenText(utterance) ||
+    fallback
+  );
 }
 
 function titleCase(s: string) {
@@ -398,6 +417,8 @@ export type ApplyActionsResult = {
   reminderAt: string | null;
   removedLastDoneLabel: string | null;
   updatedClassPack: boolean;
+  renamedPersonFrom: string | null;
+  renamedPersonTo: string | null;
 };
 
 /**
@@ -414,6 +435,11 @@ export async function applyChatActions(
     lastUserText?: string;
     lastDone?: LastDoneApi;
     household?: HouseholdMember[];
+    /** When set, a spoken name that isn't a member yet is created on the fly. */
+    people?: {
+      addMember: (input: NewHouseholdMemberInput) => Promise<HouseholdMember>;
+      updateMember?: (id: string, patch: Partial<HouseholdMember>) => Promise<void>;
+    };
     expenses?: ExpensesApi;
     subscriptions?: SubscriptionsApi;
     habits?: HabitsApi;
@@ -428,8 +454,13 @@ export async function applyChatActions(
     lastFocusExpenseId?: string | null;
     /** Last module Talk touched — vague show/delete/update uses this. */
     lastTalkFocus?: TalkFocus | null;
+    /** Household default ISO currency (from profile / onboarding). */
+    defaultCurrency?: string;
   }
 ): Promise<ApplyActionsResult> {
+  const defaultCurrency =
+    options?.defaultCurrency?.trim().toUpperCase() ||
+    getRuntimeDefaultCurrency();
   let lastAddedId: string | null = null;
   let lastAddedName: string | null = null;
   let lastAssignedTo: string | null = null;
@@ -471,6 +502,8 @@ export async function applyChatActions(
   let reminderAt: string | null = null;
   let removedLastDoneLabel: string | null = null;
   let updatedClassPack = false;
+  let renamedPersonFrom: string | null = null;
+  let renamedPersonTo: string | null = null;
   const fallback = options?.fallbackFocusId ?? null;
   const seenRemove = new Set<string>();
   const lastUserText = options?.lastUserText;
@@ -488,6 +521,24 @@ export async function applyChatActions(
     talkFocus = { kind, id };
     if (kind === 'item') focusItemId = id;
     if (kind === 'expense') loggedExpenseId = loggedExpenseId || id;
+  };
+
+  /** Spoken name with no member yet → create them instead of mis-assigning. */
+  const ensurePerson = async (
+    person: ReturnType<typeof resolveAssignment>
+  ): Promise<ReturnType<typeof resolveAssignment>> => {
+    if (!person || person.personId || !options?.people?.addMember) return person;
+    try {
+      const member = await options.people.addMember({
+        name: person.assignedTo,
+        role: 'adult',
+        relation: 'Family',
+      });
+      console.log('[LifeOS chat] created household member', member.id, member.name);
+      return { personId: member.id, assignedTo: member.name };
+    } catch {
+      return person;
+    }
   };
   const open = (target: TalkFocus) => {
     openTarget = target;
@@ -546,7 +597,7 @@ export async function applyChatActions(
         loggedExpenseId = expenseTargetId;
         loggedExpenseTitle = expensePatch.title || row?.title || null;
         if (expensePatch.amount != null) {
-          const cur = expensePatch.currency || 'AED';
+          const cur = expensePatch.currency || defaultCurrency;
           loggedExpenseAmount =
             formatMoney(`${cur} ${expensePatch.amount}`) || `${cur} ${expensePatch.amount}`;
         }
@@ -582,7 +633,7 @@ export async function applyChatActions(
             options.subscriptionsList?.find((s) => s.id === subId);
           loggedSubscriptionTitle = subPatch.title || row?.title || null;
           if (subPatch.amount != null) {
-            const cur = String(subPatch.currency || 'AED');
+            const cur = String(subPatch.currency || defaultCurrency);
             loggedSubscriptionAmount =
               formatMoney(`${cur} ${subPatch.amount}`) || `${cur} ${subPatch.amount}`;
           }
@@ -730,7 +781,7 @@ export async function applyChatActions(
       loggedExpenseId = id;
       loggedExpenseTitle = patch.title || row?.title || null;
       if (patch.amount != null) {
-        const cur = patch.currency || 'AED';
+        const cur = patch.currency || defaultCurrency;
         loggedExpenseAmount =
           formatMoney(`${cur} ${patch.amount}`) || `${cur} ${patch.amount}`;
       }
@@ -1098,10 +1149,12 @@ export async function applyChatActions(
         console.log('[LifeOS chat] skip add_expense — bad amount', action.amount);
         continue;
       }
-      const currency =
-        (action.currency?.trim().toUpperCase() ||
-          currencyFromAmountRaw(action.amount)) ??
-        'AED';
+      const currency = resolveActionCurrency(
+        action.currency,
+        action.amount,
+        lastUserText,
+        defaultCurrency
+      );
       const date = action.date ? normalizeDateField(action.date) : undefined;
       const merchant =
         formatPurchasedFrom(action.merchant) ||
@@ -1151,10 +1204,12 @@ export async function applyChatActions(
         console.log('[LifeOS chat] skip add_subscription — bad amount', action.amount);
         continue;
       }
-      const currency =
-        (action.currency?.trim().toUpperCase() ||
-          currencyFromAmountRaw(action.amount)) ??
-        'AED';
+      const currency = resolveActionCurrency(
+        action.currency,
+        action.amount,
+        lastUserText,
+        defaultCurrency
+      );
       const cycle = normalizeSubscriptionCycle(action.cycle);
       const renewsOn = action.renewsOn
         ? normalizeDateField(action.renewsOn)
@@ -1228,7 +1283,7 @@ export async function applyChatActions(
       await options.subscriptions.updateSubscription(id, patch);
       loggedSubscriptionTitle = patch.title || row?.title || 'subscription';
       if (patch.amount != null) {
-        const cur = String(patch.currency || 'AED');
+        const cur = String(patch.currency || defaultCurrency);
         loggedSubscriptionAmount =
           formatMoney(`${cur} ${patch.amount}`) || `${cur} ${patch.amount}`;
       }
@@ -1263,13 +1318,15 @@ export async function applyChatActions(
       const date =
         (action.date ? normalizeDateField(action.date) : undefined) || dayKey();
       const linkId = action.inventoryItemId?.trim() || undefined;
-      const person = resolveAssignment({
-        assignedTo: action.assignedTo,
-        personId: action.personId,
-        utterance: lastUserText,
-        members: household,
-        preferSelf: true,
-      });
+      const person = await ensurePerson(
+        resolveAssignment({
+          assignedTo: action.assignedTo,
+          personId: action.personId,
+          utterance: lastUserText,
+          members: household,
+          preferSelf: true,
+        })
+      );
       let habit =
         options.habits.findByTitle(action.title.trim(), person?.personId) ||
         options.habits.findByTitle(title, person?.personId);
@@ -1372,19 +1429,38 @@ export async function applyChatActions(
       const total = Number.isFinite(totalN) && totalN > 0 ? totalN : 0;
       const monthsRaw = spoken.months ?? action.months;
       const months = monthsRaw != null ? Math.round(Number(monthsRaw)) : undefined;
-      const person = resolveAssignment({
-        assignedTo: action.assignedTo,
-        personId: action.personId,
-        utterance: lastUserText,
-        members: household,
-        preferSelf: true,
-      });
+      const person = await ensurePerson(
+        resolveAssignment({
+          assignedTo: action.assignedTo,
+          personId: action.personId,
+          utterance: lastUserText,
+          members: household,
+          preferSelf: true,
+        })
+      );
+      // The model doesn't reliably know today's date — "before November" can
+      // come back as 2023. Spoken deadline wins; reject windows that already
+      // ended and starts that are ancient or after the end.
+      const today = dayKey();
+      const yearAgoDate = new Date();
+      yearAgoDate.setFullYear(yearAgoDate.getFullYear() - 1);
+      const yearAgo = dayKey(yearAgoDate);
+      let startsOn = action.startsOn
+        ? normalizeDateField(String(action.startsOn))
+        : undefined;
+      let endsOn =
+        classDeadlineFromUtterance(lastUserText) ||
+        (action.endsOn ? normalizeDateField(String(action.endsOn)) : undefined);
+      if (endsOn && endsOn <= today) endsOn = undefined;
+      if (startsOn && (startsOn < yearAgo || (endsOn && startsOn > endsOn))) {
+        startsOn = undefined;
+      }
       const pack = await options.classes.addPack({
         title,
         total: total || undefined,
         months: months && months > 0 ? months : undefined,
-        startsOn: action.startsOn ? normalizeDateField(String(action.startsOn)) : undefined,
-        endsOn: action.endsOn ? normalizeDateField(String(action.endsOn)) : undefined,
+        startsOn,
+        endsOn,
         personId: person?.personId,
         assignedTo: person?.assignedTo,
       });
@@ -1507,6 +1583,20 @@ export async function applyChatActions(
         const d = normalizeDateField(String(action.patch.endsOn));
         if (d) patch.endsOn = d;
       }
+      if (action.patch?.assignedTo?.trim() || action.patch?.personId) {
+        const person = await ensurePerson(
+          resolveAssignment({
+            assignedTo: action.patch.assignedTo,
+            personId: action.patch.personId,
+            utterance: lastUserText,
+            members: household,
+          })
+        );
+        if (person?.personId) {
+          patch.personId = person.personId;
+          patch.assignedTo = person.assignedTo;
+        }
+      }
       if (!Object.keys(patch).length) {
         console.log('[LifeOS chat] skip update_class_pack — empty patch');
         continue;
@@ -1519,6 +1609,48 @@ export async function applyChatActions(
       updatedClassPack = true;
       remember('class', pack.id);
       console.log('[LifeOS chat] applied update_class_pack', pack.id, patch);
+      continue;
+    }
+    if (action.type === 'rename_person' && action.to?.trim() && options?.people?.updateMember) {
+      const to = titleCase(action.to.trim());
+      const fromRaw = action.from?.trim().toLowerCase() || '';
+      // ASR can mangle the name in the correction itself ("Sara" may be stored
+      // as "Sarah"), so resolve the member fuzzily — and fall back to matching
+      // on `to`, which is always a near-variant of the stored name.
+      const member =
+        (fromRaw &&
+          household.find((m) => m.name.trim().toLowerCase() === fromRaw)) ||
+        (fromRaw ? fuzzyMatchMember(fromRaw, household) : undefined) ||
+        fuzzyMatchMember(to, household) ||
+        null;
+      if (!member) {
+        console.log('[LifeOS chat] skip rename_person — not found', action.from);
+        continue;
+      }
+      await options.people.updateMember(member.id, {
+        name: to,
+        avatarLetter: avatarLetterFromName(to),
+      });
+      // The name is denormalized onto packs/habits — cascade it.
+      if (options.classes?.updatePack) {
+        for (const row of options.classPacksList ?? []) {
+          const pack = options.classes.getById(row.id);
+          if (pack?.personId === member.id) {
+            await options.classes.updatePack(pack.id, { assignedTo: to });
+          }
+        }
+      }
+      if (options.habits?.updateHabit) {
+        for (const row of options.habitsList ?? []) {
+          const habit = options.habits.getById(row.id);
+          if (habit?.personId === member.id) {
+            await options.habits.updateHabit(habit.id, { assignedTo: to });
+          }
+        }
+      }
+      renamedPersonFrom = member.name;
+      renamedPersonTo = to;
+      console.log('[LifeOS chat] applied rename_person', member.id, member.name, '→', to);
       continue;
     }
     if (action.type === 'remove_last_done' && options?.lastDone?.remove) {
@@ -1586,6 +1718,8 @@ export async function applyChatActions(
     reminderAt,
     removedLastDoneLabel,
     updatedClassPack,
+    renamedPersonFrom,
+    renamedPersonTo,
   };
 }
 
@@ -1599,7 +1733,10 @@ function expensePatchFromItemUpdate(
     if (Number.isFinite(amount) && amount > 0) out.amount = amount;
     const cur = currencyFromAmountRaw(patch.price);
     if (cur) out.currency = cur;
-    else if (/\b(dirhams?|aed|dhs)\b/i.test(String(patch.price))) out.currency = 'AED';
+    else {
+      const spoken = currencyFromSpokenText(patch.price);
+      if (spoken) out.currency = spoken;
+    }
   }
   if (patch.purchasedFrom != null && patch.purchasedFrom !== '') {
     out.merchant =

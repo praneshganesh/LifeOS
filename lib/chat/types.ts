@@ -188,7 +188,18 @@ export type ChatUpdateClassPackAction = {
     months?: number | string;
     startsOn?: string;
     endsOn?: string;
+    assignedTo?: string;
+    personId?: string;
   };
+};
+
+/** Correct a household member's name ("it's Saara, not Sara"). */
+export type ChatRenamePersonAction = {
+  type: 'rename_person';
+  /** Current (wrong) name as stored. */
+  from?: string;
+  /** Corrected name. */
+  to: string;
 };
 
 /** Log a recurring subscription. */
@@ -304,6 +315,7 @@ export type ChatAction =
   | ChatUpdateClassPackAction
   | ChatLogClassAction
   | ChatRemoveClassPackAction
+  | ChatRenamePersonAction
   | ChatNoneAction;
 
 export type ChatAgentResponse = {

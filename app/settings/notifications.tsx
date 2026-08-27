@@ -101,7 +101,7 @@ export default function NotificationPrefsScreen() {
   return (
     <ModuleScreen
       title="Notification preferences"
-      subtitle="Local reminders on this device — no cloud push yet."
+      subtitle="Reminders scheduled on this phone — push coming later."
     >
       <ModuleSection label="Delivery">
         <ListCard>
@@ -126,44 +126,14 @@ export default function NotificationPrefsScreen() {
             value={prefs.maintenance}
             onChange={(v) => void update({ maintenance: v })}
             disabled={!prefs.push}
-          />
-          <ToggleRow
-            title="Warranties"
-            subtitle="Coming soon — not scheduled yet"
-            value={false}
-            onChange={() => {}}
-            disabled
-          />
-          <ToggleRow
-            title="Insurance renewals"
-            subtitle="Coming soon — not scheduled yet"
-            value={false}
-            onChange={() => {}}
-            disabled
-          />
-          <ToggleRow
-            title="Return windows"
-            subtitle="Coming soon — not scheduled yet"
-            value={false}
-            onChange={() => {}}
-            disabled
-          />
-          <ToggleRow
-            title="Document expiry"
-            subtitle="Coming soon — not scheduled yet"
-            value={false}
-            onChange={() => {}}
-            disabled
-          />
-          <ToggleRow
-            title="Family activity"
-            subtitle="Coming soon — not scheduled yet"
-            value={false}
-            onChange={() => {}}
-            disabled
             last
           />
         </ListCard>
+        <Text variant="caption" style={{ marginTop: spacing.sm, color: colors.mute }}>
+          Warranty, insurance, return-window, document-expiry, and family
+          notifications aren’t built yet. Anything due still shows in Tasks &
+          reminders.
+        </Text>
       </ModuleSection>
     </ModuleScreen>
   );

@@ -55,7 +55,7 @@ export default function PurchasesScreen() {
   return (
     <ModuleScreen
       title="Purchases"
-      subtitle="Things you bought — from inventory on this device."
+      subtitle="Things you bought — from your inventory."
       right={<CaptureContextButton kind="purchase" label="Capture purchase" />}
     >
       <StatStrip

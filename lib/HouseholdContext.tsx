@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -42,6 +43,7 @@ const HouseholdContext = createContext<HouseholdContextValue | null>(null);
 export function HouseholdProvider({ children }: { children: ReactNode }) {
   const [members, setMembers] = useState<HouseholdMember[]>([]);
   const [ready, setReady] = useState(false);
+  const membersRef = useRef<HouseholdMember[]>([]);
 
   useEffect(() => {
     (async () => {
@@ -63,9 +65,12 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
             loaded = loaded.map((m, i) =>
               i === idx ? { ...m, permission: 'owner' } : m
             );
-            void saveVersionedArray(STORAGE_KEY, SCHEMA_VERSION, loaded);
+            void saveVersionedArray(STORAGE_KEY, SCHEMA_VERSION, loaded).catch(
+              () => undefined
+            );
           }
         }
+        membersRef.current = loaded;
         setMembers(loaded);
       } catch {
         /* ignore */
@@ -75,58 +80,50 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
-  const persist = (next: HouseholdMember[]) => {
-    void saveVersionedArray(STORAGE_KEY, SCHEMA_VERSION, next);
+  // Awaited persist: callers only resolve once the write is on disk, so a
+  // failed write rejects instead of the UI reporting a save that never stuck.
+  const persist = async (next: HouseholdMember[]) => {
+    membersRef.current = next;
+    setMembers(next);
+    await saveVersionedArray(STORAGE_KEY, SCHEMA_VERSION, next);
   };
 
   const addMember = useCallback(async (input: NewHouseholdMemberInput) => {
     const prefs = await loadPlanPrefs();
     const plan = planById(prefs.planId);
-    // Read current count via functional pattern
-    let blocked = false;
+    if (wouldExceedMemberLimit(plan, membersRef.current.length)) {
+      throw new PlanLimitError('members');
+    }
     let created = createHouseholdMember(input);
-    setMembers((prev) => {
-      if (wouldExceedMemberLimit(plan, prev.length)) {
-        blocked = true;
-        return prev;
-      }
-      const withOwner =
-        prev.length === 0 &&
-        (created.role === 'adult' || created.role === 'parent')
-          ? { ...created, permission: 'owner' as const }
-          : created;
-      created = withOwner;
-      const next = [withOwner, ...prev];
-      persist(next);
-      return next;
-    });
-    if (blocked) throw new PlanLimitError('members');
+    if (
+      membersRef.current.length === 0 &&
+      (created.role === 'adult' || created.role === 'parent')
+    ) {
+      created = { ...created, permission: 'owner' as const };
+    }
+    await persist([created, ...membersRef.current]);
     return created;
   }, []);
 
   const updateMember = useCallback(async (id: string, patch: Partial<HouseholdMember>) => {
-    setMembers((prev) => {
-      const next = prev.map((m) => {
+    await persist(
+      membersRef.current.map((m) => {
         if (m.id !== id) return m;
         const merged = { ...m, ...patch };
         if (patch.name) merged.avatarLetter = avatarLetterFromName(patch.name);
         return merged;
-      });
-      persist(next);
-      return next;
-    });
+      })
+    );
   }, []);
 
   const removeMember = useCallback(async (id: string) => {
-    setMembers((prev) => {
-      const next = prev.filter((m) => m.id !== id);
-      persist(next);
-      return next;
-    });
+    await persist(membersRef.current.filter((m) => m.id !== id));
   }, []);
 
   const getById = useCallback(
-    (id: string) => members.find((m) => m.id === id),
+    (id: string) =>
+      membersRef.current.find((m) => m.id === id) ??
+      members.find((m) => m.id === id),
     [members]
   );
 

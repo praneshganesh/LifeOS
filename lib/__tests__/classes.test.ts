@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  classDeadlineFromUtterance,
   classPackFromUtterance,
   classTitleFromUtterance,
   createClassPack,
@@ -15,6 +16,36 @@ import {
   usedCount,
 } from '../classes';
 import { addCalendarMonths } from '../dates';
+
+describe('classDeadlineFromUtterance', () => {
+  it('maps "before November" to the upcoming 1 November', () => {
+    const d = classDeadlineFromUtterance(
+      'I have 12 classes to take before November',
+      new Date(2026, 7, 27) // Aug 2026
+    );
+    assert.equal(d, '2026-11-01');
+  });
+
+  it('rolls to next year when the month already passed', () => {
+    const d = classDeadlineFromUtterance(
+      'finish these by March',
+      new Date(2026, 7, 27)
+    );
+    assert.equal(d, '2027-03-01');
+  });
+
+  it('uses the last day for "end of" phrasing', () => {
+    const d = classDeadlineFromUtterance(
+      'wrap up before the end of November',
+      new Date(2026, 7, 27)
+    );
+    assert.equal(d, '2026-11-30');
+  });
+
+  it('returns undefined without a deadline phrase', () => {
+    assert.equal(classDeadlineFromUtterance('I enrolled for skating'), undefined);
+  });
+});
 
 describe('class packs', () => {
   it('counts remaining sessions and toggles a day', () => {

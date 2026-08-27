@@ -13,7 +13,7 @@ export default function SharingSettingsScreen() {
   return (
     <ModuleScreen
       title="Sharing"
-      subtitle="Household on this device — live invites need a backend later."
+      subtitle="Your household — live invites coming soon."
     >
       <ModuleSection label="Household" count={members.length}>
         {members.length === 0 ? (
@@ -40,7 +40,7 @@ export default function SharingSettingsScreen() {
         <ListCard>
           <ListRow
             title="Owner / editor / viewer"
-            subtitle="Local stubs on each person — tap a member to change"
+            subtitle="Roles per person — tap a member to change"
             meta="On device"
             last
           />
@@ -62,7 +62,7 @@ export default function SharingSettingsScreen() {
         <ListCard>
           <ListRow
             icon="family"
-            title="Open Family"
+            title="Open Household"
             onPress={() => router.push('/family' as Href)}
             last
           />

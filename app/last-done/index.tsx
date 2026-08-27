@@ -25,6 +25,7 @@ import { Text } from '@/components/ui/Text';
 import { DateField } from '@/components/ui/DateField';
 import { useLastDone } from '@/lib/LastDoneContext';
 import { useInventory } from '@/lib/InventoryContext';
+import { useToast } from '@/lib/ToastContext';
 import {
   findMatches,
   forInventoryItem,
@@ -136,6 +137,7 @@ export default function LastDoneModal() {
 
   const { items, logDone } = useLastDone();
   const { getById, updateItem } = useInventory();
+  const { showError } = useToast();
   const linkedThing = linkItemId ? getById(linkItemId) : undefined;
 
   const [query, setQuery] = useState('');
@@ -242,6 +244,7 @@ export default function LastDoneModal() {
       }
     } catch (err) {
       console.error('Failed to log last-done', err);
+      showError('Couldn’t save — try again.');
     } finally {
       setSaving(false);
     }

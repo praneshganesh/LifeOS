@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -43,6 +44,7 @@ function sortExpenses(list: Expense[]): Expense[] {
 export function ExpensesProvider({ children }: { children: ReactNode }) {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [ready, setReady] = useState(false);
+  const expensesRef = useRef<Expense[]>([]);
 
   useEffect(() => {
     (async () => {
@@ -52,7 +54,8 @@ export function ExpensesProvider({ children }: { children: ReactNode }) {
           SCHEMA_VERSION,
           normalizeExpense
         );
-        setExpenses(sortExpenses(loaded));
+        expensesRef.current = sortExpenses(loaded);
+        setExpenses(expensesRef.current);
       } catch {
         /* ignore */
       } finally {
@@ -61,45 +64,38 @@ export function ExpensesProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
-  const persist = (next: Expense[]) => {
-    void saveVersionedArray(STORAGE_KEY, SCHEMA_VERSION, next);
+  // Awaited persist: callers only resolve once the write is on disk, so a
+  // failed write rejects instead of the UI reporting a save that never stuck.
+  const persist = async (next: Expense[]) => {
+    expensesRef.current = next;
+    setExpenses(next);
+    await saveVersionedArray(STORAGE_KEY, SCHEMA_VERSION, next);
   };
 
   const addExpense = useCallback(async (input: NewExpenseInput) => {
-    let created = createExpense(input);
-    setExpenses((prev) => {
-      const dup = findDuplicateExpense(prev, created);
-      if (dup) {
-        created = dup;
-        return prev;
-      }
-      const next = sortExpenses([created, ...prev]);
-      persist(next);
-      return next;
-    });
+    const created = createExpense(input);
+    const dup = findDuplicateExpense(expensesRef.current, created);
+    if (dup) return dup;
+    await persist(sortExpenses([created, ...expensesRef.current]));
     return created;
   }, []);
 
   const updateExpense = useCallback(async (id: string, patch: Partial<Expense>) => {
-    setExpenses((prev) => {
-      const next = sortExpenses(
-        prev.map((e) => (e.id === id ? { ...e, ...patch, id: e.id } : e))
-      );
-      persist(next);
-      return next;
-    });
+    await persist(
+      sortExpenses(
+        expensesRef.current.map((e) => (e.id === id ? { ...e, ...patch, id: e.id } : e))
+      )
+    );
   }, []);
 
   const removeExpense = useCallback(async (id: string) => {
-    setExpenses((prev) => {
-      const next = prev.filter((e) => e.id !== id);
-      persist(next);
-      return next;
-    });
+    await persist(expensesRef.current.filter((e) => e.id !== id));
   }, []);
 
   const getById = useCallback(
-    (id: string) => expenses.find((e) => e.id === id),
+    (id: string) =>
+      expensesRef.current.find((e) => e.id === id) ??
+      expenses.find((e) => e.id === id),
     [expenses]
   );
 

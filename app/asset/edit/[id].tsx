@@ -10,13 +10,18 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
+import { OptionalDateField } from '@/components/ui/DateField';
+import { PersonChips } from '@/components/PersonChips';
+import { useHousehold } from '@/lib/HouseholdContext';
 import { useInventory } from '@/lib/InventoryContext';
 import { useSpaces } from '@/lib/SpacesContext';
 import { blurActiveElement } from '@/lib/a11y';
+import { parseDateInput } from '@/lib/lastDone';
+import { useToast } from '@/lib/ToastContext';
 import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
 
 export default function EditAssetScreen() {
@@ -27,6 +32,8 @@ export default function EditAssetScreen() {
   const router = useRouter();
   const { getById, updateItem, removeItem } = useInventory();
   const { spaces, roomsForSpace } = useSpaces();
+  const { members } = useHousehold();
+  const { showToast, showError } = useToast();
   const item = id ? getById(id) : undefined;
 
   const [name, setName] = useState('');
@@ -43,6 +50,10 @@ export default function EditAssetScreen() {
   const [documentNumber, setDocumentNumber] = useState('');
   const [fullName, setFullName] = useState('');
   const [expiryDate, setExpiryDate] = useState('');
+  const [personId, setPersonId] = useState<string | null>(null);
+  const [purchaseDate, setPurchaseDate] = useState('');
+  const [nationality, setNationality] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
 
   useEffect(() => {
     if (!item) return;
@@ -60,6 +71,10 @@ export default function EditAssetScreen() {
     setDocumentNumber(item.documentNumber || '');
     setFullName(item.fullName || '');
     setExpiryDate(item.expiryDate || '');
+    setPersonId(item.personId || null);
+    setPurchaseDate(item.purchaseDate || '');
+    setNationality(item.nationality || '');
+    setDateOfBirth(item.dateOfBirth || '');
   }, [item]);
 
   const spaceRooms = useMemo(
@@ -83,36 +98,49 @@ export default function EditAssetScreen() {
 
   async function save() {
     if (!id) return;
-    await updateItem(id, {
-      name: name.trim() || item!.name,
-      brand: brand.trim(),
-      room: room.trim(),
-      spaceId: spaceId || item!.spaceId,
-      category: category.trim() || item!.category,
-      serial: serial.trim(),
-      price: price.trim(),
-      purchasedFrom: purchasedFrom.trim() || undefined,
-      warrantyExpiry: warrantyExpiry.trim(),
-      warrantyActive: Boolean(warrantyExpiry.trim()),
-      condition: condition.trim() || '—',
-      insight: insight.trim() || undefined,
-      documentNumber: documentNumber.trim() || undefined,
-      fullName: fullName.trim() || undefined,
-      expiryDate: expiryDate.trim() || undefined,
-      timeline: [
-        {
-          date: new Date().toLocaleDateString('en-GB', {
-            day: 'numeric',
-            month: 'short',
-            year: 'numeric',
-          }),
-          event: 'Details updated',
-        },
-        ...item!.timeline,
-      ],
-    });
-    Alert.alert('Saved', 'Changes stay on this device.');
-    router.back();
+    const person = personId ? members.find((m) => m.id === personId) : undefined;
+    try {
+      await updateItem(id, {
+        name: name.trim() || item!.name,
+        brand: brand.trim(),
+        room: room.trim(),
+        spaceId: spaceId || item!.spaceId,
+        category: category.trim() || item!.category,
+        serial: serial.trim(),
+        price: price.trim(),
+        purchasedFrom: purchasedFrom.trim() || undefined,
+        purchaseDate: purchaseDate.trim(),
+        warrantyExpiry: warrantyExpiry.trim(),
+        warrantyActive: Boolean(warrantyExpiry.trim()),
+        condition: condition.trim() || '—',
+        insight: insight.trim() || undefined,
+        documentNumber: documentNumber.trim() || undefined,
+        fullName: fullName.trim() || undefined,
+        nationality: nationality.trim() || undefined,
+        dateOfBirth: dateOfBirth.trim() || undefined,
+        expiryDate: expiryDate.trim() || undefined,
+        personId: person?.id,
+        assignedTo: person?.name,
+        timeline: [
+          {
+            date: new Date().toLocaleDateString('en-GB', {
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric',
+            }),
+            event: 'Details updated',
+          },
+          ...item!.timeline,
+        ],
+      });
+      // Don't Alert here — an alert presented during the pop races with
+      // navigation on iOS and both can be swallowed. A toast doesn't block.
+      showToast('Changes saved');
+      if (router.canGoBack()) router.back();
+      else router.replace(`/asset/${id}` as Href);
+    } catch {
+      showError('Couldn’t save changes — try again.');
+    }
   }
 
   function confirmDelete() {
@@ -120,7 +148,12 @@ export default function EditAssetScreen() {
     if (!target) return;
     blurActiveElement();
     const run = async () => {
-      await removeItem(target.id);
+      try {
+        await removeItem(target.id);
+      } catch {
+        showError('Couldn’t delete — try again.');
+        return;
+      }
       router.replace('/(tabs)/spaces');
     };
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
@@ -212,18 +245,44 @@ export default function EditAssetScreen() {
 
           {item.isDocument ? (
             <>
-              <Field label="Document number" value={documentNumber} onChangeText={setDocumentNumber} />
-              <Field label="Full name" value={fullName} onChangeText={setFullName} />
               <Field
-                label="Expiry"
-                value={expiryDate}
-                onChangeText={setExpiryDate}
-                placeholder="YYYY-MM-DD"
+                label="Document number"
+                value={documentNumber}
+                onChangeText={setDocumentNumber}
+                autoCorrect={false}
+                autoCapitalize="characters"
               />
+              <Field label="Full name" value={fullName} onChangeText={setFullName} />
+              <Field label="Nationality" value={nationality} onChangeText={setNationality} />
+              <View style={styles.field}>
+                <Text variant="caption" style={styles.fieldLabel}>
+                  Date of birth
+                </Text>
+                <OptionalDateField
+                  value={parseDateInput(dateOfBirth) ? dateOfBirth : ''}
+                  onChange={setDateOfBirth}
+                  maximumDate={new Date()}
+                />
+              </View>
+              <View style={styles.field}>
+                <Text variant="caption" style={styles.fieldLabel}>
+                  Expiry
+                </Text>
+                <OptionalDateField
+                  value={parseDateInput(expiryDate) ? expiryDate : ''}
+                  onChange={setExpiryDate}
+                />
+              </View>
             </>
           ) : (
             <>
-              <Field label="Serial" value={serial} onChangeText={setSerial} />
+              <Field
+                label="Serial"
+                value={serial}
+                onChangeText={setSerial}
+                autoCorrect={false}
+                autoCapitalize="characters"
+              />
               <Field label="Price" value={price} onChangeText={setPrice} placeholder="AED 800" />
               <Field
                 label="Bought from"
@@ -231,14 +290,37 @@ export default function EditAssetScreen() {
                 onChangeText={setPurchasedFrom}
                 placeholder="Amazon, Sharaf DG…"
               />
-              <Field
-                label="Warranty until"
-                value={warrantyExpiry}
-                onChangeText={setWarrantyExpiry}
-              />
+              <View style={styles.field}>
+                <Text variant="caption" style={styles.fieldLabel}>
+                  Purchased on
+                </Text>
+                <OptionalDateField
+                  value={parseDateInput(purchaseDate) ? purchaseDate : ''}
+                  onChange={setPurchaseDate}
+                  maximumDate={new Date()}
+                />
+              </View>
+              <View style={styles.field}>
+                <Text variant="caption" style={styles.fieldLabel}>
+                  Warranty until
+                </Text>
+                <OptionalDateField
+                  value={parseDateInput(warrantyExpiry) ? warrantyExpiry : ''}
+                  onChange={setWarrantyExpiry}
+                />
+              </View>
               <Field label="Condition" value={condition} onChangeText={setCondition} />
             </>
           )}
+
+          <PersonChips
+            members={members}
+            personId={personId}
+            onChange={setPersonId}
+            label="Belongs to"
+            noneLabel="Household"
+          />
+
           <Field label="Notes" value={insight} onChangeText={setInsight} multiline />
 
           <Pressable
@@ -263,12 +345,16 @@ function Field({
   onChangeText,
   placeholder,
   multiline,
+  autoCorrect,
+  autoCapitalize,
 }: {
   label: string;
   value: string;
   onChangeText: (t: string) => void;
   placeholder?: string;
   multiline?: boolean;
+  autoCorrect?: boolean;
+  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
 }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -282,6 +368,8 @@ function Field({
         onChangeText={onChangeText}
         placeholder={placeholder}
         placeholderTextColor={colors.faint}
+        autoCorrect={autoCorrect}
+        autoCapitalize={autoCapitalize}
         style={[styles.input, multiline && styles.inputMulti]}
         multiline={multiline}
       />

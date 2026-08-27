@@ -1,5 +1,13 @@
 import { type ReactNode, useCallback, useRef } from 'react';
-import { ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen } from '@/components/ui/Screen';
@@ -32,29 +40,36 @@ export function ModuleScreen({
 
   return (
     <Screen>
-      <ScrollView
-        ref={scrollRef}
-        contentContainerStyle={[
-          styles.content,
-          { paddingBottom: insets.bottom + 108 },
-          contentStyle,
-        ]}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
+      {/* Detail screens edit inline (classes, habits, family) — keep the
+          focused field and Save reachable above the keyboard. */}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <View style={styles.header}>
-          <View style={{ flex: 1 }}>
-            <Text variant="title">{title}</Text>
-            {subtitle ? (
-              <Text variant="body" style={styles.lead}>
-                {subtitle}
-              </Text>
-            ) : null}
+        <ScrollView
+          ref={scrollRef}
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: insets.bottom + 108 },
+            contentStyle,
+          ]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.header}>
+            <View style={{ flex: 1 }}>
+              <Text variant="title">{title}</Text>
+              {subtitle ? (
+                <Text variant="body" style={styles.lead}>
+                  {subtitle}
+                </Text>
+              ) : null}
+            </View>
+            {right}
           </View>
-          {right}
-        </View>
-        {children}
-      </ScrollView>
+          {children}
+        </ScrollView>
+      </KeyboardAvoidingView>
     </Screen>
   );
 }
@@ -91,13 +106,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: spacing.md,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
   lead: {
-    marginTop: 6,
+    marginTop: 2,
   },
   section: {
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
   },
   sectionHead: {
     flexDirection: 'row',

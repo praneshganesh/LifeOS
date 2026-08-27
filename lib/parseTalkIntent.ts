@@ -136,7 +136,7 @@ export function parseAddIntent(utterance: string): TalkAddDraft | null {
     spaceId: base.spaceId,
     icon: base.icon,
     isDocument: base.isDocument,
-    insight: `Added by Talk · categorized as ${base.category} (on-device rules, no cloud AI).`,
+    insight: `Added by Talk · categorized as ${base.category}.`,
   };
 }
 

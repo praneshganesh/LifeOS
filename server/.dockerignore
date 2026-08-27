@@ -1,4 +1,4 @@
-*
-!guard.mjs
-!chat.mjs
-!brands.mjs
+fly.toml
+Dockerfile
+.dockerignore
+__tests__

@@ -1,4 +1,5 @@
 import { useTheme } from '@/lib/ThemeContext';
+import { useToast } from '@/lib/ToastContext';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Redirect, Stack, useFocusEffect, useLocalSearchParams, useRouter, type Href } from 'expo-router';
@@ -25,6 +26,7 @@ export default function SpaceDetailScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { items: inventory, removeItem, getById } = useInventory();
+  const { showError } = useToast();
   const { getSpace, roomsForSpace } = useSpaces();
   const scrollRef = useRef<ScrollView>(null);
 
@@ -60,7 +62,7 @@ export default function SpaceDetailScreen() {
     if (!getById(assetId)) return;
     const ok = await confirmDelete(name);
     if (!ok) return;
-    await removeItem(assetId);
+    await removeItem(assetId).catch(() => showError('Couldn’t delete — try again.'));
   }
 
   if (!space) {
@@ -120,6 +122,24 @@ export default function SpaceDetailScreen() {
         <Text variant="body" style={{ marginTop: 6, marginBottom: spacing.xl }}>
           {space.meta} · {spaceAssets.length} items
         </Text>
+
+        {space.kind === 'family' ? (
+          <Pressable
+            onPress={() => {
+              blurActiveElement();
+              router.push('/family' as Href);
+            }}
+            style={[styles.hint, { marginTop: -spacing.md }]}
+          >
+            <Text variant="body">
+              This space holds the family’s belongings — kids’ stuff, pet gear,
+              shared items you capture.
+            </Text>
+            <Text variant="bodyMedium" style={{ color: colors.forest, marginTop: 6 }}>
+              Managing people or pets? Open Household →
+            </Text>
+          </Pressable>
+        ) : null}
 
         {spaceRooms.length > 0 ? (
           <>
@@ -251,6 +271,12 @@ function makeStyles(colors: ThemeColors) {
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.forestSoft,
     padding: spacing.lg,
+  },
+  hint: {
+    backgroundColor: colors.surfaceSoft,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.xl,
   },
 });
 }

@@ -16,10 +16,10 @@ export default function OnboardingCapture() {
   return (
     <View style={[styles.root, { paddingBottom: Math.max(insets.bottom, 16) + 8 }]}>
       <View style={styles.body}>
-        <Text style={styles.step}>Step 3 of 4</Text>
+        <Text style={styles.step}>Step 4 of 5</Text>
         <Text style={styles.title}>Capture once — filed forever</Text>
         <Text style={styles.lead}>
-          Snap a Thing, receipt, or ID. Text is read on this device. Receipts can become a Thing,
+          Snap a Thing, receipt, or ID. Text is read automatically. Receipts can become a Thing,
           an expense, both, or a document.
         </Text>
 
@@ -79,8 +79,9 @@ function makeStyles(colors: ThemeColors) {
   },
   title: {
     fontFamily: fonts.sansSemi,
-    fontSize: 26,
-    letterSpacing: -0.5,
+    fontSize: 22,
+    lineHeight: 28,
+    letterSpacing: -0.4,
     color: colors.ink,
     marginBottom: spacing.sm,
   },

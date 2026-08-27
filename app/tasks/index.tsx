@@ -9,6 +9,7 @@ import { useLastDone } from '@/lib/LastDoneContext';
 import { useSubscriptions } from '@/lib/SubscriptionsContext';
 import { useClasses } from '@/lib/ClassesContext';
 import { buildAttentionItems } from '@/lib/attention';
+import { useAttentionDismissals } from '@/lib/attentionDismiss';
 import { colors } from '@/constants/theme';
 
 const FILTERS = [
@@ -28,13 +29,15 @@ export default function TasksScreen() {
   const { subscriptions } = useSubscriptions();
   const { packs: classPacks } = useClasses();
   const [filter, setFilter] = useState('open');
+  const { dismiss, isDismissed } = useAttentionDismissals();
 
   const queue = useMemo(
     () =>
       buildAttentionItems(items, lastDone, subscriptions, classPacks).filter(
-        (a) => a.urgency === 'urgent' || a.urgency === 'soon'
+        (a) =>
+          (a.urgency === 'urgent' || a.urgency === 'soon') && !isDismissed(a.id)
       ),
-    [items, lastDone, subscriptions, classPacks]
+    [items, lastDone, subscriptions, classPacks, isDismissed]
   );
 
   const list = useMemo(() => {
@@ -49,7 +52,7 @@ export default function TasksScreen() {
   return (
     <ModuleScreen
       title="Tasks & reminders"
-      subtitle="Due soon from warranties, docs, renewals, and Last Done — on this device."
+      subtitle="Due soon from warranties, docs, renewals, and Last Done."
     >
       <StatStrip
         items={[
@@ -85,6 +88,7 @@ export default function TasksScreen() {
                 onPress={() => {
                   if (a.href) router.push(a.href as Href);
                 }}
+                onDismiss={() => void dismiss(a.id)}
                 last={i === list.length - 1}
               />
             ))}

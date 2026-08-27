@@ -1,4 +1,5 @@
 import { useTheme } from '@/lib/ThemeContext';
+import { useToast } from '@/lib/ToastContext';
 import { useCallback, useMemo, useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
@@ -25,6 +26,7 @@ export default function RoomDetailScreen() {
   const router = useRouter();
   const { getRoom, getSpace } = useSpaces();
   const { items: inventory, removeItem, getById } = useInventory();
+  const { showError } = useToast();
   const scrollRef = useRef<ScrollView>(null);
   const room = id ? getRoom(id) : undefined;
 
@@ -55,7 +57,7 @@ export default function RoomDetailScreen() {
     if (!getById(assetId)) return;
     const ok = await confirmDelete(name);
     if (!ok) return;
-    await removeItem(assetId);
+    await removeItem(assetId).catch(() => showError('Couldn’t delete — try again.'));
   }
 
   if (!room) {

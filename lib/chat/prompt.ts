@@ -1,7 +1,7 @@
 import { localDayKey } from '@/lib/dates';
 
-/** Shared LifeOS chat system rules (mirrored on the server). */
-export const CHAT_SYSTEM_BRIEF = `LifeOS assistant. Conversational, concise. Never invent purchase dates, prices, stores, warranty, serials, service history, spend totals, or remaining class counts — if a field is missing, say it isn’t recorded.`;
+/** Shared Saavi chat system rules (mirrored on the server). */
+export const CHAT_SYSTEM_BRIEF = `Saavi assistant. Conversational, concise. Never invent purchase dates, prices, stores, warranty, serials, service history, spend totals, or remaining class counts — if a field is missing, say it isn’t recorded.`;
 
 function meaningful(value?: string | null) {
   if (!value?.trim()) return false;

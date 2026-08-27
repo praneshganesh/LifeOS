@@ -12,6 +12,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   appendLog,
   createLastDoneItem,
+  getLastDoneAt,
   labelsMatch,
   normalizeItem,
   normalizeLabel,
@@ -20,6 +21,7 @@ import {
   sortByMostRecent,
   type LastDoneItem,
   type LogDoneInput,
+  type RemindInterval,
 } from '@/lib/lastDone';
 import {
   cancelLastDoneReminder,
@@ -52,6 +54,15 @@ type LastDoneContextValue = {
     personId?: string | null;
     assignedTo?: string | null;
   }) => Promise<LastDoneItem>;
+  /**
+   * Rename an activity and/or change its repeat reminder.
+   * `remindInterval: null` clears the reminder; an interval re-anchors it
+   * from the most recent done date.
+   */
+  updateActivity: (
+    id: string,
+    patch: { label?: string; remindInterval?: RemindInterval | null }
+  ) => Promise<LastDoneItem>;
   /** Delete the whole activity (all logs). */
   remove: (id: string) => Promise<void>;
   /** Delete one mistaken log. Removes the activity if no logs remain. */
@@ -329,6 +340,39 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
     [persist]
   );
 
+  const updateActivity = useCallback(
+    async (
+      id: string,
+      patch: { label?: string; remindInterval?: RemindInterval | null }
+    ) => {
+      const list = itemsRef.current;
+      const existing = list.find((i) => i.id === id);
+      if (!existing) throw new Error('Item not found');
+      let updated: LastDoneItem = { ...existing };
+      if (patch.label !== undefined) {
+        const label = normalizeLabel(patch.label);
+        if (!label) throw new Error('Label required');
+        updated = { ...updated, label };
+      }
+      if (patch.remindInterval !== undefined) {
+        if (patch.remindInterval === null) {
+          updated = { ...updated, remindAt: undefined, remindInterval: undefined };
+        } else {
+          const anchor = parseDateInput(getLastDoneAt(updated)) ?? new Date();
+          updated = {
+            ...updated,
+            ...resolveRemindAt(anchor, { remindInterval: patch.remindInterval }),
+          };
+        }
+      }
+      await persist(list.map((i) => (i.id === id ? updated : i)));
+      if (updated.remindAt) void scheduleLastDoneReminder(updated);
+      else void cancelLastDoneReminder(id);
+      return updated;
+    },
+    [persist]
+  );
+
   const remove = useCallback(
     async (id: string) => {
       await persist(itemsRef.current.filter((i) => i.id !== id));
@@ -358,8 +402,8 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ items, ready, logDone, setReminder, remove, removeLog }),
-    [items, ready, logDone, setReminder, remove, removeLog]
+    () => ({ items, ready, logDone, setReminder, updateActivity, remove, removeLog }),
+    [items, ready, logDone, setReminder, updateActivity, remove, removeLog]
   );
 
   return (

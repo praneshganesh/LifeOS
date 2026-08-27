@@ -6,6 +6,7 @@ import { ListCard, ListRow } from '@/components/ui/ListKit';
 import { Text } from '@/components/ui/Text';
 import { SwipeableThingRow } from '@/components/SwipeableThingRow';
 import { useHousehold } from '@/lib/HouseholdContext';
+import { useToast } from '@/lib/ToastContext';
 import { useInventory } from '@/lib/InventoryContext';
 import { useClasses } from '@/lib/ClassesContext';
 import { useHabits } from '@/lib/HabitsContext';
@@ -34,9 +35,10 @@ export default function FamilyMemberScreen() {
   const id = Array.isArray(idParam) ? idParam[0] : idParam;
   const router = useRouter();
   const { getById, removeMember, updateMember } = useHousehold();
-  const { items, removeItem } = useInventory();
-  const { packs: classPacks } = useClasses();
-  const { habits } = useHabits();
+  const { items, removeItem, updateItem } = useInventory();
+  const { packs: classPacks, updatePack } = useClasses();
+  const { habits, updateHabit } = useHabits();
+  const { showToast, showError } = useToast();
 
   const memberEarly = id && id !== 'new' ? getById(id) : undefined;
   const [name, setName] = useState('');
@@ -82,14 +84,19 @@ export default function FamilyMemberScreen() {
   async function onDeleteThing(assetId: string, thingName: string) {
     const ok = await confirmDelete(thingName);
     if (!ok) return;
-    await removeItem(assetId);
+    await removeItem(assetId).catch(() => showError('Couldn’t delete — try again.'));
   }
 
   async function onRemoveMember() {
     if (!member) return;
     const ok = await confirmDelete(member.name);
     if (!ok) return;
-    await removeMember(member.id);
+    try {
+      await removeMember(member.id);
+    } catch {
+      showError('Couldn’t delete — try again.');
+      return;
+    }
     if (router.canGoBack()) router.back();
     else router.replace('/family' as Href);
   }
@@ -97,12 +104,31 @@ export default function FamilyMemberScreen() {
   async function onSaveProfile() {
     if (!member || !name.trim() || saving) return;
     setSaving(true);
+    const newName = name.trim();
+    const renamed = newName !== member.name;
     try {
       await updateMember(member.id, {
-        name: name.trim(),
+        name: newName,
         relation: relation.trim(),
         role,
       });
+      if (renamed) {
+        // assignedTo is denormalized onto their stuff — cascade the new name.
+        for (const h of theirHabits) {
+          await updateHabit(h.id, { assignedTo: newName, personId: member.id });
+        }
+        for (const p of theirClasses) {
+          await updatePack(p.id, { assignedTo: newName, personId: member.id });
+        }
+        for (const d of devices) {
+          await updateItem(d.id, { assignedTo: newName, personId: member.id });
+        }
+      }
+      showToast('Profile saved');
+      if (router.canGoBack()) router.back();
+      else router.replace('/family' as Href);
+    } catch {
+      showError('Couldn’t save the profile — try again.');
     } finally {
       setSaving(false);
     }
@@ -226,7 +252,7 @@ export default function FamilyMemberScreen() {
         Sharing role
       </Text>
       <Text variant="caption" style={{ marginBottom: spacing.sm, color: colors.mute }}>
-        Local stub until sync — not enforced yet.
+        Roles aren’t enforced yet — enforcement comes with live sharing.
       </Text>
       <View style={styles.permRow}>
         {PERMS.map((p) => {
@@ -234,7 +260,11 @@ export default function FamilyMemberScreen() {
           return (
             <Pressable
               key={p}
-              onPress={() => void updateMember(member.id, { permission: p })}
+              onPress={() =>
+                void updateMember(member.id, { permission: p }).catch(() =>
+                  showError('Couldn’t save — try again.')
+                )
+              }
               style={[
                 styles.permChip,
                 {

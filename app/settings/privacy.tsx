@@ -7,43 +7,37 @@ export default function PrivacySettingsScreen() {
   return (
     <ModuleScreen
       title="Privacy"
-      subtitle="On-device first. You decide what leaves the phone."
+      subtitle="Your data, your cloud. Never sold, never shared."
     >
       <Text variant="body" style={{ marginBottom: spacing.lg }}>
-        LifeOS keeps your inventory, family, spend, habits, and documents on this
-        device first. When cloud backup is on, a JSON snapshot (not photos) is
-        stored in your Supabase project so a lost phone is not the only copy.
-        Talk and Ask still send short text plus a compact summary to your chat
-        API so the assistant can answer.
+        Saavi stores your inventory, family, spend, habits, and documents
+        securely in the cloud, so your data survives a lost phone and follows
+        you across devices. Talk and Ask send short text plus a compact summary
+        to the chat API so the assistant can answer — never your photos.
       </Text>
 
       <ModuleSection label="Your records">
         <ListCard>
           <ListRow
             title="Things & spaces"
-            subtitle="Inventory, rooms, warranties — photos stay on-device"
-            meta="Phone"
+            subtitle="Inventory, rooms, warranties"
+            meta="Cloud"
           />
           <ListRow
             title="Money & habits"
             subtitle="Expenses, subscriptions, habit logs"
-            meta="Phone"
+            meta="Cloud"
           />
           <ListRow
             title="Family & Last Done"
             subtitle="Household people, maintenance history"
-            meta="Phone"
-          />
-          <ListRow
-            title="Document reading"
-            subtitle="OCR / MRZ runs on-device"
-            meta="Phone"
+            meta="Cloud"
             last
           />
         </ListCard>
       </ModuleSection>
 
-      <ModuleSection label="Leaves when you use Talk / Ask">
+      <ModuleSection label="Sent when you use Talk / Ask">
         <ListCard>
           <ListRow
             title="Chat messages"
@@ -59,13 +53,8 @@ export default function PrivacySettingsScreen() {
         </ListCard>
       </ModuleSection>
 
-      <ModuleSection label="Elsewhere">
+      <ModuleSection label="Never">
         <ListCard>
-          <ListRow
-            title="Cloud backup"
-            subtitle="JSON snapshot in your Supabase project"
-            meta="On"
-          />
           <ListRow title="Gmail / email import" subtitle="Not required" meta="Off" />
           <ListRow title="Bank / payment import" subtitle="Not required" meta="Off" />
           <ListRow

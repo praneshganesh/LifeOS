@@ -1,9 +1,11 @@
-# Fly.io — cheapest for sparse Talk traffic (machines auto-stop).
-# Deploy: fly launch --config server/fly.toml --dockerfile server/Dockerfile
-# Secrets: fly secrets set OPENAI_API_KEY=sk-... CHAT_API_TOKEN=... --app lifeos-chat
+# Fly.io — sparse Talk traffic (machines auto-stop when idle).
+# From repo root:
+#   npm run deploy:chat-api
+# Secrets (once):
+#   fly secrets set OPENAI_API_KEY=sk-... CHAT_API_TOKEN=... --app saavi-chat-pranesh
 
-app = "lifeos-chat"
-primary_region = "fra"
+app = "saavi-chat-pranesh"
+primary_region = "sin"
 
 [build]
   dockerfile = "Dockerfile"

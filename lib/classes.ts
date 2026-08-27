@@ -259,6 +259,43 @@ export function classPackFromUtterance(text?: string): {
   };
 }
 
+const MONTH_NAMES = [
+  'january',
+  'february',
+  'march',
+  'april',
+  'may',
+  'june',
+  'july',
+  'august',
+  'september',
+  'october',
+  'november',
+  'december',
+];
+
+/**
+ * "before November" / "by end of March" → the next upcoming occurrence of
+ * that month as YYYY-MM-DD. Talk deadlines are always in the future — a
+ * month that already passed this year means next year.
+ */
+export function classDeadlineFromUtterance(
+  text?: string,
+  from = new Date()
+): string | undefined {
+  if (!text?.trim()) return undefined;
+  const m = text.match(
+    /\b(?:before|by|until|till|through)\s+(the\s+)?(end\s+of\s+)?(january|february|march|april|may|june|july|august|september|october|november|december)\b/i
+  );
+  if (!m) return undefined;
+  const endOf = Boolean(m[2]);
+  const monthIdx = MONTH_NAMES.indexOf(m[3]!.toLowerCase());
+  if (monthIdx < 0) return undefined;
+  const year = from.getFullYear() + (monthIdx <= from.getMonth() ? 1 : 0);
+  const day = endOf ? new Date(year, monthIdx + 1, 0).getDate() : 1;
+  return `${year}-${String(monthIdx + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
 const CLASS_ACTIVITY =
   'swimming|skating|piano|tennis|football|soccer|dance|yoga|karate|guitar|violin|chess|coding|art|boxing|ballet|cricket|golf';
 

@@ -159,8 +159,8 @@ export function SwipeableThingRow({ name, subtitle, icon, onPress, onDelete }: P
               accessibilityRole="button"
               accessibilityLabel="Delete"
             >
-              <Trash2 size={20} color="#FFFFFF" strokeWidth={2.2} />
-            <Text style={[styles.deleteLabel, { color: '#FFFFFF' }]}>Delete</Text>
+              <Trash2 size={20} color={colors.onInk} strokeWidth={2.2} />
+            <Text style={[styles.deleteLabel, { color: colors.onInk }]}>Delete</Text>
             </Pressable>
           </Animated.View>
         </View>

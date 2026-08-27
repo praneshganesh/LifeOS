@@ -33,7 +33,7 @@ html {
   color-scheme: dark;
 }
 body {
-  background-color: #0B0B0C;
+  background-color: #0D0D0F;
 }
 input, textarea {
   outline: none !important;

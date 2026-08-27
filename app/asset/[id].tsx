@@ -1,4 +1,5 @@
 import { useTheme } from '@/lib/ThemeContext';
+import { useToast } from '@/lib/ToastContext';
 import {
   Alert,
   Image,
@@ -49,6 +50,7 @@ export default function AssetDetailScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { getById, removeItem } = useInventory();
+  const { showError } = useToast();
   const { items: lastDoneItems } = useLastDone();
   const scrollRef = useRef<ScrollView>(null);
   const scrollYRef = useRef(0);
@@ -100,7 +102,12 @@ export default function AssetDetailScreen() {
     blurActiveElement();
     const ok = await confirmDelete(captured.name);
     if (!ok) return;
-    await removeItem(captured.id);
+    try {
+      await removeItem(captured.id);
+    } catch {
+      showError('Couldn’t delete — try again.');
+      return;
+    }
     leave();
   }
 
@@ -540,10 +547,10 @@ function makeStyles(colors: ThemeColors) {
     gap: spacing.md,
   },
   title: {
-    fontFamily: fonts.sansBold,
-    fontSize: 28,
-    lineHeight: 34,
-    letterSpacing: -0.5,
+    fontFamily: fonts.sansSemi,
+    fontSize: 22,
+    lineHeight: 28,
+    letterSpacing: -0.4,
     color: colors.ink,
   },
   chipRow: {

@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -37,6 +38,7 @@ const SubscriptionsContext = createContext<SubscriptionsContextValue | null>(nul
 export function SubscriptionsProvider({ children }: { children: ReactNode }) {
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [ready, setReady] = useState(false);
+  const subsRef = useRef<Subscription[]>([]);
 
   useEffect(() => {
     (async () => {
@@ -46,7 +48,8 @@ export function SubscriptionsProvider({ children }: { children: ReactNode }) {
           SCHEMA_VERSION,
           normalizeSubscription
         );
-        setSubscriptions(sortByRenewal(loaded));
+        subsRef.current = sortByRenewal(loaded);
+        setSubscriptions(subsRef.current);
       } catch {
         /* ignore */
       } finally {
@@ -55,48 +58,41 @@ export function SubscriptionsProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
-  const persist = (next: Subscription[]) => {
-    void saveVersionedArray(STORAGE_KEY, SCHEMA_VERSION, next);
+  // Awaited persist: callers only resolve once the write is on disk, so a
+  // failed write rejects instead of the UI reporting a save that never stuck.
+  const persist = async (next: Subscription[]) => {
+    subsRef.current = next;
+    setSubscriptions(next);
+    await saveVersionedArray(STORAGE_KEY, SCHEMA_VERSION, next);
   };
 
   const addSubscription = useCallback(async (input: NewSubscriptionInput) => {
-    let created = createSubscription(input);
-    setSubscriptions((prev) => {
-      const dup = findDuplicateSubscription(prev, created);
-      if (dup) {
-        created = dup;
-        return prev;
-      }
-      const next = sortByRenewal([created, ...prev]);
-      persist(next);
-      return next;
-    });
+    const created = createSubscription(input);
+    const dup = findDuplicateSubscription(subsRef.current, created);
+    if (dup) return dup;
+    await persist(sortByRenewal([created, ...subsRef.current]));
     return created;
   }, []);
 
   const updateSubscription = useCallback(
     async (id: string, patch: Partial<Subscription>) => {
-      setSubscriptions((prev) => {
-        const next = sortByRenewal(
-          prev.map((s) => (s.id === id ? { ...s, ...patch, id: s.id } : s))
-        );
-        persist(next);
-        return next;
-      });
+      await persist(
+        sortByRenewal(
+          subsRef.current.map((s) => (s.id === id ? { ...s, ...patch, id: s.id } : s))
+        )
+      );
     },
     []
   );
 
   const removeSubscription = useCallback(async (id: string) => {
-    setSubscriptions((prev) => {
-      const next = prev.filter((s) => s.id !== id);
-      persist(next);
-      return next;
-    });
+    await persist(subsRef.current.filter((s) => s.id !== id));
   }, []);
 
   const getById = useCallback(
-    (id: string) => subscriptions.find((s) => s.id === id),
+    (id: string) =>
+      subsRef.current.find((s) => s.id === id) ??
+      subscriptions.find((s) => s.id === id),
     [subscriptions]
   );
 

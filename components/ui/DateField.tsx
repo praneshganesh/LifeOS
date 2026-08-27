@@ -239,6 +239,53 @@ export function DateField({
   );
 }
 
+type OptionalProps = Props & {
+  /** Shown on the add-affordance when no date is set. */
+  addLabel?: string;
+};
+
+/**
+ * DateField for optional dates: renders an "Add date" affordance when empty
+ * and a "Clear" link when set, so junk free-text dates are impossible and
+ * "no date" stays representable.
+ */
+export function OptionalDateField({
+  value,
+  onChange,
+  addLabel = 'Add date',
+  style,
+  ...rest
+}: OptionalProps) {
+  const { colors } = useTheme();
+  if (!value) {
+    return (
+      <Pressable
+        onPress={() => onChange(toDateInputValue(new Date()))}
+        style={({ pressed }) => [
+          styles.field,
+          styles.addField,
+          { borderColor: colors.lineStrong, backgroundColor: colors.surface },
+          pressed && { opacity: 0.9 },
+          style,
+        ]}
+      >
+        <View style={[styles.iconWrap, { backgroundColor: colors.accentSoft }]}>
+          <Calendar size={16} color={colors.accent} strokeWidth={2.2} />
+        </View>
+        <Text style={[styles.fieldText, { color: colors.mute }]}>{addLabel}</Text>
+      </Pressable>
+    );
+  }
+  return (
+    <View style={style}>
+      <DateField value={value} onChange={onChange} {...rest} />
+      <Pressable onPress={() => onChange('')} hitSlop={6} style={styles.clearBtn}>
+        <Text style={[styles.clearText, { color: colors.mute }]}>Clear date</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   field: {
     flexDirection: 'row',
@@ -327,5 +374,16 @@ const styles = StyleSheet.create({
   footerLink: {
     fontFamily: fonts.sansMedium,
     fontSize: 16,
+  },
+  addField: {
+    borderStyle: 'dashed',
+  },
+  clearBtn: {
+    alignSelf: 'flex-start',
+    marginTop: 6,
+  },
+  clearText: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 14,
   },
 });

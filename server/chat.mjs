@@ -20,7 +20,7 @@ import {
   tokenOk,
 } from './guard.mjs';
 import { repairHeardBrand } from './brands.mjs';
-import { ensureClassActions, classTitleFromUtterance, looksLikeClassAttendance } from './classes.mjs';
+import { ensureClassActions, classTitleFromUtterance, looksLikeClassAttendance, looksLikeClassEnrollment } from './classes.mjs';
 import { ensureReminderActions } from './reminders.mjs';
 
 const PORT = Number(process.env.PORT || process.env.CHAT_API_PORT || 8787);
@@ -66,12 +66,12 @@ function loadDotEnv() {
 loadDotEnv();
 
 /** Keep this stable + under ~600 tokens so prompt cache can kick in. */
-const SYSTEM = `LifeOS home-inventory + spend assistant for voice/chat. Reply in 1 short real English sentence (never the word "none").
+const SYSTEM = `Saavi home-inventory + spend assistant for voice/chat. Reply in 1 short real English sentence (never the word "none").
 
 ASR often mangles brand and store names. When the real manufacturer or retailer is clear from context, store the correct common spelling and reply with that. If it is not a clear match, keep what they said — never invent a brand or merchant.
 
 Defaults: coffee/espresso → Kitchen / Appliances. Laptops/phones/headphones → room Personal (never Personal Documents — that is for passports/IDs only). Rooms: Kitchen, Living Room, Bedroom, Utility, Vehicles, Personal, Family, Personal Documents.
-Ownership: assign ONLY if Household JSON in this request has that person (match name or id). Never invent people, never copy example names (there is no Ananya unless they are in Household). Things: if they did not name someone, omit assignedTo and personId. Habits, class packs, attendance, reminders: first-person (“I walked”, “I attended”, “I enrolled”, “remind me”) with no other person named → the household member whose relation is You (include that id + name). Never log another adult’s class or habit as theirs. “My son’s swimming” → that child only.
+Ownership: assign ONLY if Household JSON in this request has that person (match name or id). Never invent people, never copy example names (there is no Ananya unless they are in Household). Exception: if the user explicitly names a person this turn who is NOT in Household (“I enrolled Maya for piano”), keep assignedTo with that exact spoken name and NO personId — the app creates them; never substitute a different household member. Things: if they did not name someone, omit assignedTo and personId. Habits, class packs, attendance, reminders: first-person (“I walked”, “I attended”, “I enrolled”, “remind me”) with no other person named → the household member whose relation is You (include that id + name). Never log another adult’s class or habit as theirs. “My son’s swimming” → that child only.
 On add_item for appliances/electronics: include "manualUrl" when you know a real https manufacturer support/manual page (e.g. Apple → https://support.apple.com). Never invent fake product-PDF URLs. Omit if unsure.
 
 Facts (critical):
@@ -87,7 +87,7 @@ Facts (critical):
 - Habit streak / "did I walk" → Habits JSON only.
 - Class packs / "how many skating classes left" / remaining sessions → Classes JSON only.
 - Optional insight: if they ask about unnecessary spend, compare recent Expenses to owned Inventory cautiously — never invent.
-- "when did I add it" → use addedAt (LifeOS add date), not a made-up purchase date.
+- "when did I add it" → use addedAt (Saavi add date), not a made-up purchase date.
 - "where did I buy it" → purchasedFrom only.
 - "where is X" → room only.
 - "how long is the warranty" → warrantyExpiry only.
@@ -98,17 +98,18 @@ Facts (critical):
 
 Actions:
 - durable goods (laptop, machine, headphones, passport) → add_item (name, brand?, room?, category?, price?, purchasedFrom?, warrantyExpiry?, manualUrl?, assignedTo?, personId?). warrantyExpiry YYYY-MM-DD; year-only "until 2028" → 2028-12-31. Omit condition unless they said used/refurbished/etc — never invent Good. "I got a new X" is not a condition.
-- spent/paid/coffee run/groceries/bill (one-off consumable spend, not a Thing) → add_expense { title, amount, currency?, category?, date?, merchant?, assignedTo?, personId? } categories: food|transport|home|shopping|health|travel|bills|entertainment|other. "at/in/from STORE for X" or "got X from STORE for N dirhams" → always set merchant to STORE (keep spelling if ASR is unclear; normalize only when the real retailer is obvious). Dirhams → currency AED. Named person ("for Aarav") → that personId. Vague "show/open that/show me" after ANY successful action → open that same record using session focus (kind + id). Never open an unrelated Thing.
-- refine an expense (change amount/merchant/title of yogurt, coffee, groceries already in Expenses JSON) → update_expense { id, patch: { amount?, currency?, merchant?, title?, date?, category? } }. Never update_item for consumable spend. Dirhams → amount number + currency AED.
+- spent/paid/coffee run/groceries/bill (one-off consumable spend, not a Thing) → add_expense { title, amount, currency?, category?, date?, merchant?, assignedTo?, personId? } categories: food|transport|home|shopping|health|travel|bills|entertainment|other. "at/in/from STORE for X" or "got X from STORE for N dirhams" → always set merchant to STORE (keep spelling if ASR is unclear; normalize only when the real retailer is obvious). Named currency words → ISO codes (dirhams→AED, dollars→USD, euros→EUR, pounds→GBP, rupees→INR). If they name no currency, omit currency (app uses Default currency). Named person ("for Aarav") → that personId. Vague "show/open that/show me" after ANY successful action → open that same record using session focus (kind + id). Never open an unrelated Thing.
+- refine an expense (change amount/merchant/title of yogurt, coffee, groceries already in Expenses JSON) → update_expense { id, patch: { amount?, currency?, merchant?, title?, date?, category? } }. Never update_item for consumable spend. Spoken currency words → ISO code; otherwise leave currency unset.
 - delete an expense ("delete that juice", "remove the coffee spend") → remove_expense { id } from Expenses JSON. Never remove_item for spend. Vague "delete that" uses session focus.
-- recurring subscription ("I pay for Netflix", "Spotify is AED 22/month") → add_subscription { title, amount, currency?, cycle?, renewsOn?, category?, provider?, assignedTo?, personId? } cycle: weekly|monthly|yearly; categories: streaming|software|fitness|cloud|news|other
+- recurring subscription ("I pay for Netflix", "Spotify is 22 a month") → add_subscription { title, amount, currency?, cycle?, renewsOn?, category?, provider?, assignedTo?, personId? } cycle: weekly|monthly|yearly; categories: streaming|software|fitness|cloud|news|other. Same currency rules as expenses.
 - change/cancel a subscription → update_subscription { id, patch } or remove_subscription { id } from Subscriptions JSON. Never update_item / remove_item for a subscription.
 - habit check-in ("I walked", "mark gym done", "did meditation") → habit_check_in { title, date?, why?, createIfMissing?, inventoryItemId?, assignedTo?, personId? } (default createIfMissing true). First-person with no other name → You. Never check in someone else’s habit of the same title. Delete a habit → remove_habit { id }.
-- enrolled in a class pack ("I enrolled for swimming", "24 skating classes in 3 months") → add_class_pack { title, total?, months?, endsOn?, assignedTo?, personId? }. Create even if they omit the count. ASR "12th classes" → total 12. Not a habit. Not a lookup. First-person enroll → You; “my son” → that child. Never also habit_check_in on enroll. Change pack size → update_class_pack { id, patch: { total? } }. Cancel a pack → remove_class_pack { id }.
+- enrolled in a class pack ("I enrolled for swimming", "24 skating classes in 3 months") → add_class_pack { title, total?, months?, endsOn?, assignedTo?, personId? }. Create even if they omit the count. ASR "12th classes" → total 12. Not a habit. Not a lookup. First-person enroll → You; “my son” → that child. Never also habit_check_in on enroll. Dates: endsOn/startsOn are YYYY-MM-DD and must be today or later — "before November" → the NEXT upcoming 1 November (never a past year); omit startsOn unless they said when it starts. Change pack size → update_class_pack { id, patch: { total? } }. Reassign a pack to someone else → update_class_pack { id, patch: { assignedTo } }. Cancel a pack → remove_class_pack { id }.
+- correcting a person's NAME ("that's spelled with double A", "it's Saara not Sara", "S-A-A-R-A") → rename_person { from, to }. from = the CURRENT name of the Household member being corrected, copied from Household JSON (ASR may misspell the name again this turn — match it to the closest member; use session focus when they don't repeat the name). to = the intended spelling: a letter-by-letter spelling wins; otherwise apply the spoken instruction to that member's stored name (e.g. "double A" doubles the a, "two Ts" doubles the t) — never assume this turn's transcript spelling is what is stored. Never treat a name correction as update_class_pack, add_class_pack, or a new person.
 - attended a class ("I attended", "went to skating") → log_class { title?, id?, date?, assignedTo?, personId? } only if Classes JSON has a pack for that person (or one unassigned pack). If Classes JSON is empty, do not log_class. Never invent a pack from attendance. Never log another adult’s pack.
-- refine Thing (store/price/warranty/date/serial/name) → update_item { id, patch } (patch may include purchaseDate, warrantyExpiry, serial, purchasedFrom, price). If user gives price → "AED 800" for dirhams; Sharafdg→Sharaf DG.
+- refine Thing (store/price/warranty/date/serial/name) → update_item { id, patch } (patch may include purchaseDate, warrantyExpiry, serial, purchasedFrom, price). If user gives price with a currency word → include that ISO code in the price string; bare numbers use Default currency. Sharafdg→Sharaf DG.
 - service/maintain/descale/filter change → log_done { label, inventoryItemId?, doneAt? }
-- reminder ("remind me next Tuesday", "log a reminder to renew passport") → set_reminder { label, remindAt, inventoryItemId?, assignedTo?, personId? }. remindAt YYYY-MM-DD. Do not refuse — LifeOS stores this on Last Done.
+- reminder ("remind me next Tuesday", "log a reminder to renew passport") → set_reminder { label, remindAt, inventoryItemId?, assignedTo?, personId? }. remindAt YYYY-MM-DD. Do not refuse — Saavi stores this on Last Done.
 - delete a Last Done activity / reminder → remove_last_done { id } from LastDone JSON.
 - delete/sold a Thing → remove_item { id } (reply with count). "Did you delete?" → none only, do not remove again.
 - show/open a Thing → open_item { id } (use focus item id; never omit id)
@@ -227,7 +228,7 @@ function merchantFromUtterance(text) {
     .join(' ');
 }
 
-function formatExpenseAmount(amount, currency) {
+function formatExpenseAmount(amount, currency, defaultCurrency = '') {
   const raw = amount != null ? String(amount).trim() : '';
   if (!raw) return '';
   const numMatch = raw.replace(/,/g, '').match(/(\d+(?:\.\d+)?)/);
@@ -238,7 +239,13 @@ function formatExpenseAmount(amount, currency) {
   const cur = String(currency || '').trim().toUpperCase();
   if (cur) return `${cur} ${pretty}`;
   if (/\b(aed|dirhams?|dhs|dh)\b/i.test(raw)) return `AED ${pretty}`;
-  if (/^\d+(\.\d+)?$/.test(raw)) return `AED ${pretty}`;
+  if (/\b(usd|dollars?|\$)\b/i.test(raw)) return `USD ${pretty}`;
+  if (/\b(eur|euros?|€)\b/i.test(raw)) return `EUR ${pretty}`;
+  if (/\b(gbp|pounds?|£)\b/i.test(raw)) return `GBP ${pretty}`;
+  const fallback = String(defaultCurrency || '').trim().toUpperCase();
+  if (fallback && /^\d+(\.\d+)?$/.test(raw.replace(/,/g, ''))) {
+    return `${fallback} ${pretty}`;
+  }
   return raw;
 }
 
@@ -457,7 +464,18 @@ function isVagueDeleteUtterance(text) {
   return /^(delete|remove|forget)(\s+(it|that|this|please))?\s*[.!?]?$/.test(t);
 }
 
-function repairActions(actions, { focusItemId, focusExpenseId, sessionFocus, inventorySummary, household, lastUserText, classPacksSummary, expensesSummary }) {
+function currencyFromUtterance(text) {
+  const s = String(text || '');
+  if (/\b(aed|dirhams?|dhs|dh)\b/i.test(s)) return 'AED';
+  if (/\b(usd|dollars?|\$)\b/i.test(s)) return 'USD';
+  if (/\b(eur|euros?|€)\b/i.test(s)) return 'EUR';
+  if (/\b(gbp|pounds?|£)\b/i.test(s)) return 'GBP';
+  if (/\b(inr|rupees?)\b/i.test(s)) return 'INR';
+  if (/\b(sar|riyals?)\b/i.test(s)) return 'SAR';
+  return '';
+}
+
+function repairActions(actions, { focusItemId, focusExpenseId, sessionFocus, inventorySummary, household, lastUserText, classPacksSummary, expensesSummary, defaultCurrency }) {
   const ids = inventoryIds(inventorySummary);
   const expenseIds = new Set(
     (Array.isArray(expensesSummary) ? expensesSummary : [])
@@ -501,9 +519,11 @@ function repairActions(actions, { focusItemId, focusExpenseId, sessionFocus, inv
         if (a.patch?.purchaseDate) patch.date = a.patch.purchaseDate;
         if (
           !patch.currency &&
-          /\b(aed|dirhams?|dhs|dh)\b/i.test(String(lastUserText || a.patch?.price || ''))
+          currencyFromUtterance(String(lastUserText || a.patch?.price || ''))
         ) {
-          patch.currency = 'AED';
+          patch.currency = currencyFromUtterance(
+            String(lastUserText || a.patch?.price || '')
+          );
         }
         return { type: 'update_expense', id: matched, patch };
       }
@@ -552,6 +572,16 @@ function repairActions(actions, { focusItemId, focusExpenseId, sessionFocus, inv
         const next = { ...a };
         delete next.assignedTo;
         delete next.personId;
+        // Keep a name the user actually spoke this turn — the app creates
+        // that person instead of silently reassigning to self.
+        if (
+          assigned &&
+          String(lastUserText || '')
+            .toLowerCase()
+            .includes(assigned.toLowerCase())
+        ) {
+          next.assignedTo = assigned;
+        }
         return next;
       }
       return { ...a, assignedTo: hit.name, personId: hit.id };
@@ -602,10 +632,11 @@ function repairActions(actions, { focusItemId, focusExpenseId, sessionFocus, inv
       if (merchant) next.merchant = merchant;
       else delete next.merchant;
       if (
-        !String(next.currency || '').trim() &&
-        /\b(aed|dirhams?|dhs|dh)\b/i.test(String(lastUserText || ''))
+        !String(next.currency || '').trim()
       ) {
-        next.currency = 'AED';
+        const spoken = currencyFromUtterance(String(lastUserText || ''));
+        if (spoken) next.currency = spoken;
+        else if (defaultCurrency) next.currency = defaultCurrency;
       }
       return next;
     }
@@ -671,7 +702,7 @@ function slimExpenses(summary) {
         id: e.id,
         title: e.title,
         amount: e.amount,
-        currency: e.currency || 'AED',
+        currency: e.currency || undefined,
         category: e.category || 'other',
         date: e.date,
       };
@@ -734,7 +765,7 @@ function slimSubscriptions(summary) {
         id: s.id,
         title: s.title,
         amount: s.amount,
-        currency: s.currency || 'AED',
+        currency: s.currency || undefined,
         cycle: s.cycle || 'monthly',
         renewsOn: s.renewsOn,
         category: s.category || 'other',
@@ -822,6 +853,11 @@ const server = createServer(async (req, res) => {
   const classPacksSummary = slimClassPacks(body.classPacksSummary);
   const subscriptionsSummary = slimSubscriptions(body.subscriptionsSummary);
   const household = Array.isArray(body.household) ? body.household.slice(0, 12) : [];
+  const defaultCurrency = String(body.defaultCurrency || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z]/g, '')
+    .slice(0, 3);
   const focusItemId =
     typeof body.session?.focusItemId === 'string' && body.session.focusItemId
       ? body.session.focusItemId
@@ -860,7 +896,7 @@ const server = createServer(async (req, res) => {
     ...FEW_SHOT,
     {
       role: 'system',
-      content: `${focusLine}\nHousehold people (use id + name for assignedTo/personId):\n${JSON.stringify(household)}\nInventory (newest first):\n${JSON.stringify(inventorySummary)}\nLastDone activities (maintenance/service logs):\n${JSON.stringify(lastDoneSummary)}\nExpenses (newest first):\n${JSON.stringify(expensesSummary)}\nSubscriptions:\n${JSON.stringify(subscriptionsSummary)}\nHabits:\n${JSON.stringify(habitsSummary)}\nClasses (session packs):\n${JSON.stringify(classPacksSummary)}`,
+      content: `Today is ${new Date().toISOString().slice(0, 10)}. All spoken dates ("before November", "next Tuesday") are relative to today and always in the FUTURE — never a past year.\nDefault currency: ${defaultCurrency || 'unset (omit currency unless they named one)'}.\n${focusLine}\nHousehold people (use id + name for assignedTo/personId):\n${JSON.stringify(household)}\nInventory (newest first):\n${JSON.stringify(inventorySummary)}\nLastDone activities (maintenance/service logs):\n${JSON.stringify(lastDoneSummary)}\nExpenses (newest first):\n${JSON.stringify(expensesSummary)}\nSubscriptions:\n${JSON.stringify(subscriptionsSummary)}\nHabits:\n${JSON.stringify(habitsSummary)}\nClasses (session packs):\n${JSON.stringify(classPacksSummary)}`,
     },
     ...messages.map((m) => ({
       role: m.role === 'assistant' ? 'assistant' : 'user',
@@ -922,6 +958,7 @@ const server = createServer(async (req, res) => {
       lastUserText,
       classPacksSummary,
       expensesSummary,
+      defaultCurrency,
     });
     parsed.reply = alignReplyWithActions(parsed.reply, parsed.actions);
     if (

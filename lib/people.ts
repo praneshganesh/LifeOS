@@ -117,12 +117,32 @@ export function resolvePersonMention(
   for (const m of members) {
     const name = m.name.toLowerCase();
     if (name.length < 2) continue;
-    if (new RegExp(`\\b(for|to)\\s+${escapeRe(name)}\\b`, 'i').test(t)) {
+    if (
+      new RegExp(
+        `\\b(for|to|enrolled|enrolling|booked|registered|signed\\s+up)\\s+${escapeRe(name)}\\b`,
+        'i'
+      ).test(t)
+    ) {
       return { personId: m.id, assignedTo: m.name };
     }
     if (new RegExp(`\\b${escapeRe(name)}['']s\\b`, 'i').test(t)) {
       return { personId: m.id, assignedTo: m.name };
     }
+  }
+
+  // ASR rarely spells names right ("Saara" → "Sara"/"Sarah") — fuzzy-bind the
+  // spoken enroll-object / possessive word before inventing a new person.
+  const enrollWord = t.match(
+    /\b(?:for|to|enrolled|enrolling|booked|registered|signed\s+up)\s+([a-z][a-z'’-]+)\b/i
+  )?.[1];
+  if (enrollWord && !ENROLL_OBJECT_STOPWORDS.has(enrollWord.toLowerCase())) {
+    const hit = fuzzyMatchMember(enrollWord, members);
+    if (hit) return { personId: hit.id, assignedTo: hit.name };
+  }
+  const possessiveWord = t.match(/\b([a-z][a-z-]+)['’]s\b/i)?.[1];
+  if (possessiveWord && !ENROLL_OBJECT_STOPWORDS.has(possessiveWord.toLowerCase())) {
+    const hit = fuzzyMatchMember(possessiveWord, members);
+    if (hit) return { personId: hit.id, assignedTo: hit.name };
   }
 
   const self = selfMember(members);
@@ -144,11 +164,111 @@ export function looksLikeFirstPersonSelf(utterance: string): boolean {
   ) {
     return false;
   }
+  // "I enrolled Maya…" — the verb has a person object, so it isn't about self.
+  if (
+    /^i\s+(?:enrolled|enrolling|signed\s+up|registered|booked)\s+(?!for\b|in\b|into\b|to\b|at\b|myself\b|my\b)/i.test(
+      t
+    )
+  ) {
+    return false;
+  }
   return /^(i |i'm |i’m |i've |i’ve |i am |i have |remind me\b)/i.test(t);
+}
+
+const ENROLL_OBJECT_STOPWORDS = new Set([
+  'for',
+  'in',
+  'into',
+  'to',
+  'at',
+  'on',
+  'myself',
+  'me',
+  'my',
+  'him',
+  'her',
+  'them',
+  'us',
+  'a',
+  'an',
+  'the',
+  'some',
+  'today',
+  'yesterday',
+  'tomorrow',
+]);
+
+/**
+ * "I enrolled Maya for piano" → "Maya", when that name is NOT already a
+ * household member. Returns null for "enrolled for swimming" style phrasing.
+ */
+export function spokenEnrolleeName(
+  utterance: string,
+  members: HouseholdMember[]
+): string | null {
+  const m = utterance.match(
+    /\b(?:enrolled|enrolling|signed\s+up|registered|booked)\s+([a-z][a-z'’-]+)/i
+  );
+  const word = m?.[1]?.trim();
+  if (!word) return null;
+  const lower = word.toLowerCase();
+  if (ENROLL_OBJECT_STOPWORDS.has(lower)) return null;
+  // Fuzzy too — "Sara" must bind to the member "Saara", not spawn a twin.
+  if (fuzzyMatchMember(word, members)) return null;
+  return word[0]!.toUpperCase() + word.slice(1);
 }
 
 function escapeRe(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** "ishaan" → "ishan" — ASR drops doubled letters constantly. */
+function collapseRepeats(s: string): string {
+  return s.replace(/(.)\1+/g, '$1');
+}
+
+function editDistance(a: string, b: string): number {
+  const rows = a.length + 1;
+  const cols = b.length + 1;
+  const prev = new Array<number>(cols);
+  const curr = new Array<number>(cols);
+  for (let j = 0; j < cols; j++) prev[j] = j;
+  for (let i = 1; i < rows; i++) {
+    curr[0] = i;
+    for (let j = 1; j < cols; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
+    }
+    for (let j = 0; j < cols; j++) prev[j] = curr[j]!;
+  }
+  return prev[cols - 1]!;
+}
+
+/**
+ * Bind an ASR-mangled spoken name ("Sara", "Sarah") to the one household
+ * member it plausibly is ("Saara"). Exact match first; then doubled-letter
+ * collapse plus a small edit distance. Returns undefined when ambiguous —
+ * never guess between two members.
+ */
+export function fuzzyMatchMember(
+  spoken: string,
+  members: HouseholdMember[]
+): HouseholdMember | undefined {
+  const s = spoken.trim().toLowerCase();
+  if (s.length < 2 || !members.length) return undefined;
+  const exact = members.find((m) => m.name.trim().toLowerCase() === s);
+  if (exact) return exact;
+  const sKey = collapseRepeats(s);
+  const hits = members.filter((m) => {
+    const n = m.name.trim().toLowerCase().split(/\s+/)[0] || '';
+    if (n.length < 2) return false;
+    const nKey = collapseRepeats(n);
+    if (nKey === sKey) return true;
+    const len = Math.min(nKey.length, sKey.length);
+    const maxDist = len >= 6 ? 2 : len >= 4 ? 1 : 0;
+    return maxDist > 0 && editDistance(sKey, nKey) <= maxDist;
+  });
+  return hits.length === 1 ? hits[0] : undefined;
 }
 
 export function personById(members: HouseholdMember[], id?: string | null) {
@@ -157,8 +277,23 @@ export function personById(members: HouseholdMember[], id?: string | null) {
 }
 
 /**
- * Bind ownership only to a real household member.
- * Model names like "Ananya" from few-shots are dropped if they are not in the list.
+ * Live owner name for display — the member's CURRENT name wins over the
+ * assignedTo string copied at creation time (which goes stale on rename).
+ */
+export function displayNameFor(
+  members: HouseholdMember[],
+  personId?: string | null,
+  assignedTo?: string | null
+): string {
+  const member = personId ? members.find((m) => m.id === personId) : undefined;
+  return (member?.name || assignedTo || '').trim();
+}
+
+/**
+ * Bind ownership to a real household member when possible.
+ * Model names like "Ananya" from few-shots are dropped if they are not in the
+ * list AND not spoken in the utterance. A spoken name that isn't a member yet
+ * is returned WITHOUT a personId so callers can create that person.
  */
 export function resolveAssignment(params: {
   assignedTo?: string;
@@ -169,11 +304,11 @@ export function resolveAssignment(params: {
   preferSelf?: boolean;
 }): PersonRef | null {
   const members = params.members ?? [];
-  if (!members.length) return null;
 
-  const fromSpeech = params.utterance
-    ? resolvePersonMention(params.utterance, members)
-    : null;
+  const fromSpeech =
+    params.utterance && members.length
+      ? resolvePersonMention(params.utterance, members)
+      : null;
   if (fromSpeech) return fromSpeech;
 
   if (params.personId) {
@@ -181,13 +316,31 @@ export function resolveAssignment(params: {
     if (hit) return { personId: hit.id, assignedTo: hit.name };
   }
 
-  const name = params.assignedTo?.trim().toLowerCase();
-  if (name && name.length >= 2) {
-    const hit = members.find((m) => m.name.trim().toLowerCase() === name);
+  const name = params.assignedTo?.trim();
+  const lower = name?.toLowerCase();
+  if (name && lower && lower.length >= 2) {
+    const hit =
+      members.find((m) => m.name.trim().toLowerCase() === lower) ||
+      (!/^(you|me|myself)$/.test(lower)
+        ? fuzzyMatchMember(name, members)
+        : undefined);
     if (hit) return { personId: hit.id, assignedTo: hit.name };
+    // Only trust an unknown name if the user actually said it this turn —
+    // that filters model hallucinations but keeps "I enrolled Maya…".
+    if (
+      !/^(you|me|myself)$/.test(lower) &&
+      params.utterance?.toLowerCase().includes(lower)
+    ) {
+      return { assignedTo: name };
+    }
   }
 
-  if (params.preferSelf) {
+  const enrollee = params.utterance
+    ? spokenEnrolleeName(params.utterance, members)
+    : null;
+  if (enrollee) return { assignedTo: enrollee };
+
+  if (params.preferSelf && members.length) {
     const self = selfMember(members);
     if (self) return { personId: self.id, assignedTo: self.name };
   }

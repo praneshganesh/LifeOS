@@ -137,7 +137,7 @@ export async function scheduleLastDoneReminder(
     const Notifications = await notifications();
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('lifeos-reminders', {
-        name: 'LifeOS reminders',
+        name: 'Saavi reminders',
         importance: Notifications.AndroidImportance.DEFAULT,
         vibrationPattern: [0, 250, 250, 250],
         lightColor: '#5F7350',

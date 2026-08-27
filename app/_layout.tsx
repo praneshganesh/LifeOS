@@ -27,6 +27,8 @@ import { HabitsProvider } from '@/lib/HabitsContext';
 import { ClassesProvider } from '@/lib/ClassesContext';
 import { SubscriptionsProvider } from '@/lib/SubscriptionsContext';
 import { TalkOverlayProvider } from '@/lib/TalkOverlayContext';
+import { ToastProvider } from '@/lib/ToastContext';
+import { CurrencyProvider } from '@/lib/CurrencyContext';
 import { FloatingNav, TalkOrb } from '@/components/TalkOverlay';
 import 'react-native-reanimated';
 
@@ -150,7 +152,7 @@ export default function RootLayout() {
   if (!loaded) return null;
 
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#0B0B0C' }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#0D0D0F' }}>
       <ThemeProvider>
         <CloudGate>
         <LastDoneProvider>
@@ -162,14 +164,18 @@ export default function RootLayout() {
                     <ClassesProvider>
                       <SubscriptionsProvider>
                         <TalkOverlayProvider>
-                          <AppLockGate>
-                            <OnboardingGate>
-                              <RootNavigation
-                                showBrandSplash={showBrandSplash}
-                                onBrandSplashFinished={finishBrandSplash}
-                              />
-                            </OnboardingGate>
-                          </AppLockGate>
+                          <ToastProvider>
+                            <CurrencyProvider>
+                            <AppLockGate>
+                              <OnboardingGate>
+                                <RootNavigation
+                                  showBrandSplash={showBrandSplash}
+                                  onBrandSplashFinished={finishBrandSplash}
+                                />
+                              </OnboardingGate>
+                            </AppLockGate>
+                            </CurrencyProvider>
+                          </ToastProvider>
                         </TalkOverlayProvider>
                       </SubscriptionsProvider>
                     </ClassesProvider>

@@ -27,8 +27,11 @@ export default function OnboardingWelcome() {
           style={styles.mark}
           resizeMode="contain"
         />
-        <Text style={styles.brand}>LifeOS</Text>
-        <Text style={styles.headline}>Your home, Things, and routines — kept local.</Text>
+        <Text style={styles.brand}>Saavi</Text>
+        <Text style={styles.headline}>
+          Your home, Things, and routines — private by default, backed up only
+          when you choose.
+        </Text>
         <Text style={styles.lead}>
           A short setup: name your place, add people, try Capture, then meet Talk.
         </Text>
@@ -41,7 +44,7 @@ export default function OnboardingWelcome() {
         >
           <Text style={styles.ctaText}>Get started</Text>
         </Pressable>
-        <Text style={styles.privacy}>On this device · nothing leaves unless you use Talk chat</Text>
+        <Text style={styles.privacy}>Synced securely to your cloud — never sold, never shared</Text>
       </View>
     </View>
   );
@@ -75,8 +78,9 @@ function makeStyles(colors: ThemeColors) {
   },
   brand: {
     fontFamily: fonts.sansSemi,
-    fontSize: 40,
-    letterSpacing: -1.4,
+    fontSize: 32,
+    lineHeight: 40,
+    letterSpacing: -1,
     color: colors.ink,
     marginBottom: spacing.md,
   },

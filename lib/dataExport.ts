@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Sharing from 'expo-sharing';
 import { defaultSpacesPayload } from '@/lib/spacesDefaults';
 
-/** All LifeOS on-device store keys (export + wipe). */
+/** All Saavi on-device store keys (export + wipe). */
 export const LIFEOS_STORAGE_KEYS = [
   'lifeos:inventory:v1',
   'lifeos:expenses:v1',
@@ -45,7 +45,7 @@ export async function buildLifeOsBackup(version = '1.0.0'): Promise<LifeOsBackup
   }
   return {
     exportedAt: new Date().toISOString(),
-    app: 'LifeOS',
+    app: 'Saavi',
     version,
     stores,
   };
@@ -82,7 +82,7 @@ export async function shareLifeOsBackup(
     if (available) {
       await Sharing.shareAsync(uri, {
         mimeType: 'application/json',
-        dialogTitle: 'Export LifeOS backup',
+        dialogTitle: 'Export Saavi backup',
         UTI: 'public.json',
       });
       return 'shared';
@@ -100,7 +100,7 @@ export async function shareLifeOsBackup(
 }
 
 /**
- * Wipe all LifeOS AsyncStorage keys and re-seed default spaces.
+ * Wipe all Saavi AsyncStorage keys and re-seed default spaces.
  * Callers should reload the app so React contexts rehydrate.
  */
 export async function wipeLifeOsData(): Promise<void> {

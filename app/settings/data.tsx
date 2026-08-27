@@ -17,6 +17,7 @@ import {
   wipeLifeOsData,
 } from '@/lib/dataExport';
 import { isSupabaseConfigured } from '@/lib/supabase';
+import { getStorageLoadFailures } from '@/lib/storage/versioned';
 import {
   loadCloudMeta,
   loadRecoveryCode,
@@ -43,6 +44,7 @@ export default function DataSettingsScreen() {
   const [restoreCode, setRestoreCode] = useState('');
 
   const configured = isSupabaseConfigured();
+  const loadFailures = getStorageLoadFailures();
 
   const version =
     Constants.expoConfig?.version ||
@@ -78,8 +80,19 @@ export default function DataSettingsScreen() {
     }
   }
 
+  function alertNotConfigured() {
+    Alert.alert(
+      'Cloud backup isn’t set up',
+      'This build has no cloud backup configured. Use “Export backup JSON” to keep a copy of your data.'
+    );
+  }
+
   async function onSync() {
-    if (busy || !configured) return;
+    if (busy) return;
+    if (!configured) {
+      alertNotConfigured();
+      return;
+    }
     setBusy(true);
     try {
       const next = await syncCloudNow();
@@ -88,13 +101,22 @@ export default function DataSettingsScreen() {
       if (next.lastError) {
         Alert.alert('Cloud backup', next.lastError);
       }
+    } catch (err) {
+      Alert.alert(
+        'Backup failed',
+        err instanceof Error ? err.message : 'Couldn’t reach the backup service.'
+      );
     } finally {
       setBusy(false);
     }
   }
 
   async function onRestore() {
-    if (busy || !configured) return;
+    if (busy) return;
+    if (!configured) {
+      alertNotConfigured();
+      return;
+    }
     setBusy(true);
     try {
       await restoreFromRecoveryCode(restoreCode);
@@ -105,7 +127,7 @@ export default function DataSettingsScreen() {
       }
       Alert.alert(
         'Restored',
-        'Force-quit and reopen LifeOS so every screen reloads from the cloud copy.'
+        'Force-quit and reopen Saavi so every screen reloads from the cloud copy.'
       );
     } catch (err) {
       Alert.alert(
@@ -126,7 +148,7 @@ export default function DataSettingsScreen() {
       void runWipe();
       return;
     }
-    Alert.alert('Wipe all LifeOS data?', message, [
+    Alert.alert('Wipe all Saavi data?', message, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Wipe everything',
@@ -157,7 +179,7 @@ export default function DataSettingsScreen() {
       }
       Alert.alert(
         'Data wiped',
-        'Force-quit and reopen LifeOS so every screen reloads empty defaults. Use your recovery code if you want the cloud copy back.'
+        'Force-quit and reopen Saavi so every screen reloads empty defaults. Use your recovery code if you want the cloud copy back.'
       );
     } finally {
       setBusy(false);
@@ -177,7 +199,25 @@ export default function DataSettingsScreen() {
       title="Export & backup"
       subtitle="On this phone, plus a cloud copy when Supabase is configured."
     >
-      <ModuleSection label="On this device">
+      {loadFailures.length ? (
+        <View
+          style={[
+            styles.warnCard,
+            { backgroundColor: colors.coralSoft ?? colors.surface, borderColor: colors.coral },
+          ]}
+        >
+          <Text style={[styles.warnTitle, { color: colors.coral }]}>
+            Some data couldn’t be loaded
+          </Text>
+          <Text variant="caption" style={{ color: colors.ink, marginTop: 4 }}>
+            {loadFailures.length} store{loadFailures.length === 1 ? '' : 's'} failed to
+            read this session. The original data was backed up on this phone and is
+            not lost — don’t wipe data, and contact support.
+          </Text>
+        </View>
+      ) : null}
+
+      <ModuleSection label="Your data">
         <ListCard>
           <ListRow title="Things" meta={String(items.length)} />
           <ListRow title="Expenses" meta={String(expenses.length)} />
@@ -259,7 +299,7 @@ export default function DataSettingsScreen() {
           <ListRow
             icon="package"
             title={busy ? 'Working…' : 'Export backup JSON'}
-            subtitle="Share a full on-device snapshot"
+            subtitle="Share a full snapshot"
             onPress={() => void onExport()}
           />
           <ListRow
@@ -276,7 +316,7 @@ export default function DataSettingsScreen() {
         <ListCard>
           <ListRow
             icon="tools"
-            title="Wipe all LifeOS data"
+            title="Wipe all Saavi data"
             subtitle="Removes every local store on this phone"
             onPress={onWipe}
             last
@@ -288,6 +328,16 @@ export default function DataSettingsScreen() {
 }
 
 const styles = StyleSheet.create({
+  warnCard: {
+    borderRadius: radius.md,
+    borderWidth: 1,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  warnTitle: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 16,
+  },
   code: {
     marginTop: spacing.sm,
     fontFamily: fonts.sansMedium,

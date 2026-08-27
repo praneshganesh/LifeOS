@@ -11,6 +11,19 @@ export type ThemeMode = 'light' | 'dark' | 'system';
 export type ThemeId = ThemeFamily | 'linen' | 'hearth' | 'system';
 export type ThemeResolved = 'light' | 'dark';
 
+/**
+ * Token roles — the elevation & emphasis contract every screen relies on:
+ * - `bg`            screen background (mid stop of the Screen gradient)
+ * - `bgDeep`        bottom gradient stop / recessed areas
+ * - `bgElevated`    top gradient stop / raised page zones
+ * - `surface`       cards — one clear step lighter (dark) / whiter (light) than bg
+ * - `surfaceSoft`   insets ON a card: chips, input fills, secondary tiles
+ * - `surfaceHover`  pressed/hover state of surfaceSoft
+ * - `accent`        PRIMARY CTA fill (with `accentOn` text)
+ * - `accentSoft`    SECONDARY CTA fill (with `accent` text)
+ * - `accentWash`    tertiary tint — highlighted rows, selected states
+ * - `ink`           primary text; `onInk` = text on ink-filled buttons
+ */
 export type ThemeColors = {
   bg: string;
   bgDeep: string;
@@ -198,41 +211,41 @@ export const earthLight: ThemeColors = paint({
   listenGradient: ['#7A9066', '#C08A3E', '#4F6840', '#E5A95C', '#7A9066'],
 });
 
-/** Earth dark — warm charcoal, sage accent (legacy Hearth). */
+/** Earth dark — firelit hearth: warm brown depths, sage accent. */
 export const earthDark: ThemeColors = paint({
-  bg: '#1A1714',
-  bgDeep: '#12100E',
-  bgElevated: '#24201C',
-  surface: '#2E2823',
-  surfaceSoft: '#3A332C',
-  surfaceHover: '#443C34',
-  surfaceTint: '#32382C',
-  ink: '#F6F0E8',
-  slate: '#D0C4B6',
-  mute: '#B5A898',
-  faint: '#8A7E72',
-  line: 'rgba(246, 240, 232, 0.14)',
-  lineStrong: 'rgba(246, 240, 232, 0.22)',
-  accent: '#A3C089',
-  accentStrong: '#B7D19C',
-  accentSoft: 'rgba(163, 192, 137, 0.24)',
-  accentWash: 'rgba(163, 192, 137, 0.12)',
+  bg: '#1C1712',
+  bgDeep: '#110E0A',
+  bgElevated: '#282017',
+  surface: '#332A20',
+  surfaceSoft: '#423728',
+  surfaceHover: '#4E4231',
+  surfaceTint: '#343B27',
+  ink: '#F7F1E8',
+  slate: '#D6C9B9',
+  mute: '#B3A492',
+  faint: '#87796A',
+  line: 'rgba(247, 241, 232, 0.16)',
+  lineStrong: 'rgba(247, 241, 232, 0.26)',
+  accent: '#A9C78D',
+  accentStrong: '#C0DBA6',
+  accentSoft: 'rgba(169, 199, 141, 0.28)',
+  accentWash: 'rgba(169, 199, 141, 0.14)',
   accentOn: '#141A10',
-  amber: '#E0B36A',
-  amberSoft: 'rgba(224, 179, 106, 0.22)',
-  coral: '#E5987A',
-  coralSoft: 'rgba(229, 152, 122, 0.20)',
-  sky: '#8BB0CC',
-  skySoft: 'rgba(139, 176, 204, 0.20)',
-  violet: '#B0A0C4',
-  violetSoft: 'rgba(176, 160, 196, 0.20)',
+  amber: '#E3B76D',
+  amberSoft: 'rgba(227, 183, 109, 0.26)',
+  coral: '#E89B7B',
+  coralSoft: 'rgba(232, 155, 123, 0.24)',
+  sky: '#8FB4D0',
+  skySoft: 'rgba(143, 180, 208, 0.24)',
+  violet: '#B4A4C8',
+  violetSoft: 'rgba(180, 164, 200, 0.24)',
   overlay: 'rgba(0, 0, 0, 0.55)',
-  gradient: ['#24201C', '#1A1714', '#12100E'],
-  bloomAmber: 'rgba(224, 179, 106, 0.12)',
-  bloomForest: 'rgba(163, 192, 137, 0.10)',
+  gradient: ['#282017', '#1C1712', '#110E0A'],
+  bloomAmber: 'rgba(227, 183, 109, 0.12)',
+  bloomForest: 'rgba(169, 199, 141, 0.10)',
   statusBar: 'light',
-  onInk: '#1A1714',
-  listenGradient: ['#A3C089', '#E0B36A', '#8FA87A', '#E5A95C', '#A3C089'],
+  onInk: '#1C1712',
+  listenGradient: ['#A9C78D', '#E3B76D', '#8FA87A', '#E5A95C', '#A9C78D'],
 });
 
 /** Ocean light — cool mist, deep teal. */
@@ -272,41 +285,41 @@ export const oceanLight: ThemeColors = paint({
   listenGradient: ['#3D8AAD', '#5BA3C4', '#1B6B86', '#7EB8D4', '#3D8AAD'],
 });
 
-/** Ocean dark — navy, seafoam. */
+/** Ocean dark — deep water: saturated navy depths, seafoam accent. */
 export const oceanDark: ThemeColors = paint({
-  bg: '#0E181E',
-  bgDeep: '#0A1216',
-  bgElevated: '#162228',
-  surface: '#1C2C34',
-  surfaceSoft: '#253740',
-  surfaceHover: '#2E424C',
-  surfaceTint: '#1A3340',
+  bg: '#0D1C25',
+  bgDeep: '#06121A',
+  bgElevated: '#142935',
+  surface: '#1B3443',
+  surfaceSoft: '#264455',
+  surfaceHover: '#2F5164',
+  surfaceTint: '#1B3C4E',
   ink: '#EAF4F8',
   slate: '#C5D8E2',
   mute: '#A3B9C6',
   faint: '#7E96A4',
-  line: 'rgba(234, 244, 248, 0.14)',
-  lineStrong: 'rgba(234, 244, 248, 0.22)',
-  accent: '#7EC8E0',
-  accentStrong: '#9AD7EA',
-  accentSoft: 'rgba(126, 200, 224, 0.24)',
-  accentWash: 'rgba(126, 200, 224, 0.12)',
-  accentOn: '#0A1418',
-  amber: '#E0B36A',
-  amberSoft: 'rgba(224, 179, 106, 0.22)',
-  coral: '#E5988A',
-  coralSoft: 'rgba(229, 152, 138, 0.20)',
+  line: 'rgba(234, 244, 248, 0.16)',
+  lineStrong: 'rgba(234, 244, 248, 0.26)',
+  accent: '#66C6E4',
+  accentStrong: '#8AD6EE',
+  accentSoft: 'rgba(102, 198, 228, 0.28)',
+  accentWash: 'rgba(102, 198, 228, 0.14)',
+  accentOn: '#06141B',
+  amber: '#E7BC72',
+  amberSoft: 'rgba(231, 188, 114, 0.26)',
+  coral: '#EC9C8C',
+  coralSoft: 'rgba(236, 156, 140, 0.24)',
   sky: '#8BB8D4',
-  skySoft: 'rgba(139, 184, 212, 0.20)',
+  skySoft: 'rgba(139, 184, 212, 0.24)',
   violet: '#A8B4D4',
-  violetSoft: 'rgba(168, 180, 212, 0.20)',
+  violetSoft: 'rgba(168, 180, 212, 0.24)',
   overlay: 'rgba(0, 0, 0, 0.55)',
-  gradient: ['#162228', '#0E181E', '#0A1216'],
-  bloomAmber: 'rgba(224, 179, 106, 0.12)',
-  bloomForest: 'rgba(126, 200, 224, 0.12)',
+  gradient: ['#142935', '#0D1C25', '#06121A'],
+  bloomAmber: 'rgba(231, 188, 114, 0.12)',
+  bloomForest: 'rgba(102, 198, 228, 0.12)',
   statusBar: 'light',
-  onInk: '#0E181E',
-  listenGradient: ['#7EC8E0', '#5BA3C4', '#3D8AAD', '#E0B36A', '#7EC8E0'],
+  onInk: '#0D1C25',
+  listenGradient: ['#66C6E4', '#5BA3C4', '#3D8AAD', '#E7BC72', '#66C6E4'],
 });
 
 /** Clay light — sand, terracotta (not green). */
@@ -346,41 +359,41 @@ export const clayLight: ThemeColors = paint({
   listenGradient: ['#C46A3A', '#E08A5C', '#B44A28', '#D4A45C', '#C46A3A'],
 });
 
-/** Clay dark — ember charcoal, warm terracotta. */
+/** Clay dark — glowing ember: red-brown depths, terracotta accent. */
 export const clayDark: ThemeColors = paint({
-  bg: '#1C1512',
-  bgDeep: '#140F0C',
-  bgElevated: '#261C18',
-  surface: '#32251F',
-  surfaceSoft: '#3E2E27',
-  surfaceHover: '#4A382F',
-  surfaceTint: '#3A2A22',
-  ink: '#F6EBE3',
-  slate: '#D4C0B4',
-  mute: '#B89A8C',
-  faint: '#8E7368',
-  line: 'rgba(246, 235, 227, 0.14)',
-  lineStrong: 'rgba(246, 235, 227, 0.22)',
-  accent: '#E9A07A',
-  accentStrong: '#F2B898',
-  accentSoft: 'rgba(233, 160, 122, 0.24)',
-  accentWash: 'rgba(233, 160, 122, 0.12)',
-  accentOn: '#1A100C',
-  amber: '#E0B36A',
-  amberSoft: 'rgba(224, 179, 106, 0.22)',
-  coral: '#E5987A',
-  coralSoft: 'rgba(229, 152, 122, 0.20)',
-  sky: '#8BB0CC',
-  skySoft: 'rgba(139, 176, 204, 0.20)',
-  violet: '#B0A0C4',
-  violetSoft: 'rgba(176, 160, 196, 0.20)',
+  bg: '#201310',
+  bgDeep: '#140C08',
+  bgElevated: '#2C1B14',
+  surface: '#39251B',
+  surfaceSoft: '#483023',
+  surfaceHover: '#553B2B',
+  surfaceTint: '#412B1D',
+  ink: '#F7ECE4',
+  slate: '#D6C2B5',
+  mute: '#BA9C8D',
+  faint: '#8F7468',
+  line: 'rgba(247, 236, 228, 0.16)',
+  lineStrong: 'rgba(247, 236, 228, 0.26)',
+  accent: '#EE9F6F',
+  accentStrong: '#F6B98F',
+  accentSoft: 'rgba(238, 159, 111, 0.28)',
+  accentWash: 'rgba(238, 159, 111, 0.14)',
+  accentOn: '#1D110A',
+  amber: '#E3B76D',
+  amberSoft: 'rgba(227, 183, 109, 0.26)',
+  coral: '#E89B7B',
+  coralSoft: 'rgba(232, 155, 123, 0.24)',
+  sky: '#8FB4D0',
+  skySoft: 'rgba(143, 180, 208, 0.24)',
+  violet: '#B4A4C8',
+  violetSoft: 'rgba(180, 164, 200, 0.24)',
   overlay: 'rgba(0, 0, 0, 0.55)',
-  gradient: ['#261C18', '#1C1512', '#140F0C'],
-  bloomAmber: 'rgba(224, 179, 106, 0.12)',
-  bloomForest: 'rgba(233, 160, 122, 0.10)',
+  gradient: ['#2C1B14', '#201310', '#140C08'],
+  bloomAmber: 'rgba(227, 183, 109, 0.12)',
+  bloomForest: 'rgba(238, 159, 111, 0.10)',
   statusBar: 'light',
-  onInk: '#1C1512',
-  listenGradient: ['#E9A07A', '#E0B36A', '#C46A3A', '#F2B898', '#E9A07A'],
+  onInk: '#201310',
+  listenGradient: ['#EE9F6F', '#E3B76D', '#C46A3A', '#F6B98F', '#EE9F6F'],
 });
 
 /** Ink light — paper and graphite. */
@@ -420,40 +433,40 @@ export const inkLight: ThemeColors = paint({
   listenGradient: ['#3F3F46', '#111113', '#71717A', '#18181B', '#3F3F46'],
 });
 
-/** Ink dark — charcoal studio, white type. */
+/** Ink dark — charcoal studio, white type. Monochrome, but with real depth. */
 export const inkDark: ThemeColors = paint({
-  bg: '#0B0B0C',
+  bg: '#0D0D0F',
   bgDeep: '#050506',
-  bgElevated: '#121214',
-  surface: '#18181B',
-  surfaceSoft: '#1F1F23',
-  surfaceHover: '#27272A',
-  surfaceTint: '#1C1C20',
+  bgElevated: '#18181B',
+  surface: '#212125',
+  surfaceSoft: '#2C2C31',
+  surfaceHover: '#37373D',
+  surfaceTint: '#242429',
   ink: '#FAFAFA',
   slate: '#E4E4E7',
   mute: '#A1A1AA',
   faint: '#71717A',
-  line: 'rgba(250, 250, 250, 0.12)',
-  lineStrong: 'rgba(250, 250, 250, 0.20)',
+  line: 'rgba(250, 250, 250, 0.14)',
+  lineStrong: 'rgba(250, 250, 250, 0.24)',
   accent: '#FAFAFA',
   accentStrong: '#FFFFFF',
-  accentSoft: 'rgba(250, 250, 250, 0.14)',
-  accentWash: 'rgba(250, 250, 250, 0.07)',
+  accentSoft: 'rgba(250, 250, 250, 0.16)',
+  accentWash: 'rgba(250, 250, 250, 0.08)',
   accentOn: '#0B0B0C',
   amber: '#E8B84A',
-  amberSoft: 'rgba(232, 184, 74, 0.18)',
+  amberSoft: 'rgba(232, 184, 74, 0.20)',
   coral: '#F07070',
-  coralSoft: 'rgba(240, 112, 112, 0.16)',
+  coralSoft: 'rgba(240, 112, 112, 0.18)',
   sky: '#A1A1AA',
-  skySoft: 'rgba(161, 161, 170, 0.16)',
+  skySoft: 'rgba(161, 161, 170, 0.18)',
   violet: '#A1A1AA',
-  violetSoft: 'rgba(161, 161, 170, 0.16)',
+  violetSoft: 'rgba(161, 161, 170, 0.18)',
   overlay: 'rgba(0, 0, 0, 0.62)',
-  gradient: ['#141416', '#0B0B0C', '#050506'],
+  gradient: ['#18181B', '#0D0D0F', '#050506'],
   bloomAmber: 'rgba(250, 250, 250, 0.09)',
   bloomForest: 'rgba(250, 250, 250, 0.07)',
   statusBar: 'light',
-  onInk: '#0B0B0C',
+  onInk: '#0D0D0F',
   listenGradient: ['#FAFAFA', '#A1A1AA', '#27272A', '#FFFFFF', '#FAFAFA'],
 });
 
@@ -608,28 +621,58 @@ export const fonts = {
   serif: 'FigtreeMedium',
 } as const;
 
+/**
+ * Soft-UI finish: each surface shadow pairs an outer drop with a faint inset
+ * highlight along the top edge (and a whisper of a dark inner edge at the
+ * bottom in light mode), so cards read as gently pillowed — tactile like
+ * neumorphism, without giving up surface/background contrast.
+ * `pressed` is the inset state for pressable cards and buttons.
+ */
 export const shadows = {
   card: {
-    boxShadow: '0 12px 40px rgba(0, 0, 0, 0.08)',
+    boxShadow:
+      '0 12px 40px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -1px 0 rgba(0, 0, 0, 0.04)',
   },
   soft: {
-    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.06)',
+    boxShadow:
+      '0 8px 24px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.8), inset 0 -1px 0 rgba(0, 0, 0, 0.03)',
   },
   float: {
-    boxShadow: '0 18px 50px rgba(0, 0, 0, 0.10)',
+    boxShadow:
+      '0 18px 50px rgba(0, 0, 0, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -1px 0 rgba(0, 0, 0, 0.05)',
   },
   glow: {
     boxShadow: '0 0 28px rgba(0, 0, 0, 0.12)',
+  },
+  pressed: {
+    boxShadow:
+      '0 2px 8px rgba(0, 0, 0, 0.05), inset 0 2px 6px rgba(0, 0, 0, 0.10)',
   },
 } as const;
 
 export function shadowsFor(resolved: ThemeResolved) {
   if (resolved === 'dark') {
+    // Darker, tighter drops — surfaces are lighter than bg, so the shadow
+    // does the separating instead of relying on hairlines alone. The inset
+    // white edge is the "lit from above" highlight that sells the depth.
     return {
-      card: { boxShadow: '0 16px 40px rgba(0, 0, 0, 0.45)' },
-      soft: { boxShadow: '0 8px 24px rgba(0, 0, 0, 0.35)' },
-      float: { boxShadow: '0 20px 50px rgba(0, 0, 0, 0.55)' },
-      glow: { boxShadow: '0 0 28px rgba(255, 255, 255, 0.06)' },
+      card: {
+        boxShadow:
+          '0 14px 36px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.07)',
+      },
+      soft: {
+        boxShadow:
+          '0 6px 20px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
+      },
+      float: {
+        boxShadow:
+          '0 22px 56px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.09)',
+      },
+      glow: { boxShadow: '0 0 28px rgba(255, 255, 255, 0.07)' },
+      pressed: {
+        boxShadow:
+          '0 2px 8px rgba(0, 0, 0, 0.35), inset 0 2px 8px rgba(0, 0, 0, 0.5)',
+      },
     } as const;
   }
   return shadows;

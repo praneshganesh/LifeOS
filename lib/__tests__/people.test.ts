@@ -46,6 +46,51 @@ describe('self display name', () => {
   });
 });
 
+describe('fuzzy name binding (ASR misspellings)', () => {
+  const withKid = [
+    ...household,
+    createHouseholdMember({
+      id: 'saara',
+      name: 'Saara',
+      role: 'child',
+      relation: 'Daughter',
+    }),
+  ];
+
+  it('binds "Sara" from speech to the member Saara', () => {
+    const hit = resolveAssignment({
+      utterance: 'I enrolled Sara for skating',
+      members: withKid,
+      preferSelf: true,
+    });
+    assert.equal(hit?.personId, 'saara');
+    assert.equal(hit?.assignedTo, 'Saara');
+  });
+
+  it('binds a fuzzy model assignedTo to the existing member', () => {
+    const hit = resolveAssignment({
+      assignedTo: 'Sara',
+      members: withKid,
+    });
+    assert.equal(hit?.personId, 'saara');
+  });
+
+  it('binds possessives like "Sara\u2019s skating" to Saara', () => {
+    const hit = resolvePersonMention('log Sara’s skating class', withKid);
+    assert.equal(hit?.personId, 'saara');
+  });
+
+  it('still creates a genuinely new name', () => {
+    const hit = resolveAssignment({
+      utterance: 'I enrolled Noor for piano classes',
+      members: withKid,
+      preferSelf: true,
+    });
+    assert.equal(hit?.personId, undefined);
+    assert.equal(hit?.assignedTo, 'Noor');
+  });
+});
+
 describe('person mentions', () => {
   it('maps I attended to You, not spouse', () => {
     const hit = resolvePersonMention('I attended swimming', household);

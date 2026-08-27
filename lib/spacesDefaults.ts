@@ -31,7 +31,14 @@ export const DEFAULT_SPACES: Space[] = [
     meta: 'IDs & legal',
     items: 0,
   },
-  { id: 's6', name: 'Family', kind: 'family', icon: 'family', meta: 'People & pets', items: 0 },
+  {
+    id: 's6',
+    name: 'Family things',
+    kind: 'family',
+    icon: 'family',
+    meta: 'Kids’ & pets’ belongings',
+    items: 0,
+  },
 ];
 
 /** Default rooms for Home — empty assetIds; inventory is the source of truth. */

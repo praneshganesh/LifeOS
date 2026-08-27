@@ -18,7 +18,10 @@ import {
   usedCount,
 } from '@/lib/classes';
 import { confirmDelete } from '@/lib/confirmDelete';
+import { useToast } from '@/lib/ToastContext';
+import { displayNameFor } from '@/lib/people';
 import { localDayKey } from '@/lib/dates';
+import { sanitizeIntegerInput } from '@/lib/currency';
 import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
 import CreateClassPackScreen from './create';
 
@@ -30,6 +33,8 @@ export default function ClassPackDetailScreen() {
   const router = useRouter();
   const { getById, logClass, removePack, updatePack } = useClasses();
   const { members } = useHousehold();
+  const { showToast, showError } = useToast();
+  const saveFailed = () => showError('Couldn’t save — try again.');
 
   const packEarly = id && id !== 'new' ? getById(id) : undefined;
   const [title, setTitle] = useState('');
@@ -52,7 +57,12 @@ export default function ClassPackDetailScreen() {
     if (!pack) return;
     const ok = await confirmDelete(pack.title);
     if (!ok) return;
-    await removePack(pack.id);
+    try {
+      await removePack(pack.id);
+    } catch {
+      showError('Couldn’t delete — try again.');
+      return;
+    }
     if (router.canGoBack()) router.back();
     else router.replace('/classes' as Href);
   }
@@ -85,10 +95,12 @@ export default function ClassPackDetailScreen() {
           ? `Ends in ${daysLeft} days`
           : `${daysLeft} days left`;
 
+  const ownerName = displayNameFor(members, pack.personId, pack.assignedTo);
+
   return (
     <ModuleScreen
       title={pack.title}
-      subtitle={pack.assignedTo ? `For ${pack.assignedTo}` : 'Class pack'}
+      subtitle={ownerName ? `For ${ownerName}` : 'Class pack'}
     >
       <Stack.Screen options={{ title: '' }} />
 
@@ -110,7 +122,7 @@ export default function ClassPackDetailScreen() {
           </Text>
         ) : null}
         <Pressable
-          onPress={() => void logClass(pack.id, today)}
+          onPress={() => void logClass(pack.id, today).catch(saveFailed)}
           style={[styles.logToday, todayDone && styles.logTodayOn]}
         >
           <Text style={[styles.logTodayText, todayDone && styles.logTodayTextOn]}>
@@ -140,7 +152,7 @@ export default function ClassPackDetailScreen() {
       <Text style={styles.fieldLabel}>Total classes</Text>
       <TextInput
         value={total}
-        onChangeText={setTotal}
+        onChangeText={(t) => setTotal(sanitizeIntegerInput(t))}
         keyboardType="number-pad"
         style={styles.input}
         placeholder="Not set yet"
@@ -149,12 +161,12 @@ export default function ClassPackDetailScreen() {
       <Text style={styles.fieldLabel}>Starts</Text>
       <DateField
         value={pack.startsOn}
-        onChange={(startsOn) => void updatePack(pack.id, { startsOn })}
+        onChange={(startsOn) => void updatePack(pack.id, { startsOn }).catch(saveFailed)}
       />
       <Text style={[styles.fieldLabel, { marginTop: spacing.md }]}>Ends</Text>
       <DateField
         value={pack.endsOn}
-        onChange={(endsOn) => void updatePack(pack.id, { endsOn })}
+        onChange={(endsOn) => void updatePack(pack.id, { endsOn }).catch(saveFailed)}
       />
 
       {members.length ? (
@@ -163,7 +175,10 @@ export default function ClassPackDetailScreen() {
           <View style={styles.chips}>
             <Pressable
               onPress={() =>
-                void updatePack(pack.id, { personId: undefined, assignedTo: undefined })
+                void updatePack(pack.id, {
+                  personId: undefined,
+                  assignedTo: undefined,
+                }).catch(saveFailed)
               }
               style={[styles.chip, !pack.personId && styles.chipOn]}
             >
@@ -177,7 +192,10 @@ export default function ClassPackDetailScreen() {
                 <Pressable
                   key={m.id}
                   onPress={() =>
-                    void updatePack(pack.id, { personId: m.id, assignedTo: m.name })
+                    void updatePack(pack.id, {
+                      personId: m.id,
+                      assignedTo: m.name,
+                    }).catch(saveFailed)
                   }
                   style={[styles.chip, on && styles.chipOn]}
                 >
@@ -192,14 +210,25 @@ export default function ClassPackDetailScreen() {
       <Pressable
         onPress={() => {
           if (!title.trim() || saving) return;
-          const parsed = Math.round(Number(total));
-          const nextTotal =
-            Number.isFinite(parsed) && parsed > 0 ? parsed : pack.total;
+          const digits = total.replace(/[^\d]/g, '');
+          const parsed = Math.round(Number(digits));
+          if (total.trim() && (!digits || parsed <= 0)) {
+            showError('Total classes must be a number above 0.');
+            return;
+          }
+          const nextTotal = digits && parsed > 0 ? parsed : pack.total;
           setSaving(true);
           void updatePack(pack.id, {
             title: title.trim(),
             total: nextTotal,
-          }).finally(() => setSaving(false));
+          })
+            .then(() => {
+              showToast('Class pack saved');
+              if (router.canGoBack()) router.back();
+              else router.replace('/classes' as Href);
+            })
+            .catch(saveFailed)
+            .finally(() => setSaving(false));
         }}
         disabled={!title.trim() || saving}
         style={[styles.saveBtn, (!title.trim() || saving) && { opacity: 0.45 }]}
@@ -219,7 +248,7 @@ export default function ClassPackDetailScreen() {
                 title={log.doneAt}
                 meta="Logged"
                 last={i === recent.length - 1}
-                onPress={() => void logClass(pack.id, log.doneAt)}
+                onPress={() => void logClass(pack.id, log.doneAt).catch(saveFailed)}
               />
             ))}
           </ListCard>
@@ -247,18 +276,20 @@ function makeStyles(colors: ThemeColors) {
     borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.line,
-    padding: spacing.lg,
+    padding: spacing.md,
     marginBottom: spacing.md,
     alignItems: 'flex-start',
   },
   big: {
-    fontFamily: fonts.sansBold,
-    fontSize: 40,
+    fontFamily: fonts.sansSemi,
+    fontSize: 26,
+    lineHeight: 32,
+    letterSpacing: -0.6,
     color: colors.ink,
   },
   bigMute: {
     fontFamily: fonts.sans,
-    fontSize: 22,
+    fontSize: 16,
     color: colors.mute,
   },
   logToday: {
@@ -277,7 +308,7 @@ function makeStyles(colors: ThemeColors) {
     color: colors.forest,
   },
   logTodayTextOn: {
-    color: colors.pure,
+    color: colors.forestOn,
   },
   fieldLabel: {
     fontFamily: fonts.sansMedium,
@@ -332,7 +363,7 @@ function makeStyles(colors: ThemeColors) {
   saveBtnText: {
     fontFamily: fonts.sansSemi,
     fontSize: 16,
-    color: colors.pure,
+    color: colors.forestOn,
   },
   remove: {
     marginTop: spacing.xl,

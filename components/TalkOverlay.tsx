@@ -43,6 +43,7 @@ import {
 import { getLastDoneAt } from '@/lib/lastDone';
 import { remainingCount, usedCount } from '@/lib/classes';
 import { useTalkOverlay } from '@/lib/TalkOverlayContext';
+import { useCurrency } from '@/lib/CurrencyContext';
 import { ChatAgentError, runChatAgent } from '@/lib/chat/agent';
 import { applyChatActions } from '@/lib/chat/applyActions';
 import { composeAppliedReply } from '@/lib/chat/composeReply';
@@ -166,9 +167,9 @@ function AnimatedListeningOrb({ busy }: { busy: boolean }) {
       </Animated.View>
       <View style={styles.orbFace} pointerEvents="none">
         {busy ? (
-          <ActivityIndicator color={colors.pure} />
+          <ActivityIndicator color={colors.onInk} />
         ) : (
-          <Mic size={32} color={colors.pure} strokeWidth={2} />
+          <Mic size={32} color={colors.onInk} strokeWidth={2} />
         )}
       </View>
     </Animated.View>
@@ -187,7 +188,10 @@ export function TalkOrb() {
   const pathname = usePathname();
   const { items, addItem, updateItem, removeItem, getById } = useInventory();
   const { items: lastDoneItems, logDone, setReminder, remove: removeLastDone } = useLastDone();
-  const { members: householdMembers } = useHousehold();
+  const { members: householdMembers, addMember, updateMember } = useHousehold();
+  const { currency: defaultCurrency } = useCurrency();
+  const currencyRef = useRef(defaultCurrency);
+  currencyRef.current = defaultCurrency;
   const { expenses, addExpense, updateExpense, removeExpense, getById: getExpenseById } = useExpenses();
   const { habits, addHabit, checkIn, findByTitle, getById: getHabitById, updateHabit, removeHabit } = useHabits();
   const { packs: classPacks, addPack, logClass, findPack, pickAttendance, getById: getClassPack, newestPack, removePack, updatePack } = useClasses();
@@ -418,11 +422,18 @@ export function TalkOrb() {
   );
 
   const failListen = useCallback(
-    (message: string) => {
+    (message: string, opts?: { terminal?: boolean }) => {
       if (handledRef.current || phaseRef.current === 'thinking') return;
       stopRecognition();
       setPhase('idle');
       setError(message);
+      // Permission denied / no engine: retrying every second is noise — the
+      // user has to change something in Settings first.
+      if (opts?.terminal) {
+        sessionActiveRef.current = false;
+        clearResumeTimer();
+        return;
+      }
       // Keep session open — retry listening shortly
       if (sessionActiveRef.current && openRef.current) {
         clearResumeTimer();
@@ -480,6 +491,7 @@ export function TalkOrb() {
             fallbackFocusId: focusItemIdRef.current || newestId,
             lastFocusExpenseId: focusExpenseIdRef.current,
             lastTalkFocus: talkFocusRef.current,
+            defaultCurrency: currencyRef.current,
             resolveItem: (id) => getById(id),
             inventoryList: inventoryRef.current.map((i) => ({
               id: i.id,
@@ -551,6 +563,7 @@ export function TalkOrb() {
             focus: talkFocusRef.current,
           },
           household: householdPeople,
+          defaultCurrency: currencyRef.current,
         });
         if (!openRef.current || !sessionActiveRef.current) return;
         const applied = await applyChatActions(
@@ -561,8 +574,10 @@ export function TalkOrb() {
             fallbackFocusId: focusItemIdRef.current || newestId,
             resolveItem: (id) => getById(id),
             lastUserText: text,
+            defaultCurrency: currencyRef.current,
             lastDone: { logDone, setReminder, remove: removeLastDone },
             household: householdMembers,
+            people: { addMember, updateMember },
             expenses: {
               addExpense,
               updateExpense,
@@ -654,6 +669,8 @@ export function TalkOrb() {
           reminderAt: applied.reminderAt,
           removedLastDoneLabel: applied.removedLastDoneLabel,
           updatedClassPack: applied.updatedClassPack,
+          renamedPersonFrom: applied.renamedPersonFrom,
+          renamedPersonTo: applied.renamedPersonTo,
         });
         console.log(
           '[Talk] ← actions',
@@ -764,12 +781,15 @@ export function TalkOrb() {
     try {
       const available = ExpoSpeechRecognitionModule.isRecognitionAvailable();
       if (!available) {
-        failListen('Speech isn’t available on this device.');
+        failListen('Speech isn’t available on this device.', { terminal: true });
         return;
       }
       const permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
       if (!permission.granted) {
-        failListen('Allow microphone access to talk.');
+        failListen(
+          'Microphone blocked — allow access in Settings, then reopen Talk.',
+          { terminal: true }
+        );
         return;
       }
       setPhase('listening');
@@ -812,12 +832,15 @@ export function TalkOrb() {
       void processUtteranceRef.current(transcriptRef.current);
       return;
     }
+    if (event.error === 'not-allowed') {
+      failListen(
+        'Microphone blocked — allow access in Settings, then reopen Talk.',
+        { terminal: true }
+      );
+      return;
+    }
     failListen(
-      event.error === 'not-allowed'
-        ? 'Microphone blocked.'
-        : event.error === 'no-speech'
-          ? 'Still listening…'
-          : 'Listening glitch — retrying…'
+      event.error === 'no-speech' ? 'Still listening…' : 'Listening glitch — retrying…'
     );
   });
 
@@ -951,7 +974,7 @@ export function TalkOrb() {
             pointerEvents="none"
           >
             <Text style={[styles.apiBannerText, { color: colors.ink }]}>
-              Chat service offline — Capture and local Talk still work on this device.
+              Chat service offline — Capture and basic Talk still work.
             </Text>
           </View>
         ) : null}

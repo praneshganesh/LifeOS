@@ -21,6 +21,7 @@ import {
   shouldSyncLastDone,
 } from '@/lib/habits';
 import { confirmDelete } from '@/lib/confirmDelete';
+import { useToast } from '@/lib/ToastContext';
 import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
 import CreateHabitScreen from './create';
 
@@ -34,6 +35,8 @@ export default function HabitDetailScreen() {
   const { getById: getItem, items } = useInventory();
   const { logDone } = useLastDone();
   const { members } = useHousehold();
+  const { showToast, showError } = useToast();
+  const saveFailed = () => showError('Couldn’t save — try again.');
 
   const linkables = useMemo(
     () =>
@@ -87,7 +90,12 @@ export default function HabitDetailScreen() {
     if (!habit) return;
     const ok = await confirmDelete(habit.title);
     if (!ok) return;
-    await removeHabit(habit.id);
+    try {
+      await removeHabit(habit.id);
+    } catch {
+      showError('Couldn’t delete — try again.');
+      return;
+    }
     if (router.canGoBack()) router.back();
     else router.replace('/habits' as Href);
   }
@@ -140,9 +148,9 @@ export default function HabitDetailScreen() {
           void updateHabit(habit.id, {
             personId: m?.id,
             assignedTo: m?.name,
-          });
+          }).catch(saveFailed);
         }}
-        noneLabel="Just me / unassigned"
+        noneLabel="No one"
       />
       <Pressable
         onPress={() => {
@@ -155,7 +163,14 @@ export default function HabitDetailScreen() {
             title: nextTitle,
             why: nextWhy,
             categoryId: cat.id,
-          }).finally(() => setSavingDetails(false));
+          })
+            .then(() => {
+              showToast('Habit saved');
+              if (router.canGoBack()) router.back();
+              else router.replace('/habits' as Href);
+            })
+            .catch(saveFailed)
+            .finally(() => setSavingDetails(false));
         }}
         disabled={!title.trim() || savingDetails}
         style={[styles.saveBtn, (!title.trim() || savingDetails) && { opacity: 0.45 }]}
@@ -201,7 +216,7 @@ export default function HabitDetailScreen() {
                 void updateHabit(habit.id, {
                   inventoryItemId: undefined,
                   syncLastDone: undefined,
-                })
+                }).catch(saveFailed)
               }
               style={[styles.chip, !habit.inventoryItemId && styles.chipOn]}
             >
@@ -223,7 +238,7 @@ export default function HabitDetailScreen() {
                     void updateHabit(habit.id, {
                       inventoryItemId: item.id,
                       syncLastDone: habit.syncLastDone ?? true,
-                    })
+                    }).catch(saveFailed)
                   }
                   style={[styles.chip, on && styles.chipOn]}
                 >
@@ -251,7 +266,7 @@ export default function HabitDetailScreen() {
               <Switch
                 value={shouldSyncLastDone(habit)}
                 onValueChange={(v) =>
-                  void updateHabit(habit.id, { syncLastDone: v })
+                  void updateHabit(habit.id, { syncLastDone: v }).catch(saveFailed)
                 }
                 trackColor={{ false: colors.lineStrong, true: colors.forestBright }}
                 thumbColor={colors.white}
@@ -298,7 +313,7 @@ function makeStyles(colors: ThemeColors) {
   saveBtnText: {
     fontFamily: fonts.sansSemi,
     fontSize: 16,
-    color: colors.pure,
+    color: colors.forestOn,
   },
   syncRow: {
     marginTop: spacing.md,

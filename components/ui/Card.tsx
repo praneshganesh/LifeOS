@@ -28,7 +28,8 @@ export function Card({
         onPress={onPress}
         style={({ pressed }) => [
           ...base,
-          pressed && { transform: [{ scale: 0.985 }], opacity: 0.97 },
+          // Sink into the page: swap the raised shadow for the inset one.
+          pressed && { transform: [{ scale: 0.985 }], ...shade.pressed },
         ]}
       >
         {children}

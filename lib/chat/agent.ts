@@ -148,6 +148,8 @@ export async function runChatAgent(params: {
   }>;
   session?: ChatSessionFocus;
   household?: Array<{ id: string; name: string; relation: string; role: string }>;
+  /** Household default ISO 4217 currency. */
+  defaultCurrency?: string;
 }): Promise<ChatAgentResponse> {
   const url = chatApiUrl();
   const inventorySummary = buildInventorySummary(params.inventory);
@@ -167,7 +169,7 @@ export async function runChatAgent(params: {
     looksLikeLoopbackChatUrl(url)
   ) {
     throw new ChatAgentError(
-      'Talk can’t reach chat-api from this phone via localhost. Set EXPO_PUBLIC_CHAT_API_URL to http://<your-mac-lan-ip>:8787/chat, run npm run chat-api, and restart Expo. Inventory stays on this device.'
+      'Talk can’t reach chat-api from this phone via localhost. Set EXPO_PUBLIC_CHAT_API_URL to http://<your-mac-lan-ip>:8787/chat, run npm run chat-api, and restart Expo.'
     );
   }
 
@@ -192,6 +194,7 @@ export async function runChatAgent(params: {
         subscriptionsSummary,
         session: params.session ?? {},
         household: params.household ?? [],
+        defaultCurrency: params.defaultCurrency ?? '',
       }),
     });
   } catch (err) {
@@ -204,11 +207,11 @@ export async function runChatAgent(params: {
     throw new ChatAgentError(
       aborted
         ? hosted
-          ? 'Talk timed out waiting for the chat service. Try again in a moment — inventory stays on this device.'
-          : 'Talk timed out waiting for the chat service. Is npm run chat-api running? Your inventory stays on this device.'
+          ? 'Talk timed out waiting for the chat service. Try again in a moment.'
+          : 'Talk timed out waiting for the chat service. Is npm run chat-api running?'
         : hosted
-          ? 'Talk can’t reach the chat service right now. Check your connection. Inventory stays on this device.'
-          : 'Talk can’t reach the chat service right now. Check your connection, or start the local chat API. Your inventory stays on this device.'
+          ? 'Talk can’t reach the chat service right now. Check your connection.'
+          : 'Talk can’t reach the chat service right now. Check your connection, or start the local chat API.'
     );
   } finally {
     clearTimeout(timer);

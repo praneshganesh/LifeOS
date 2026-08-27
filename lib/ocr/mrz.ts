@@ -33,6 +33,9 @@ function parseYyMmDd(raw: string, preferFuture = false): string {
   const yy = Number(raw.slice(0, 2));
   const mm = raw.slice(2, 4);
   const dd = raw.slice(4, 6);
+  // Reject impossible calendar dates — random digit runs from receipts and
+  // addresses otherwise "parse" into things like 2002-28-72.
+  if (Number(mm) < 1 || Number(mm) > 12 || Number(dd) < 1 || Number(dd) > 31) return '';
   let century = 2000;
   if (!preferFuture) {
     century = yy <= 30 ? 2000 : 1900;
@@ -82,6 +85,11 @@ export function parseTd3Passport(line1: string, line2: string): ParsedIdentity |
   const sex = l2[20] === 'M' || l2[20] === 'F' ? l2[20] : 'X';
   const expiryDate = parseYyMmDd(l2.slice(21, 27), true);
 
+  // Real MRZ always carries valid YYMMDD dates. Without them this is almost
+  // certainly a dense text line (address, phone numbers) that merely starts
+  // with P — cleanLine strips spaces, so receipts can produce such lines.
+  if (!dateOfBirth && !expiryDate) return null;
+
   return {
     kind: 'passport',
     fullName,
@@ -111,6 +119,9 @@ export function parseTd1Id(line1: string, line2: string, line3: string): ParsedI
   const expiryDate = parseYyMmDd(l2.slice(8, 14), true);
   const nationality = l2.slice(15, 18).replace(/</g, '');
   const { surname, givenNames, fullName } = namesFromField(l3);
+
+  // Same guard as TD3: no valid dates → not an MRZ.
+  if (!dateOfBirth && !expiryDate) return null;
 
   const isUae =
     issuingCountry === 'ARE' ||
@@ -162,10 +173,18 @@ export function parseMrzFromOcr(ocrText: string): ParsedIdentity | null {
 /** Keyword fallback when MRZ is unreadable — still on-device, no AI. */
 export function classifyDocumentFromText(text: string): MrzDocumentKind {
   const t = text.toUpperCase();
+  // Receipts beat weak doc heuristics — "PB No" on UAE invoices used to
+  // match the old `\nP[A-Z]` passport sniff and mis-file groceries as Passport.
+  if (
+    /\b(TAX\s*INVOICE|INVOICE|RECEIPT|SUBTOTAL|GRAND\s*TOTAL)\b/.test(t) ||
+    (/\bTOTAL\b/.test(t) && /\bVAT\b/.test(t)) ||
+    /\b(AED|USD|EUR)\s*[\d,]+\.\d{2}\b/.test(text)
+  ) {
+    return 'unknown';
+  }
   if (/EMIRATES\s*ID|هوية|RESIDENCY|IDENTITY CARD|UAE/.test(t) && /ID|IDENTITY/.test(t)) {
     return 'emirates_id';
   }
   if (/PASSPORT|PASSEPORT|جواز/.test(t)) return 'passport';
-  if (/P</.test(t) || /\nP[A-Z</]/.test(t)) return 'passport';
   return 'unknown';
 }

@@ -5,16 +5,16 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   TextInput,
   View,
 } from 'react-native';
 import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Package, Search as SearchIcon, Send, User } from 'lucide-react-native';
+import { Send } from 'lucide-react-native';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
-import { greetingForNow } from '@/data/mock';
 import { dueSoonForHome } from '@/lib/attention';
 import { useInventory } from '@/lib/InventoryContext';
 import { useLastDone } from '@/lib/LastDoneContext';
@@ -40,12 +40,13 @@ import { resolveOpenItemId } from '@/lib/chat/openItem';
 import { hrefForTalkFocus, type TalkFocus } from '@/lib/chat/focus';
 import type { ChatMessage } from '@/lib/chat/types';
 import { useTalkOverlay } from '@/lib/TalkOverlayContext';
+import { useCurrency } from '@/lib/CurrencyContext';
 import { getHouseholdPeople, selfAvatarInitial } from '@/lib/people';
 import { loadLocalProfile } from '@/lib/profile';
 import { blurActiveElement } from '@/lib/a11y';
 import { fonts, radius, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
-import { HomeSurfaceSwitch } from '@/components/HomeSurfaceSwitch';
+import { HomeHeader } from '@/components/HomeHeader';
 import { saveHomeSurface } from '@/lib/homeSurface';
 
 type UiMessage = {
@@ -80,7 +81,8 @@ export default function ChatScreen() {
   talkFocusRef.current = talkFocus;
   const { items, addItem, updateItem, removeItem, getById } = useInventory();
   const { items: lastDoneItems, logDone, setReminder, remove: removeLastDone } = useLastDone();
-  const { members: householdMembers } = useHousehold();
+  const { members: householdMembers, addMember, updateMember } = useHousehold();
+  const { currency: defaultCurrency } = useCurrency();
   const { expenses, addExpense, updateExpense, removeExpense, getById: getExpenseById } = useExpenses();
   const { habits, addHabit, checkIn, findByTitle, getById: getHabitById, updateHabit, removeHabit } = useHabits();
   const { packs: classPacks, addPack, logClass, findPack, pickAttendance, getById: getClassPack, newestPack, removePack, updatePack } = useClasses();
@@ -163,7 +165,7 @@ export default function ChatScreen() {
     {
       id: 'welcome',
       role: 'assistant',
-      text: `${greetingForNow()}. Add a thing, check in a habit, log a class, or ask about a document.`,
+      text: 'Add a thing, check in a habit, log a class, or ask about a document.',
     },
   ]);
 
@@ -252,6 +254,7 @@ export default function ChatScreen() {
                 focus: talkFocusRef.current,
               },
               household: householdPeople,
+              defaultCurrency,
             });
       const applied = await applyChatActions(
         result.actions,
@@ -261,8 +264,10 @@ export default function ChatScreen() {
           fallbackFocusId: focusItemIdRef.current || newestId,
           resolveItem: (id) => getById(id),
           lastUserText: question,
+          defaultCurrency,
           lastDone: { logDone, setReminder, remove: removeLastDone },
           household: householdMembers,
+          people: { addMember, updateMember },
           expenses: {
             addExpense,
             updateExpense,
@@ -355,6 +360,8 @@ export default function ChatScreen() {
         reminderAt: applied.reminderAt,
         removedLastDoneLabel: applied.removedLastDoneLabel,
         updatedClassPack: applied.updatedClassPack,
+        renamedPersonFrom: applied.renamedPersonFrom,
+        renamedPersonTo: applied.renamedPersonTo,
       });
 
       if (applied.openTarget) {
@@ -391,7 +398,7 @@ export default function ChatScreen() {
       const text =
         err instanceof ChatAgentError
           ? err.message
-          : 'Something went wrong talking to LifeOS. Try again in a moment.';
+          : 'Something went wrong talking to Saavi. Try again in a moment.';
       setMessages((prev) => [
         ...prev,
         { id: `a-${Date.now()}`, role: 'assistant', text },
@@ -409,50 +416,7 @@ export default function ChatScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={8}
       >
-        <View style={[styles.topBar, { paddingTop: insets.top + 10 }]}>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.brand, { color: colors.mute }]}>LifeOS</Text>
-            <View style={styles.switchRow}>
-              <HomeSurfaceSwitch value="ask" />
-            </View>
-          </View>
-          <Pressable
-            onPress={() => {
-              blurActiveElement();
-              router.push('/(tabs)/search' as Href);
-            }}
-            hitSlop={8}
-            style={styles.iconBtn}
-            accessibilityLabel="Search"
-          >
-            <SearchIcon size={20} color={colors.slate} strokeWidth={1.8} />
-          </Pressable>
-          <Pressable
-            onPress={() => {
-              blurActiveElement();
-              router.push('/(tabs)/spaces' as Href);
-            }}
-            hitSlop={8}
-            style={styles.iconBtn}
-            accessibilityLabel="Things"
-          >
-            <Package size={20} color={colors.slate} strokeWidth={1.8} />
-          </Pressable>
-          <Pressable
-            onPress={() => {
-              blurActiveElement();
-              router.push('/profile' as Href);
-            }}
-            style={[styles.avatar, { backgroundColor: colors.ink }]}
-            accessibilityLabel="Profile"
-          >
-            {avatarLetter ? (
-              <Text style={[styles.avatarLetter, { color: colors.onInk }]}>{avatarLetter}</Text>
-            ) : (
-              <User size={14} color={colors.onInk} strokeWidth={1.8} />
-            )}
-          </Pressable>
-        </View>
+        <HomeHeader surface="ask" avatarLetter={avatarLetter} />
 
         <FlatList
           ref={listRef}
@@ -461,6 +425,7 @@ export default function ChatScreen() {
           style={styles.list}
           contentContainerStyle={styles.thread}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
           ListHeaderComponent={
             topAttention.length ? (
@@ -484,10 +449,16 @@ export default function ChatScreen() {
                         },
                       ]}
                     />
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.attentionTitle, { color: colors.ink }]}>{a.title}</Text>
-                      <Text style={[styles.attentionSub, { color: colors.mute }]}>{a.subtitle}</Text>
-                    </View>
+                    <Text
+                      style={[styles.attentionTitle, { color: colors.ink, flex: 1 }]}
+                      numberOfLines={2}
+                    >
+                      {a.title}
+                      <Text style={[styles.attentionSub, { color: colors.mute }]}>
+                        {' · '}
+                        {a.subtitle}
+                      </Text>
+                    </Text>
                   </Pressable>
                 ))}
               </View>
@@ -502,13 +473,18 @@ export default function ChatScreen() {
                 </View>
               ) : null}
               {messages.length <= 1 && !busy ? (
-                <View style={styles.prompts}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.prompts}
+                  contentContainerStyle={styles.promptsInner}
+                >
                   {STARTER_PROMPTS.map((s) => (
                     <Pressable key={s} onPress={() => void ask(s)} style={[styles.chip, { backgroundColor: colors.surface, borderColor: colors.line }]}>
                       <Text style={[styles.chipText, { color: colors.slate }]}>{s}</Text>
                     </Pressable>
                   ))}
-                </View>
+                </ScrollView>
               ) : null}
             </>
           }
@@ -525,7 +501,7 @@ export default function ChatScreen() {
                   m.role === 'user'
                     ? { maxWidth: '88%', backgroundColor: colors.accent }
                     : {
-                        width: '100%',
+                        maxWidth: '88%',
                         backgroundColor: colors.surface,
                         borderWidth: StyleSheet.hairlineWidth,
                         borderColor: colors.line,
@@ -597,68 +573,34 @@ export default function ChatScreen() {
 }
 
 const styles = StyleSheet.create({
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.sm,
-  },
-  brand: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-  },
-  switchRow: {
-    marginTop: 8,
-  },
-  iconBtn: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatar: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarLetter: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-  },
   attentionBlock: {
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
-    padding: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
   attentionLabel: {
     fontFamily: fonts.sansMedium,
     fontSize: 16,
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
-    marginBottom: spacing.sm,
+    marginBottom: 2,
   },
   attentionRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    paddingVertical: 8,
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 5,
   },
   dot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    marginTop: 5,
   },
   attentionTitle: {
     fontFamily: fonts.sansMedium,
     fontSize: 16,
   },
   attentionSub: {
-    marginTop: 2,
     fontFamily: fonts.sans,
     fontSize: 16,
   },
@@ -682,11 +624,11 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   bubbleRowAssistant: {
-    alignItems: 'stretch',
+    alignItems: 'flex-start',
   },
   bubble: {
     paddingHorizontal: spacing.md,
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderRadius: radius.md,
   },
   bubbleText: {
@@ -714,25 +656,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   prompts: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    marginTop: spacing.md,
+    marginHorizontal: -spacing.lg,
+  },
+  promptsInner: {
     gap: 8,
-    marginTop: spacing.lg,
-    width: '100%',
+    paddingHorizontal: spacing.lg,
   },
   chip: {
-    flexGrow: 1,
-    flexBasis: '46%',
-    justifyContent: 'center',
     borderRadius: radius.full,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 8,
     borderWidth: StyleSheet.hairlineWidth,
   },
   chipText: {
     fontFamily: fonts.sans,
     fontSize: 16,
-    lineHeight: 23,
+    lineHeight: 21,
   },
   composer: {
     flexDirection: 'row',

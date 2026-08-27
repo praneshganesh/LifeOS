@@ -24,8 +24,10 @@ import {
 } from '@/lib/habitHeatmap';
 import { fonts, radius, shadows, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
+import { useHousehold } from '@/lib/HouseholdContext';
+import { displayNameFor, selfMember } from '@/lib/people';
 
-const MONTH_LABEL_W = 28;
+const MONTH_LABEL_W = 36;
 const GAP = 2;
 /** Sparse ticks — never clip two-digit numbers into a 1-cell box. */
 const DAY_TICKS = [1, 5, 10, 15, 20, 25, 31] as const;
@@ -113,15 +115,21 @@ function HabitYearCalendar({
     [habit.logs, year]
   );
 
-  // Measure the days track only (month labels sit outside). Fill that width — no artificial cap.
+  // Measure the days track only (month labels sit outside). Cells are heatmap
+  // squares, not text — they must shrink so all 31 columns fit the card.
   const trackBudget = Math.max(0, innerW - MONTH_LABEL_W);
   const cell = cellSizeForWidth(trackBudget, GAP, {
-    min: 16,
-    max: 48,
+    min: 4,
+    max: 14,
   });
   const trackW = daysTrackWidth(cell, GAP);
   const ready = trackBudget > 0;
-  const labelFs = 16;
+  // Chart axis micro-labels — must fit inside cell-height rows, so they scale
+  // with the grid instead of following the app-wide 16px text floor.
+  const labelFs = Math.max(10, Math.min(13, cell + 3));
+  // Row pitch follows the label, not the cell: an 11px label in an 8px-tall
+  // row bleeds into its neighbors and clips descenders (Aug → "Aua").
+  const rowH = Math.max(cell, labelFs + 4);
 
   function onLayout(e: LayoutChangeEvent) {
     const w = Math.floor(e.nativeEvent.layout.width);
@@ -165,14 +173,14 @@ function HabitYearCalendar({
           {model.months.map((row) => (
             <View
               key={row.monthIndex}
-              style={[styles.calRow, { marginTop: GAP }]}
+              style={[styles.calRow, { marginTop: GAP, height: rowH }]}
             >
               <RNText
                 numberOfLines={1}
                 allowFontScaling={false}
                 style={[
                   styles.monthLabel,
-                  { height: cell, lineHeight: cell, fontSize: labelFs, color: colors.mute },
+                  { height: rowH, lineHeight: rowH, fontSize: labelFs, color: colors.mute },
                 ]}
               >
                 {row.label}
@@ -191,11 +199,17 @@ function HabitYearCalendar({
             </View>
           ))}
 
-          <Text variant="caption" style={styles.yearCaption}>
+          <RNText
+            allowFontScaling={false}
+            style={[
+              styles.yearCaption,
+              { fontSize: labelFs, lineHeight: labelFs + 4, color: colors.faint },
+            ]}
+          >
             {habit.logs.length
               ? `${year} · filled = done`
               : `${year} · tap a day to mark done`}
-          </Text>
+          </RNText>
         </>
       ) : null}
     </View>
@@ -220,11 +234,23 @@ export function HabitCard({
   year?: number;
 }) {
   const { colors } = useTheme();
+  const { members } = useHousehold();
   const category = paintHabitCategory(habit.categoryId, colors);
   const viewYear = year ?? new Date().getFullYear();
   const doneToday = loggedOn(habit);
   const streak = currentStreak(habit);
   const rate = completionRate(habit, 30);
+  // Habits can belong to any household member (a kid's reading habit, etc.).
+  // Only show the owner when it's someone other than the user — your own
+  // name on your own habit is noise.
+  const self = selfMember(members);
+  const owner = displayNameFor(members, habit.personId, habit.assignedTo);
+  const isOwn =
+    (habit.personId && habit.personId === self?.id) ||
+    (!habit.personId &&
+      !!self &&
+      owner.trim().toLowerCase() === self.name.trim().toLowerCase());
+  const ownerName = isOwn ? '' : owner;
 
   const body = (
     <>
@@ -238,9 +264,9 @@ export function HabitCard({
             <Text variant="caption" numberOfLines={1} style={styles.why}>
               {habit.why}
             </Text>
-          ) : habit.assignedTo ? (
+          ) : ownerName ? (
             <Text variant="caption" numberOfLines={1} style={styles.why}>
-              {habit.assignedTo}
+              {ownerName}
             </Text>
           ) : null}
         </View>
@@ -262,7 +288,7 @@ export function HabitCard({
           >
             <Check
               size={12}
-              color={doneToday ? colors.pure : category.color}
+              color={doneToday ? colors.forestOn : category.color}
               strokeWidth={2.4}
             />
           </Pressable>
@@ -383,7 +409,8 @@ const styles = StyleSheet.create({
   },
   yearCaption: {
     marginTop: 6,
-    fontSize: 16,
+    fontFamily: fonts.sans,
+    includeFontPadding: false,
   },
   catHead: {
     flexDirection: 'row',

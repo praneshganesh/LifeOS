@@ -15,7 +15,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { Icon3DBadge, type Icon3DName } from '@/components/ui/Icon3D';
+import { useInventory } from '@/lib/InventoryContext';
 import { useSpaces, type SpaceKind } from '@/lib/SpacesContext';
+import { useToast } from '@/lib/ToastContext';
 import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
 
 const KINDS: { id: SpaceKind; label: string; icon: Icon3DName }[] = [
@@ -33,8 +35,17 @@ export default function EditSpaceScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { getSpace, updateSpace, removeSpace, roomsForSpace, addRoom, removeRoom } =
-    useSpaces();
+  const {
+    getSpace,
+    updateSpace,
+    removeSpace,
+    roomsForSpace,
+    addRoom,
+    updateRoom,
+    removeRoom,
+  } = useSpaces();
+  const { items: inventoryItems, updateItem } = useInventory();
+  const { showToast, showError } = useToast();
   const space = id ? getSpace(id) : undefined;
   const spaceRooms = id ? roomsForSpace(id) : [];
 
@@ -44,6 +55,8 @@ export default function EditSpaceScreen() {
   const [icon, setIcon] = useState<Icon3DName>('house');
   const [newRoom, setNewRoom] = useState('');
   const [saving, setSaving] = useState(false);
+  const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
+  const [roomDraft, setRoomDraft] = useState('');
 
   useEffect(() => {
     if (!space) return;
@@ -77,7 +90,10 @@ export default function EditSpaceScreen() {
         kind,
         icon: kind === 'home' ? icon : KINDS.find((k) => k.id === kind)?.icon || icon,
       });
+      showToast('Space saved');
       router.back();
+    } catch {
+      showError('Couldn’t save the space — try again.');
     } finally {
       setSaving(false);
     }
@@ -96,7 +112,12 @@ export default function EditSpaceScreen() {
           style: 'destructive',
           onPress: () => {
             void (async () => {
-              await removeSpace(target.id);
+              try {
+                await removeSpace(target.id);
+              } catch {
+                showError('Couldn’t delete — try again.');
+                return;
+              }
               router.replace('/(tabs)/spaces');
             })();
           },
@@ -108,8 +129,31 @@ export default function EditSpaceScreen() {
   async function onAddRoom() {
     const trimmed = newRoom.trim();
     if (!trimmed || !id) return;
-    await addRoom({ spaceId: id, name: trimmed, icon: 'package' });
-    setNewRoom('');
+    try {
+      await addRoom({ spaceId: id, name: trimmed, icon: 'package' });
+      setNewRoom('');
+    } catch {
+      showError('Couldn’t add the room — try again.');
+    }
+  }
+
+  async function commitRoomRename(roomId: string, oldName: string) {
+    const next = roomDraft.trim();
+    setEditingRoomId(null);
+    if (!next || next === oldName || !id) return;
+    try {
+      await updateRoom(roomId, { name: next });
+      // Things reference rooms by name — carry them over to the new name.
+      const affected = inventoryItems.filter(
+        (i) => i.spaceId === id && i.room === oldName
+      );
+      for (const it of affected) {
+        await updateItem(it.id, { room: next });
+      }
+      showToast('Room renamed');
+    } catch {
+      showError('Couldn’t rename the room — try again.');
+    }
   }
 
   return (
@@ -178,9 +222,31 @@ export default function EditSpaceScreen() {
           ) : null}
 
           <Text style={styles.label}>Rooms</Text>
+          <Text style={styles.roomHint}>Tap a room name to rename it.</Text>
           {spaceRooms.map((room) => (
             <View key={room.id} style={styles.roomRow}>
-              <Text style={styles.roomName}>{room.name}</Text>
+              {editingRoomId === room.id ? (
+                <TextInput
+                  value={roomDraft}
+                  onChangeText={setRoomDraft}
+                  autoFocus
+                  returnKeyType="done"
+                  onSubmitEditing={() => void commitRoomRename(room.id, room.name)}
+                  onBlur={() => void commitRoomRename(room.id, room.name)}
+                  style={[styles.input, styles.roomEditInput]}
+                />
+              ) : (
+                <Pressable
+                  onPress={() => {
+                    setEditingRoomId(room.id);
+                    setRoomDraft(room.name);
+                  }}
+                  style={{ flex: 1 }}
+                  hitSlop={4}
+                >
+                  <Text style={styles.roomName}>{room.name}</Text>
+                </Pressable>
+              )}
               <Pressable
                 onPress={() => {
                   Alert.alert('Remove room?', `Remove “${room.name}”?`, [
@@ -188,7 +254,10 @@ export default function EditSpaceScreen() {
                     {
                       text: 'Remove',
                       style: 'destructive',
-                      onPress: () => void removeRoom(room.id),
+                      onPress: () =>
+                        void removeRoom(room.id).catch(() =>
+                          showError('Couldn’t remove — try again.')
+                        ),
                     },
                   ]);
                 }}
@@ -324,6 +393,17 @@ function makeStyles(colors: ThemeColors) {
     fontFamily: fonts.sans,
     fontSize: 16,
     color: colors.ink,
+  },
+  roomHint: {
+    fontFamily: fonts.sans,
+    fontSize: 13,
+    color: colors.mute,
+    marginBottom: 4,
+  },
+  roomEditInput: {
+    flex: 1,
+    marginRight: spacing.md,
+    paddingVertical: 8,
   },
   removeText: {
     fontFamily: fonts.sansMedium,

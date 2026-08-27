@@ -1,6 +1,7 @@
 import { useTheme } from '@/lib/ThemeContext';
 import { useMemo, useState } from 'react';
 import {
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -50,8 +51,12 @@ export default function OnboardingFamily() {
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <View style={[styles.body, { paddingBottom: Math.max(insets.bottom, 16) + 8 }]}>
-        <Text style={styles.step}>Step 2 of 4</Text>
+      <Pressable
+        style={[styles.body, { paddingBottom: Math.max(insets.bottom, 16) + 8 }]}
+        onPress={Keyboard.dismiss}
+        accessible={false}
+      >
+        <Text style={styles.step}>Step 3 of 5</Text>
         <Text style={styles.title}>Who’s in the household?</Text>
         <Text style={styles.lead}>
           {alreadyHavePeople
@@ -94,7 +99,7 @@ export default function OnboardingFamily() {
             <Text style={styles.skip}>Skip for now</Text>
           </Pressable>
         </View>
-      </View>
+      </Pressable>
     </KeyboardAvoidingView>
   );
 }
@@ -117,8 +122,9 @@ function makeStyles(colors: ThemeColors) {
   },
   title: {
     fontFamily: fonts.sansSemi,
-    fontSize: 26,
-    letterSpacing: -0.5,
+    fontSize: 22,
+    lineHeight: 28,
+    letterSpacing: -0.4,
     color: colors.ink,
     marginBottom: spacing.sm,
   },

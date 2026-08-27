@@ -1,6 +1,5 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
-import { ListCard } from '@/components/ui/ListKit';
 import { Text } from '@/components/ui/Text';
 import { useTheme } from '@/lib/ThemeContext';
 import {
@@ -35,50 +34,64 @@ export default function AppearanceSettingsScreen() {
       subtitle={`${FAMILY_LABEL[family]} · ${resolved} · Figtree.`}
     >
       <ModuleSection label="Palette">
-        <ListCard>
-          {THEME_FAMILIES.map((t, i) => {
+        <View style={styles.grid}>
+          {THEME_FAMILIES.map((t) => {
             const on = family === t.id;
-            const light = PALETTES[t.id].light;
-            const dark = PALETTES[t.id].dark;
+            const p = PALETTES[t.id][resolved];
             return (
               <Pressable
                 key={t.id}
                 onPress={() => void setFamily(t.id)}
                 style={[
-                  styles.row,
-                  i < THEME_FAMILIES.length - 1 && {
-                    borderBottomWidth: StyleSheet.hairlineWidth,
-                    borderBottomColor: colors.line,
+                  styles.previewWrap,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: on ? colors.accent : colors.line,
+                    borderWidth: on ? 2 : StyleSheet.hairlineWidth,
                   },
                 ]}
               >
-                <View style={{ flex: 1 }}>
-                  <Text variant="headline" style={{ fontSize: 16 }}>
-                    {t.title}
-                    {on ? ' · Active' : ''}
-                  </Text>
-                  <Text variant="caption" style={{ marginTop: 2 }}>
+                {/* Mini mockup: background → card → primary / secondary CTA */}
+                <View style={[styles.preview, { backgroundColor: p.bg }]}>
+                  <View
+                    style={[
+                      styles.previewCard,
+                      { backgroundColor: p.surface, borderColor: p.line },
+                    ]}
+                  >
+                    <View
+                      style={[styles.previewBar, { backgroundColor: p.ink, width: '64%' }]}
+                    />
+                    <View
+                      style={[styles.previewBar, { backgroundColor: p.faint, width: '42%' }]}
+                    />
+                  </View>
+                  <View style={styles.previewPills}>
+                    <View
+                      style={[styles.previewPill, { backgroundColor: p.accent, width: 36 }]}
+                    />
+                    <View
+                      style={[styles.previewPill, { backgroundColor: p.accentSoft, width: 24 }]}
+                    />
+                  </View>
+                </View>
+                <View style={styles.previewMeta}>
+                  <View style={styles.previewTitleRow}>
+                    <Text variant="headline" style={{ fontSize: 16 }}>
+                      {t.title}
+                    </Text>
+                    {on ? (
+                      <View style={[styles.activeDot, { backgroundColor: colors.accent }]} />
+                    ) : null}
+                  </View>
+                  <Text variant="caption" numberOfLines={1}>
                     {t.hint}
                   </Text>
-                </View>
-                <View style={styles.swatches}>
-                  {[light.bg, light.accent, dark.bg].map((c) => (
-                    <View
-                      key={`${t.id}-${c}`}
-                      style={[
-                        styles.swatch,
-                        {
-                          backgroundColor: c,
-                          borderColor: colors.lineStrong,
-                        },
-                      ]}
-                    />
-                  ))}
                 </View>
               </Pressable>
             );
           })}
-        </ListCard>
+        </View>
       </ModuleSection>
 
       <ModuleSection label="Brightness">
@@ -112,19 +125,53 @@ export default function AppearanceSettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  row: {
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  previewWrap: {
+    flexBasis: '47%',
+    flexGrow: 1,
+    borderRadius: radius.md,
+    overflow: 'hidden',
+  },
+  preview: {
+    padding: 10,
+    paddingBottom: 12,
+  },
+  previewCard: {
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 8,
+    gap: 5,
+  },
+  previewBar: {
+    height: 5,
+    borderRadius: 3,
+  },
+  previewPills: {
+    flexDirection: 'row',
+    gap: 5,
+    marginTop: 8,
+  },
+  previewPill: {
+    height: 14,
+    borderRadius: radius.full,
+  },
+  previewMeta: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+  },
+  previewTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 14,
+    gap: 6,
   },
-  swatches: { flexDirection: 'row', gap: 6 },
-  swatch: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: StyleSheet.hairlineWidth,
+  activeDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
   },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {

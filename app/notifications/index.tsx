@@ -9,6 +9,7 @@ import { useLastDone } from '@/lib/LastDoneContext';
 import { useSubscriptions } from '@/lib/SubscriptionsContext';
 import { useClasses } from '@/lib/ClassesContext';
 import { buildAttentionItems } from '@/lib/attention';
+import { useAttentionDismissals } from '@/lib/attentionDismiss';
 import { colors } from '@/constants/theme';
 
 const FILTERS = [
@@ -24,13 +25,15 @@ export default function NotificationsScreen() {
   const { subscriptions } = useSubscriptions();
   const { packs: classPacks } = useClasses();
   const [filter, setFilter] = useState('all');
+  const { dismiss, isDismissed } = useAttentionDismissals();
 
   const due = useMemo(
     () =>
       buildAttentionItems(items, lastDone, subscriptions, classPacks).filter(
-        (a) => a.urgency === 'urgent' || a.urgency === 'soon'
+        (a) =>
+          (a.urgency === 'urgent' || a.urgency === 'soon') && !isDismissed(a.id)
       ),
-    [items, lastDone, subscriptions, classPacks]
+    [items, lastDone, subscriptions, classPacks, isDismissed]
   );
 
   const list = useMemo(() => {
@@ -80,6 +83,7 @@ export default function NotificationsScreen() {
                 onPress={() => {
                   if (a.href) router.push(a.href as Href);
                 }}
+                onDismiss={() => void dismiss(a.id)}
                 last={i === list.length - 1}
               />
             ))}

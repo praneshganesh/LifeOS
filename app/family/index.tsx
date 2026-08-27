@@ -61,8 +61,8 @@ export default function FamilyScreen() {
 
   return (
     <ModuleScreen
-      title="Family"
-      subtitle="People on your login. They only need a seat if they use the app themselves."
+      title="Household"
+      subtitle="People and pets who own things in Saavi — assign habits, classes, and documents to them."
       right={
         <CaptureContextButton
           kind="family"
@@ -135,7 +135,7 @@ export default function FamilyScreen() {
           <ListRow
             icon="family"
             title="Permissions"
-            subtitle="Owner, admin, editor, viewer"
+            subtitle="Owner, editor, viewer"
             onPress={() => router.push('/settings/sharing' as Href)}
           />
           <ListRow

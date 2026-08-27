@@ -6,6 +6,7 @@ import { useSpaces } from '@/lib/SpacesContext';
 import { useHousehold } from '@/lib/HouseholdContext';
 import { loadLocalProfile } from '@/lib/profile';
 import { resolveSelfDisplayName } from '@/lib/people';
+import { resolveDefaultCurrency } from '@/lib/currency';
 import { useTheme } from '@/lib/ThemeContext';
 import { THEME_FAMILIES } from '@/constants/theme';
 
@@ -15,15 +16,18 @@ export default function SettingsScreen() {
   const { spaces } = useSpaces();
   const { members } = useHousehold();
   const [displayName, setDisplayName] = useState('You');
+  const [currency, setCurrency] = useState('');
 
   useEffect(() => {
-    void loadLocalProfile().then((p) =>
-      setDisplayName(resolveSelfDisplayName(p.displayName, members) || p.displayName)
-    );
+    void loadLocalProfile().then((p) => {
+      setDisplayName(resolveSelfDisplayName(p.displayName, members) || p.displayName);
+      setCurrency(resolveDefaultCurrency(p.currency));
+    });
   }, [members]);
 
   const homes = spaces.filter((s) => s.kind === 'home');
   const defaultHome = homes[0]?.name || 'No home yet';
+  const homesMeta = [defaultHome, currency].filter(Boolean).join(' · ');
 
   return (
     <ModuleScreen
@@ -41,7 +45,7 @@ export default function SettingsScreen() {
           <ListRow
             icon="credit"
             title="Plan & billing"
-            subtitle="Trial · on this device"
+            subtitle="Trial"
             onPress={() => router.push('/settings/plan' as Href)}
             last
           />
@@ -64,7 +68,7 @@ export default function SettingsScreen() {
           <ListRow
             icon="house"
             title="Homes & defaults"
-            subtitle={defaultHome}
+            subtitle={homesMeta}
             onPress={() => router.push('/settings/homes' as Href)}
             last
           />
@@ -82,7 +86,7 @@ export default function SettingsScreen() {
           <ListRow
             icon="key"
             title="Security"
-            subtitle="Biometrics coming soon"
+            subtitle="Face ID & app lock"
             onPress={() => router.push('/settings/security' as Href)}
           />
           <ListRow
@@ -105,7 +109,7 @@ export default function SettingsScreen() {
           />
           <ListRow
             icon="document"
-            title="About LifeOS"
+            title="About Saavi"
             onPress={() => router.push('/settings/about' as Href)}
             last
           />

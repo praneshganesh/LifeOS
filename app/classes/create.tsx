@@ -16,8 +16,10 @@ import { Text } from '@/components/ui/Text';
 import { DateField } from '@/components/ui/DateField';
 import { PersonChips } from '@/components/PersonChips';
 import { useClasses } from '@/lib/ClassesContext';
+import { useToast } from '@/lib/ToastContext';
 import { useHousehold } from '@/lib/HouseholdContext';
 import { selfMember } from '@/lib/people';
+import { sanitizeIntegerInput } from '@/lib/currency';
 import { addCalendarMonths, localDayKey } from '@/lib/dates';
 import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
 
@@ -30,6 +32,7 @@ export default function CreateClassPackScreen() {
   const router = useRouter();
   const { addPack } = useClasses();
   const { members } = useHousehold();
+  const { showToast, showError } = useToast();
   const [title, setTitle] = useState('');
   const [total, setTotal] = useState('24');
   const [months, setMonths] = useState(3);
@@ -44,7 +47,9 @@ export default function CreateClassPackScreen() {
     [startsOn, months]
   );
   const person = members.find((m) => m.id === personId);
-  const totalN = Math.max(1, Math.round(Number(total) || 0));
+  // Digits only — "24 classes" or "1,500" must not turn into NaN or a
+  // silently coerced 1.
+  const totalN = Math.round(Number(total.replace(/[^\d]/g, '')) || 0);
   const canSave = Boolean(title.trim()) && totalN > 0;
 
   async function save() {
@@ -60,7 +65,10 @@ export default function CreateClassPackScreen() {
         personId: person?.id,
         assignedTo: person?.name,
       });
+      showToast('Class pack added');
       router.replace(`/classes/${pack.id}` as Href);
+    } catch {
+      showError('Couldn’t save the class pack — try again.');
     } finally {
       setSaving(false);
     }
@@ -97,7 +105,7 @@ export default function CreateClassPackScreen() {
           <Text style={styles.label}>How many classes</Text>
           <TextInput
             value={total}
-            onChangeText={setTotal}
+            onChangeText={(t) => setTotal(sanitizeIntegerInput(t))}
             keyboardType="number-pad"
             placeholder="24"
             placeholderTextColor={colors.faint}
@@ -150,6 +158,13 @@ export default function CreateClassPackScreen() {
               {saving ? 'Saving…' : 'Save class pack'}
             </Text>
           </Pressable>
+          {!canSave ? (
+            <Text style={styles.saveHint}>
+              {!title.trim()
+                ? 'Add a name to save.'
+                : 'Enter how many classes (a number above 0).'}
+            </Text>
+          ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
     </Screen>
@@ -159,7 +174,8 @@ export default function CreateClassPackScreen() {
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
   content: {
-    padding: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xs,
   },
   label: {
     fontFamily: fonts.sansMedium,
@@ -220,10 +236,17 @@ function makeStyles(colors: ThemeColors) {
   saveDisabled: {
     opacity: 0.45,
   },
+  saveHint: {
+    fontFamily: fonts.sans,
+    fontSize: 14,
+    color: colors.mute,
+    textAlign: 'center',
+    marginTop: spacing.sm,
+  },
   saveText: {
     fontFamily: fonts.sansSemi,
     fontSize: 16,
-    color: colors.pure,
+    color: colors.forestOn,
   },
 });
 }

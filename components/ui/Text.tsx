@@ -31,17 +31,17 @@ export function Text({
     },
     hero: {
       fontFamily: fonts.sansSemi,
-      fontSize: 34,
-      lineHeight: 40,
+      fontSize: 28,
+      lineHeight: 34,
       color: colors.ink,
-      letterSpacing: -1,
+      letterSpacing: -0.8,
     },
     title: {
       fontFamily: fonts.sansSemi,
-      fontSize: 26,
-      lineHeight: 32,
+      fontSize: 22,
+      lineHeight: 28,
       color: colors.ink,
-      letterSpacing: -0.5,
+      letterSpacing: -0.4,
     },
     headline: {
       fontFamily: fonts.sansMedium,
@@ -78,10 +78,10 @@ export function Text({
     },
     score: {
       fontFamily: fonts.sansSemi,
-      fontSize: 40,
-      lineHeight: 44,
+      fontSize: 28,
+      lineHeight: 32,
       color: colors.ink,
-      letterSpacing: -1,
+      letterSpacing: -0.6,
     },
   };
 

@@ -16,6 +16,7 @@ import { Text } from '@/components/ui/Text';
 import { useHousehold } from '@/lib/HouseholdContext';
 import type { HouseholdRole } from '@/lib/household';
 import { messageForPlanLimit } from '@/lib/planLimits';
+import { useToast } from '@/lib/ToastContext';
 import { fonts, radius, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
 import { noFocusRing } from '@/lib/a11y';
@@ -39,6 +40,7 @@ export default function NewFamilyMemberScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { addMember } = useHousehold();
+  const { showToast } = useToast();
   const [name, setName] = useState('');
   const [relation, setRelation] = useState('');
   const [role, setRole] = useState<HouseholdRole>('adult');
@@ -55,6 +57,7 @@ export default function NewFamilyMemberScreen() {
         role,
         relation: relation.trim() || (role === 'adult' ? 'Family' : ''),
       });
+      showToast(`${member.name} added`);
       router.replace(`/family/${member.id}`);
     } catch (err) {
       Alert.alert('Couldn’t add person', messageForPlanLimit(err) || 'Try again.');
@@ -159,6 +162,11 @@ export default function NewFamilyMemberScreen() {
               {saving ? 'Saving…' : 'Save'}
             </Text>
           </Pressable>
+          {!name.trim() ? (
+            <Text style={[styles.saveHint, { color: colors.mute }]}>
+              Add a name to save.
+            </Text>
+          ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
     </Screen>
@@ -167,7 +175,8 @@ export default function NewFamilyMemberScreen() {
 
 const styles = StyleSheet.create({
   content: {
-    padding: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xs,
   },
   label: {
     fontFamily: fonts.sansMedium,
@@ -212,5 +221,11 @@ const styles = StyleSheet.create({
   saveText: {
     fontFamily: fonts.sansSemi,
     fontSize: 16,
+  },
+  saveHint: {
+    fontFamily: fonts.sans,
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: spacing.sm,
   },
 });

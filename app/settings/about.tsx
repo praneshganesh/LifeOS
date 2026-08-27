@@ -14,18 +14,18 @@ export default function AboutSettingsScreen() {
     String(Constants.expoConfig?.runtimeVersion || '57');
 
   return (
-    <ModuleScreen title="About LifeOS" subtitle="OS for everything you own.">
+    <ModuleScreen title="About Saavi" subtitle="The key to your home life.">
       <Text variant="body" style={{ marginBottom: spacing.lg }}>
-        Privacy-first life administration — homes, assets, warranties, documents,
-        and family — with on-device document reading and no required email or bank
-        connections.
+        Life administration — homes, assets, warranties, documents, and family —
+        with automatic document reading and no required email or bank
+        connections. Your data syncs securely to the cloud.
       </Text>
       <ModuleSection label="App">
         <ListCard>
           <ListRow title="Version" meta={version} />
           <ListRow title="Expo SDK" meta={String(sdk).includes('57') ? '57' : String(sdk)} />
           <ListRow title="Fonts" meta="Figtree" />
-          <ListRow title="Storage" meta="On this device" last />
+          <ListRow title="Storage" meta="Cloud synced" last />
         </ListCard>
       </ModuleSection>
     </ModuleScreen>

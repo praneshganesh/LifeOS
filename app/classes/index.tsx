@@ -7,6 +7,8 @@ import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { StatStrip } from '@/components/ui/ListKit';
 import { Text } from '@/components/ui/Text';
 import { useClasses } from '@/lib/ClassesContext';
+import { useHousehold } from '@/lib/HouseholdContext';
+import { displayNameFor } from '@/lib/people';
 import {
   formatPackWindow,
   loggedOn,
@@ -22,6 +24,7 @@ export default function ClassesScreen() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
   const { packs, logClass } = useClasses();
+  const { members } = useHousehold();
   const today = localDayKey();
 
   const left = packs.reduce((n, p) => n + (remainingCount(p) ?? 0), 0);
@@ -73,7 +76,8 @@ export default function ClassesScreen() {
           const remaining = remainingCount(pack);
           const pct = pack.total > 0 ? Math.min(1, used / pack.total) : 0;
           const todayDone = loggedOn(pack, today);
-          const who = pack.assignedTo ? `${pack.assignedTo} · ` : '';
+          const ownerName = displayNameFor(members, pack.personId, pack.assignedTo);
+          const who = ownerName ? `${ownerName} · ` : '';
           return (
             <Pressable
               key={pack.id}
@@ -162,7 +166,7 @@ function makeStyles(colors: ThemeColors) {
     color: colors.forest,
   },
   logLabelOn: {
-    color: colors.pure,
+    color: colors.forestOn,
   },
   track: {
     height: 6,

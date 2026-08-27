@@ -28,7 +28,7 @@ export default function OnboardingTalk() {
   return (
     <View style={[styles.root, { paddingBottom: Math.max(insets.bottom, 16) + 8 }]}>
       <View style={styles.body}>
-        <Text style={styles.step}>Step 4 of 4</Text>
+        <Text style={styles.step}>Step 5 of 5</Text>
         <Text style={styles.title}>Meet Talk</Text>
         <Text style={styles.lead}>
           Say “I bought AirPods for 900” or ask “what’s due soon?” Talk updates your home data —
@@ -54,7 +54,7 @@ export default function OnboardingTalk() {
           onPress={() => void finish(false)}
           style={({ pressed }) => [styles.secondary, pressed && { opacity: 0.92 }]}
         >
-          <Text style={styles.secondaryText}>Enter LifeOS</Text>
+          <Text style={styles.secondaryText}>Enter Saavi</Text>
         </Pressable>
       </View>
     </View>
@@ -80,8 +80,9 @@ function makeStyles(colors: ThemeColors) {
   },
   title: {
     fontFamily: fonts.sansSemi,
-    fontSize: 26,
-    letterSpacing: -0.5,
+    fontSize: 22,
+    lineHeight: 28,
+    letterSpacing: -0.4,
     color: colors.ink,
     marginBottom: spacing.sm,
   },

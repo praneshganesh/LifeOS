@@ -6,6 +6,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   TextInput,
   View,
 } from 'react-native';
@@ -13,7 +14,11 @@ import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
+import { DateField } from '@/components/ui/DateField';
 import { useSubscriptions } from '@/lib/SubscriptionsContext';
+import { useToast } from '@/lib/ToastContext';
+import { useCurrency } from '@/lib/CurrencyContext';
+import { sanitizeAmountInput } from '@/lib/currency';
 import {
   SUBSCRIPTION_CATEGORIES,
   SUBSCRIPTION_CYCLES,
@@ -32,8 +37,11 @@ export default function SubscriptionFormScreen() {
   const { editId: editParam } = useLocalSearchParams<{ editId?: string }>();
   const editId = Array.isArray(editParam) ? editParam[0] : editParam;
   const { addSubscription, updateSubscription, getById } = useSubscriptions();
+  const { showToast, showError } = useToast();
+  const { currency: defaultCurrency } = useCurrency();
   const existing = editId ? getById(editId) : undefined;
   const editing = Boolean(existing);
+  const currency = existing?.currency || defaultCurrency;
 
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
@@ -41,6 +49,8 @@ export default function SubscriptionFormScreen() {
   const [cycle, setCycle] = useState<SubscriptionCycle>('monthly');
   const [category, setCategory] = useState<SubscriptionCategory>('other');
   const [renewsOn, setRenewsOn] = useState(defaultRenewsOn('monthly'));
+  const [autoRenew, setAutoRenew] = useState(true);
+  const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [hydrated, setHydrated] = useState(!editId);
 
@@ -57,6 +67,8 @@ export default function SubscriptionFormScreen() {
     setCycle(s.cycle);
     setCategory(s.category);
     setRenewsOn(s.renewsOn || defaultRenewsOn(s.cycle));
+    setAutoRenew(s.autoRenew !== false);
+    setNote(s.note || '');
     setHydrated(true);
   }, [editId, getById]);
 
@@ -76,24 +88,34 @@ export default function SubscriptionFormScreen() {
         await updateSubscription(existing.id, {
           title: title.trim(),
           amount: amountNum,
+          currency,
           cycle,
           category,
           renewsOn: renewsOn.trim() || defaultRenewsOn(cycle),
           provider: provider.trim() || undefined,
+          autoRenew,
+          note: note.trim() || undefined,
         });
+        showToast('Subscription updated');
         router.replace(`/subscriptions/${existing.id}` as Href);
       } else {
         const sub = await addSubscription({
           title: title.trim(),
           amount: amountNum,
+          currency,
           cycle,
           category,
           renewsOn: renewsOn.trim() || undefined,
           provider: provider.trim() || undefined,
+          autoRenew,
+          note: note.trim() || undefined,
           source: 'manual',
         });
+        showToast('Subscription added');
         router.replace(`/subscriptions/${sub.id}` as Href);
       }
+    } catch {
+      showError('Couldn’t save the subscription — try again.');
     } finally {
       setSaving(false);
     }
@@ -146,10 +168,10 @@ export default function SubscriptionFormScreen() {
             autoFocus={!editing}
           />
 
-          <Text style={styles.label}>Amount (AED)</Text>
+          <Text style={styles.label}>Amount ({currency})</Text>
           <TextInput
             value={amount}
-            onChangeText={setAmount}
+            onChangeText={(t) => setAmount(sanitizeAmountInput(t))}
             placeholder="0.00"
             placeholderTextColor={colors.faint}
             style={styles.input}
@@ -181,14 +203,31 @@ export default function SubscriptionFormScreen() {
             })}
           </View>
 
-          <Text style={styles.label}>Next renewal (YYYY-MM-DD)</Text>
+          <Text style={styles.label}>Next renewal</Text>
+          <DateField value={renewsOn} onChange={setRenewsOn} />
+
+          <View style={styles.switchRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.switchTitle}>Auto-renews</Text>
+              <Text style={styles.switchHint}>
+                Off if you cancel it and it just runs out.
+              </Text>
+            </View>
+            <Switch
+              value={autoRenew}
+              onValueChange={setAutoRenew}
+              trackColor={{ false: colors.lineStrong, true: colors.forest }}
+              thumbColor={colors.white}
+            />
+          </View>
+
+          <Text style={styles.label}>Note (optional)</Text>
           <TextInput
-            value={renewsOn}
-            onChangeText={setRenewsOn}
-            placeholder="2026-09-01"
+            value={note}
+            onChangeText={setNote}
+            placeholder="e.g. Family plan, shared with Maya"
             placeholderTextColor={colors.faint}
             style={styles.input}
-            autoCapitalize="none"
           />
 
           <Text style={styles.label}>Category</Text>
@@ -216,6 +255,13 @@ export default function SubscriptionFormScreen() {
               {saving ? 'Saving…' : editing ? 'Save changes' : 'Save subscription'}
             </Text>
           </Pressable>
+          {!canSave ? (
+            <Text style={styles.saveHint}>
+              {!title.trim()
+                ? 'Add a name to save.'
+                : 'Enter an amount above 0 to save.'}
+            </Text>
+          ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
     </Screen>
@@ -225,7 +271,8 @@ export default function SubscriptionFormScreen() {
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
   content: {
-    padding: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xs,
   },
   label: {
     fontFamily: fonts.sansMedium,
@@ -283,7 +330,37 @@ function makeStyles(colors: ThemeColors) {
   saveText: {
     fontFamily: fonts.sansSemi,
     fontSize: 16,
-    color: colors.pure,
+    color: colors.forestOn,
+  },
+  saveHint: {
+    fontFamily: fonts.sans,
+    fontSize: 14,
+    color: colors.mute,
+    textAlign: 'center',
+    marginTop: spacing.sm,
+  },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginTop: spacing.md,
+    backgroundColor: colors.white,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
+  },
+  switchTitle: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 16,
+    color: colors.ink,
+  },
+  switchHint: {
+    fontFamily: fonts.sans,
+    fontSize: 13,
+    color: colors.mute,
+    marginTop: 2,
   },
 });
 }

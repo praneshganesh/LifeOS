@@ -1,6 +1,10 @@
 import type { InventoryItem } from '@/lib/InventoryContext';
 import { daysUntil } from '@/lib/lastDone';
 import { parseAmount } from '@/lib/expenses';
+import {
+  currencyFromSpokenText,
+  getRuntimeDefaultCurrency,
+} from '@/lib/currency';
 
 /** Resolve space ids by kind so modules don’t hardcode s4/s5. */
 export function spaceIdByKind(
@@ -107,7 +111,7 @@ export function purchaseSortKey(item: InventoryItem): string {
   return item.createdAt.slice(0, 10);
 }
 
-/** Sum parseable AED/USD-style prices from inventory purchase fields. */
+/** Sum parseable prices from inventory purchase fields. */
 export function sumPurchasePrices(items: InventoryItem[]): {
   total: number;
   currency: string;
@@ -115,15 +119,15 @@ export function sumPurchasePrices(items: InventoryItem[]): {
 } {
   let total = 0;
   let counted = 0;
-  let currency = 'AED';
+  let currency = getRuntimeDefaultCurrency();
   for (const item of items) {
     if (!item.price || item.price === '—') continue;
     const n = parseAmount(item.price);
     if (!Number.isFinite(n) || n <= 0) continue;
     total += n;
     counted += 1;
-    if (/\busd|\$\b/i.test(item.price)) currency = 'USD';
-    else if (/\beur|€\b/i.test(item.price)) currency = 'EUR';
+    const spoken = currencyFromSpokenText(item.price);
+    if (spoken) currency = spoken;
   }
   return { total, currency, counted };
 }

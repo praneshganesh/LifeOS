@@ -15,6 +15,19 @@ export type VersionedEnvelope<T> = {
   data: T;
 };
 
+export type StorageLoadFailure = { key: string; message: string; backedUp: boolean };
+
+const loadFailures: StorageLoadFailure[] = [];
+
+/**
+ * Stores that failed to load this session (corrupt JSON / read error).
+ * Surfaced in Settings → Export & backup so a wiped-looking module is
+ * distinguishable from genuinely empty data.
+ */
+export function getStorageLoadFailures(): StorageLoadFailure[] {
+  return [...loadFailures];
+}
+
 export function isEnvelope(raw: unknown): raw is VersionedEnvelope<unknown> {
   return (
     Boolean(raw) &&
@@ -35,8 +48,9 @@ export async function loadVersioned<T>(
   empty: T,
   migrate?: (data: unknown, fromVersion: number) => T
 ): Promise<T> {
+  let raw: string | null = null;
   try {
-    const raw = await AsyncStorage.getItem(key);
+    raw = await AsyncStorage.getItem(key);
     if (!raw) return empty;
 
     const parsed: unknown = JSON.parse(raw);
@@ -55,14 +69,33 @@ export async function loadVersioned<T>(
         next = migrate(next, v);
         v += 1;
       }
-      await saveVersioned(key, currentVersion, next);
+      // A failed rewrite must not discard successfully loaded data.
+      await saveVersioned(key, currentVersion, next).catch(() => undefined);
     } else if (!isEnvelope(parsed)) {
       // Rewrite legacy bare payload into an envelope
-      await saveVersioned(key, currentVersion, next);
+      await saveVersioned(key, currentVersion, next).catch(() => undefined);
     }
 
     return next;
-  } catch {
+  } catch (err) {
+    // Don't silently present corrupt data as "empty": preserve the raw bytes
+    // so the user's data is recoverable, and record the failure so the UI
+    // can say the store failed to load instead of looking factory-reset.
+    let backedUp = false;
+    if (raw != null) {
+      try {
+        await AsyncStorage.setItem(`${key}.corrupt`, raw);
+        backedUp = true;
+      } catch {
+        // best effort — original key is left untouched either way
+      }
+    }
+    loadFailures.push({
+      key,
+      message: err instanceof Error ? err.message : String(err),
+      backedUp,
+    });
+    console.error(`[storage] failed to load ${key}`, err);
     return empty;
   }
 }

@@ -54,11 +54,13 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const packsRef = useRef<ClassPack[]>([]);
 
-  const commit = useCallback((next: ClassPack[]) => {
+  // Awaited commit: callers only resolve once the write is on disk, so a
+  // failed write rejects instead of the UI reporting a save that never stuck.
+  const commit = useCallback(async (next: ClassPack[]) => {
     const sorted = sortPacks(next);
     packsRef.current = sorted;
     setPacks(sorted);
-    void saveVersionedArray(STORAGE_KEY, SCHEMA_VERSION, sorted);
+    await saveVersionedArray(STORAGE_KEY, SCHEMA_VERSION, sorted);
     return sorted;
   }, []);
 
@@ -90,13 +92,13 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
       if (existing && (!input.personId || existing.personId === input.personId)) {
         const merged = mergeClassPackUpdate(existing, input);
         if (!merged) return existing;
-        commit(
+        await commit(
           packsRef.current.map((p) => (p.id === existing.id ? merged : p))
         );
         return merged;
       }
       const pack = createClassPack(input);
-      commit([pack, ...packsRef.current]);
+      await commit([pack, ...packsRef.current]);
       return pack;
     },
     [commit]
@@ -104,7 +106,7 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
 
   const updatePack = useCallback(
     async (id: string, patch: Partial<ClassPack>) => {
-      commit(
+      await commit(
         packsRef.current.map((p) => (p.id === id ? { ...p, ...patch, id: p.id } : p))
       );
     },
@@ -113,7 +115,7 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
 
   const removePack = useCallback(
     async (id: string) => {
-      commit(packsRef.current.filter((p) => p.id !== id));
+      await commit(packsRef.current.filter((p) => p.id !== id));
     },
     [commit]
   );
@@ -126,7 +128,7 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
         updated = toggleLogForDay(p, date);
         return updated;
       });
-      commit(next);
+      await commit(next);
       return updated;
     },
     [commit]

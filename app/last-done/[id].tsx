@@ -1,11 +1,12 @@
 import { useTheme } from '@/lib/ThemeContext';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
+  TextInput,
   View,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
@@ -18,10 +19,12 @@ import {
   LastDoneCategoryHeader,
 } from '@/components/LastDoneActivityCard';
 import { useLastDone } from '@/lib/LastDoneContext';
+import { useToast } from '@/lib/ToastContext';
 import {
   formatRelativeDone,
   formatRemindStatus,
   sortLogsNewestFirst,
+  type RemindInterval,
 } from '@/lib/lastDone';
 import { categorizeLastDone, paintLastDoneCategory } from '@/lib/lastDoneCategories';
 import { blurActiveElement } from '@/lib/a11y';
@@ -39,18 +42,72 @@ function confirmDelete(message: string): Promise<boolean> {
   });
 }
 
+const REMIND_CHOICES: { key: string; label: string; interval: RemindInterval | null }[] = [
+  { key: 'off', label: 'Off', interval: null },
+  { key: '7d', label: '1 week', interval: { value: 7, unit: 'days' } },
+  { key: '30d', label: '1 month', interval: { value: 30, unit: 'days' } },
+  { key: '3m', label: '3 months', interval: { value: 3, unit: 'months' } },
+  { key: '6m', label: '6 months', interval: { value: 6, unit: 'months' } },
+  { key: '12m', label: '1 year', interval: { value: 12, unit: 'months' } },
+];
+
 export default function LastDoneDetailScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { items, remove, removeLog, logDone } = useLastDone();
+  const { items, remove, removeLog, logDone, updateActivity } = useLastDone();
+  const { showToast, showError } = useToast();
 
   const item = useMemo(
     () => items.find((i) => i.id === id),
     [items, id]
   );
+
+  const [labelDraft, setLabelDraft] = useState('');
+  useEffect(() => {
+    if (item) setLabelDraft(item.label);
+  }, [item]);
+
+  const activeRemindKey = item?.remindInterval
+    ? REMIND_CHOICES.find(
+        (c) =>
+          c.interval &&
+          c.interval.value === item.remindInterval?.value &&
+          c.interval.unit === item.remindInterval?.unit
+      )?.key
+    : item?.remindAt
+      ? undefined // one-off date reminder — no chip matches
+      : 'off';
+
+  async function commitRename() {
+    if (!item) return;
+    const next = labelDraft.trim();
+    if (!next || next === item.label) {
+      setLabelDraft(item.label);
+      return;
+    }
+    try {
+      await updateActivity(item.id, { label: next });
+      showToast('Renamed');
+    } catch {
+      setLabelDraft(item.label);
+      showError('Couldn’t rename — try again.');
+    }
+  }
+
+  async function onPickReminder(choice: (typeof REMIND_CHOICES)[number]) {
+    if (!item) return;
+    try {
+      await updateActivity(item.id, { remindInterval: choice.interval });
+      showToast(
+        choice.interval ? `Reminder set — every ${choice.label}` : 'Reminder off'
+      );
+    } catch {
+      showError('Couldn’t update the reminder — try again.');
+    }
+  }
 
   const logs = useMemo(
     () => (item ? sortLogsNewestFirst(item.logs ?? []) : []),
@@ -121,6 +178,39 @@ export default function LastDoneDetailScreen() {
               : ''}
           </Text>
         ) : null}
+
+        <Text variant="label" style={[styles.sectionLabel, { marginTop: spacing.sm }]}>
+          Name
+        </Text>
+        <TextInput
+          value={labelDraft}
+          onChangeText={setLabelDraft}
+          returnKeyType="done"
+          onSubmitEditing={() => void commitRename()}
+          onBlur={() => void commitRename()}
+          style={styles.nameInput}
+          placeholderTextColor={colors.faint}
+        />
+
+        <Text variant="label" style={[styles.sectionLabel, { marginTop: spacing.md }]}>
+          Remind me
+        </Text>
+        <View style={styles.remindChips}>
+          {REMIND_CHOICES.map((choice) => {
+            const on = activeRemindKey === choice.key;
+            return (
+              <Pressable
+                key={choice.key}
+                onPress={() => void onPickReminder(choice)}
+                style={[styles.remindChip, on && styles.remindChipOn]}
+              >
+                <Text style={[styles.remindChipText, on && styles.remindChipTextOn]}>
+                  {choice.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
 
         <View style={styles.sectionHead}>
           <Text variant="label" style={styles.sectionLabel}>
@@ -223,6 +313,44 @@ function makeStyles(colors: ThemeColors) {
   sectionLabel: {
     color: colors.mute,
     fontSize: 16,
+  },
+  nameInput: {
+    backgroundColor: colors.white,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
+    fontFamily: fonts.sans,
+    fontSize: 16,
+    color: colors.ink,
+    marginTop: 6,
+  },
+  remindChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 6,
+  },
+  remindChip: {
+    borderRadius: radius.full,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: colors.white,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+  },
+  remindChipOn: {
+    backgroundColor: colors.forest,
+    borderColor: colors.forest,
+  },
+  remindChipText: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 14,
+    color: colors.slate,
+  },
+  remindChipTextOn: {
+    color: colors.forestOn,
   },
   listCard: {
     backgroundColor: colors.white,

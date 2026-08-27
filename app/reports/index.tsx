@@ -18,6 +18,7 @@ import {
   formatAmount,
   sumExpenses,
 } from '@/lib/expenses';
+import { getRuntimeDefaultCurrency } from '@/lib/currency';
 import {
   daysUntilRenewal,
   formatAmount as formatSubAmount,
@@ -51,7 +52,7 @@ export default function ReportsScreen() {
 
   const month = currentMonthKey();
   const monthSpend = sumExpenses(expensesInMonth(expenses, month));
-  const currency = expenses[0]?.currency || 'AED';
+  const currency = expenses[0]?.currency || getRuntimeDefaultCurrency();
   const monthlySubs = sumMonthly(subscriptions);
   const upcoming = sortByRenewal(subscriptions).slice(0, 5);
   const warranties = warrantyRecordsFromInventory(items);
@@ -74,7 +75,7 @@ export default function ReportsScreen() {
   return (
     <ModuleScreen
       title="Reports"
-      subtitle="Live snapshot from data on this device."
+      subtitle="Live snapshot of your data."
     >
       <StatStrip
         items={[

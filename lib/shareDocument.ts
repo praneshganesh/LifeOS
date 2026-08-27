@@ -27,7 +27,7 @@ export function confirmShareDocument(
   const body =
     mode === 'redacted'
       ? `Share redacted details for “${name}”? Document number and date of birth are omitted. The photo is not shared.`
-      : `Share “${name}”? The photo or details leave LifeOS through your phone’s share sheet (WhatsApp, Messages, Mail…). Nothing is uploaded by LifeOS.`;
+      : `Share “${name}”? The photo or details leave Saavi through your phone’s share sheet (WhatsApp, Messages, Mail…). Nothing is uploaded by Saavi.`;
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
     return Promise.resolve(window.confirm(body));
   }
@@ -77,9 +77,7 @@ function buildTextSummary(item: ShareableDocument, mode: ShareMode): string {
   if (expires && expires !== '—') lines.push(`Expires: ${expires}`);
   lines.push('');
   lines.push(
-    mode === 'redacted'
-      ? 'Shared from LifeOS · redacted (on this device).'
-      : 'Shared from LifeOS (on this device).'
+    mode === 'redacted' ? 'Shared from Saavi · redacted.' : 'Shared from Saavi.'
   );
   return lines.join('\n');
 }

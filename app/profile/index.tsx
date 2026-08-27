@@ -4,7 +4,6 @@ import {
   StyleSheet,
   Pressable,
   TextInput,
-  Alert,
 } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import { ChevronRight, User } from 'lucide-react-native';
@@ -29,6 +28,7 @@ import {
 } from '@/lib/planLimits';
 import { fonts, radius, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
+import { useToast } from '@/lib/ToastContext';
 
 export default function ProfileScreen() {
   const { colors } = useTheme();
@@ -36,10 +36,12 @@ export default function ProfileScreen() {
   const { items } = useInventory();
   const { spaces } = useSpaces();
   const { members } = useHousehold();
+  const { showToast, showError } = useToast();
   const [name, setName] = useState(DEFAULT_PROFILE.displayName);
   const [locale, setLocale] = useState(DEFAULT_PROFILE.locale || '');
   const [ready, setReady] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [planPrefs, setPlanPrefs] = useState<PlanPrefs>({ planId: 'trial' });
 
   const documentsSpaceId = spaceIdByKind(spaces, 'documents');
@@ -63,7 +65,10 @@ export default function ProfileScreen() {
     setSaving(true);
     try {
       await saveLocalProfile({ displayName: name, locale });
-      Alert.alert('Saved', 'Profile stays on this device.');
+      showToast('Profile saved');
+      setEditing(false);
+    } catch {
+      showError('Couldn’t save your profile — try again.');
     } finally {
       setSaving(false);
     }
@@ -79,12 +84,12 @@ export default function ProfileScreen() {
         : daysLeft === 0 || (daysLeft != null && daysLeft <= 0)
           ? 'Trial ended'
           : 'Trial · 14 days'
-      : `${plan.name} · on this device`;
+      : plan.name;
 
   return (
     <ModuleScreen
       title="Profile"
-      subtitle={locale || 'On this device'}
+      subtitle={locale || 'Your account'}
     >
       <View
         style={[
@@ -92,25 +97,88 @@ export default function ProfileScreen() {
           { backgroundColor: colors.surface, borderColor: colors.line },
         ]}
       >
-        <View style={[styles.avatar, { backgroundColor: colors.ink }]}>
-          {letter ? (
-            <Text style={[styles.letter, { color: colors.onInk }]}>{letter}</Text>
-          ) : (
-            <User size={28} color={colors.onInk} strokeWidth={1.8} />
-          )}
+        <View style={styles.heroRow}>
+          <View style={[styles.avatar, { backgroundColor: colors.ink }]}>
+            {letter ? (
+              <Text style={[styles.letter, { color: colors.onInk }]}>{letter}</Text>
+            ) : (
+              <User size={22} color={colors.onInk} strokeWidth={1.8} />
+            )}
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text variant="headline" numberOfLines={1}>
+              {name.trim() || 'You'}
+            </Text>
+            <Text variant="caption" style={{ marginTop: 2 }}>
+              {planLabel}
+            </Text>
+          </View>
+          <Pressable
+            onPress={() => setEditing((v) => !v)}
+            hitSlop={8}
+            style={[styles.editChip, { backgroundColor: colors.surfaceSoft }]}
+            accessibilityLabel={editing ? 'Stop editing profile' : 'Edit profile'}
+          >
+            <Text style={[styles.editChipText, { color: colors.slate }]}>
+              {editing ? 'Cancel' : 'Edit'}
+            </Text>
+          </Pressable>
         </View>
-        <Text
-          variant="title"
-          style={{ marginTop: spacing.md, color: colors.ink, textAlign: 'center' }}
-        >
-          {name.trim() || 'You'}
-        </Text>
-        <Text variant="caption" style={{ marginTop: 6, color: colors.mute, textAlign: 'center' }}>
-          On this device
-        </Text>
-        <View style={[styles.planPill, { backgroundColor: colors.surfaceSoft }]}>
-          <Text style={[styles.planText, { color: colors.slate }]}>{planLabel}</Text>
-        </View>
+
+        {editing ? (
+          <View style={styles.editForm}>
+            <Text style={[styles.label, { color: colors.mute }]}>Display name</Text>
+            <TextInput
+              value={name}
+              onChangeText={setName}
+              placeholder="Your name"
+              placeholderTextColor={colors.faint}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: colors.surfaceSoft,
+                  borderColor: colors.line,
+                  color: colors.ink,
+                },
+              ]}
+              autoCorrect={false}
+              spellCheck={false}
+              autoComplete="off"
+              textContentType="none"
+              autoCapitalize="words"
+              editable={ready}
+            />
+            <Text style={[styles.label, { color: colors.mute }]}>Locale note</Text>
+            <TextInput
+              value={locale}
+              onChangeText={setLocale}
+              placeholder="e.g. Dubai"
+              placeholderTextColor={colors.faint}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: colors.surfaceSoft,
+                  borderColor: colors.line,
+                  color: colors.ink,
+                },
+              ]}
+              editable={ready}
+            />
+            <Pressable
+              onPress={() => void save()}
+              disabled={saving || !ready}
+              style={[
+                styles.save,
+                { backgroundColor: colors.ink },
+                saving && { opacity: 0.5 },
+              ]}
+            >
+              <Text style={[styles.saveText, { color: colors.onInk }]}>
+                {saving ? 'Saving…' : 'Save'}
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
       </View>
 
       <StatStrip
@@ -121,79 +189,19 @@ export default function ProfileScreen() {
         ]}
       />
 
-      <ModuleSection label="Your details">
-        <View
-          style={[
-            styles.formCard,
-            { backgroundColor: colors.surface, borderColor: colors.line },
-          ]}
-        >
-          <Text style={[styles.label, { color: colors.mute }]}>Display name</Text>
-          <TextInput
-            value={name}
-            onChangeText={setName}
-            placeholder="Your name"
-            placeholderTextColor={colors.faint}
-            style={[
-              styles.input,
-              {
-                backgroundColor: colors.surfaceSoft,
-                borderColor: colors.line,
-                color: colors.ink,
-              },
-            ]}
-            autoCorrect={false}
-            spellCheck={false}
-            autoComplete="off"
-            textContentType="none"
-            autoCapitalize="words"
-            editable={ready}
-          />
-          <Text style={[styles.label, { color: colors.mute }]}>Locale note</Text>
-          <TextInput
-            value={locale}
-            onChangeText={setLocale}
-            placeholder="e.g. Dubai"
-            placeholderTextColor={colors.faint}
-            style={[
-              styles.input,
-              {
-                backgroundColor: colors.surfaceSoft,
-                borderColor: colors.line,
-                color: colors.ink,
-              },
-            ]}
-            editable={ready}
-          />
-          <Pressable
-            onPress={() => void save()}
-            disabled={saving || !ready}
-            style={[
-              styles.save,
-              { backgroundColor: colors.ink },
-              saving && { opacity: 0.5 },
-            ]}
-          >
-            <Text style={[styles.saveText, { color: colors.onInk }]}>
-              {saving ? 'Saving…' : 'Save profile'}
-            </Text>
-          </Pressable>
-        </View>
-      </ModuleSection>
-
       <ModuleSection label="Household" count={members.length}>
         <ListCard>
           <ListRow
             icon="family"
-            title="Family"
-            subtitle={`${members.length} people on this device`}
+            title="Household"
+            subtitle={`${members.length} ${members.length === 1 ? 'person' : 'people'}`}
             onPress={() => router.push('/family' as Href)}
             last
           />
         </ListCard>
       </ModuleSection>
 
-      <ModuleSection label="LifeOS">
+      <ModuleSection label="Saavi">
         <ListCard>
           <ListRow
             icon="bell"
@@ -226,7 +234,7 @@ export default function ProfileScreen() {
           <Text variant="caption">
             {plan.id === 'trial'
               ? 'Full Pro while trial lasts — billing comes later'
-              : `${plan.name} on this device — billing comes later`}
+              : `${plan.name} — billing comes later`}
           </Text>
         </View>
         <ChevronRight size={16} color={colors.faint} />
@@ -237,37 +245,38 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   hero: {
-    alignItems: 'center',
     borderRadius: radius.lg,
-    padding: spacing.xl,
-    marginBottom: spacing.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
     borderWidth: StyleSheet.hairlineWidth,
   },
+  heroRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
   avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
   letter: {
     fontFamily: fonts.sansSemi,
-    fontSize: 28,
+    fontSize: 20,
   },
-  planPill: {
-    marginTop: spacing.md,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+  editChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: radius.full,
   },
-  planText: {
+  editChipText: {
     fontFamily: fonts.sansMedium,
     fontSize: 16,
   },
-  formCard: {
-    borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: spacing.md,
+  editForm: {
+    marginTop: spacing.sm,
   },
   label: {
     fontFamily: fonts.sansMedium,

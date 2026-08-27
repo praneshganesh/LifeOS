@@ -48,12 +48,12 @@ export function AppLockGate({ children }: { children: ReactNode }) {
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
       const enrolled = await LocalAuthentication.isEnrolledAsync();
       if (!hasHardware || !enrolled) {
-        setHint('Set up Face ID / biometrics in system Settings to lock LifeOS.');
+        setHint('Set up Face ID / biometrics in system Settings to lock Saavi.');
         setBusy(false);
         return;
       }
       const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Unlock LifeOS',
+        promptMessage: 'Unlock Saavi',
         cancelLabel: 'Cancel',
         disableDeviceFallback: false,
       });
@@ -121,9 +121,9 @@ export function AppLockGate({ children }: { children: ReactNode }) {
           style={[styles.overlay, { backgroundColor: colors.bg }]}
           accessibilityViewIsModal
         >
-          <Text style={[styles.brand, { color: colors.ink }]}>LifeOS</Text>
+          <Text style={[styles.brand, { color: colors.ink }]}>Saavi</Text>
           <Text style={[styles.lead, { color: colors.mute }]}>
-            Unlock to continue. Data stays on this device.
+            Unlock to continue.
           </Text>
           {hint ? <Text style={[styles.hint, { color: colors.coral }]}>{hint}</Text> : null}
           <Pressable

@@ -6,6 +6,7 @@ import { ModuleScreen } from '@/components/ui/ModuleScreen';
 import { ListCard, ListRow } from '@/components/ui/ListKit';
 import { Text } from '@/components/ui/Text';
 import { useSubscriptions } from '@/lib/SubscriptionsContext';
+import { useToast } from '@/lib/ToastContext';
 import {
   daysUntilRenewal,
   formatAmount,
@@ -24,6 +25,7 @@ export default function SubscriptionDetailScreen() {
   const id = Array.isArray(idParam) ? idParam[0] : idParam;
   const router = useRouter();
   const { getById, removeSubscription } = useSubscriptions();
+  const { showError } = useToast();
 
   if (id === 'new') {
     return <CreateScreen />;
@@ -34,7 +36,12 @@ export default function SubscriptionDetailScreen() {
     if (!sub) return;
     const ok = await confirmDelete(sub.title);
     if (!ok) return;
-    await removeSubscription(sub.id);
+    try {
+      await removeSubscription(sub.id);
+    } catch {
+      showError('Couldn’t delete — try again.');
+      return;
+    }
     if (router.canGoBack()) router.back();
     else router.replace('/subscriptions' as Href);
   }

@@ -71,7 +71,7 @@ export default function InsuranceScreen() {
   return (
     <ModuleScreen
       title="Insurance"
-      subtitle="Policies from captures and Things — on this device."
+      subtitle="Policies from captures and Things."
       right={<CaptureContextButton kind="insurance" label="Capture insurance" />}
     >
       <StatStrip

@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useTheme } from '@/lib/ThemeContext';
+import { useToast } from '@/lib/ToastContext';
 import { StyleSheet, View, Pressable } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { ModuleScreen } from '@/components/ui/ModuleScreen';
@@ -21,6 +22,7 @@ export default function ExpenseDetailScreen() {
   const id = Array.isArray(idParam) ? idParam[0] : idParam;
   const router = useRouter();
   const { getById, removeExpense } = useExpenses();
+  const { showError } = useToast();
 
   if (id === 'new') {
     return <CreateScreen />;
@@ -31,7 +33,12 @@ export default function ExpenseDetailScreen() {
     if (!expense) return;
     const ok = await confirmDelete(expense.title);
     if (!ok) return;
-    await removeExpense(expense.id);
+    try {
+      await removeExpense(expense.id);
+    } catch {
+      showError('Couldn’t delete — try again.');
+      return;
+    }
     if (router.canGoBack()) router.back();
     else router.replace('/expenses' as Href);
   }

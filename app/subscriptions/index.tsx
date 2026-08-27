@@ -7,6 +7,7 @@ import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { ListCard, ListRow, StatStrip } from '@/components/ui/ListKit';
 import { Text } from '@/components/ui/Text';
 import { useSubscriptions } from '@/lib/SubscriptionsContext';
+import { getRuntimeDefaultCurrency } from '@/lib/currency';
 import {
   daysUntilRenewal,
   formatAmount,
@@ -33,7 +34,7 @@ export default function SubscriptionsScreen() {
   const { subscriptions } = useSubscriptions();
   const monthly = sumMonthly(subscriptions);
   const yearly = sumYearly(subscriptions);
-  const currency = subscriptions[0]?.currency || 'AED';
+  const currency = subscriptions[0]?.currency || getRuntimeDefaultCurrency();
   const upcoming = useMemo(
     () =>
       [...subscriptions].sort((a, b) => a.renewsOn.localeCompare(b.renewsOn)),
@@ -43,7 +44,7 @@ export default function SubscriptionsScreen() {
   return (
     <ModuleScreen
       title="Subscriptions"
-      subtitle="Recurring spend on this device."
+      subtitle="Your recurring spend."
       right={
         <Pressable
           onPress={() => router.push('/subscriptions/create' as Href)}

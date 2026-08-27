@@ -101,9 +101,13 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
-  const persist = (next: InventoryItem[]) => {
+  // itemsRef is the authoritative list (updated synchronously), so mutators
+  // can compute from it, show the optimistic state, and then AWAIT the disk
+  // write — a failed write rejects instead of silently losing data.
+  const persist = async (next: InventoryItem[]) => {
     itemsRef.current = next;
-    void saveVersionedArray(STORAGE_KEY, SCHEMA_VERSION, next);
+    setItems(next);
+    await saveVersionedArray(STORAGE_KEY, SCHEMA_VERSION, next);
   };
 
   const addItem = useCallback(
@@ -118,30 +122,20 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         id: input.id ?? `inv-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         createdAt: new Date().toISOString(),
       };
-      setItems((prev) => {
-        const next = [item, ...prev];
-        persist(next);
-        return next;
-      });
+      await persist([item, ...itemsRef.current]);
       return item;
     },
     []
   );
 
   const updateItem = useCallback(async (id: string, patch: Partial<InventoryItem>) => {
-    setItems((prev) => {
-      const next = prev.map((i) => (i.id === id ? { ...i, ...patch } : i));
-      persist(next);
-      return next;
-    });
+    await persist(
+      itemsRef.current.map((i) => (i.id === id ? { ...i, ...patch } : i))
+    );
   }, []);
 
   const removeItem = useCallback(async (id: string) => {
-    setItems((prev) => {
-      const next = prev.filter((i) => i.id !== id);
-      persist(next);
-      return next;
-    });
+    await persist(itemsRef.current.filter((i) => i.id !== id));
   }, []);
 
   const getById = useCallback(

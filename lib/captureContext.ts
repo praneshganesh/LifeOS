@@ -56,7 +56,7 @@ function one(v?: string | string[]) {
 const PRESETS: Record<CaptureContextKind, Omit<CapturePreset, 'spaceId' | 'room'> & { spaceId?: string; room?: string }> = {
   general: {
     kind: 'general',
-    label: 'LifeOS',
+    label: 'Saavi',
     hint: 'Point at the item or document',
     category: 'Uncategorized',
     icon: 'package',

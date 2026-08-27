@@ -11,14 +11,15 @@ import {
 } from 'react-native';
 import { Stack, useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Check } from 'lucide-react-native';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { useHabits } from '@/lib/HabitsContext';
+import { useToast } from '@/lib/ToastContext';
 import { useInventory } from '@/lib/InventoryContext';
 import { useHousehold } from '@/lib/HouseholdContext';
 import { PersonChips } from '@/components/PersonChips';
-import { categorizeHabit } from '@/lib/habits';
-import { selfMember } from '@/lib/people';
+import { categorizeHabit, dayKey } from '@/lib/habits';
 import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
 
 export default function CreateHabitScreen() {
@@ -26,15 +27,15 @@ export default function CreateHabitScreen() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { addHabit } = useHabits();
+  const { addHabit, checkIn } = useHabits();
   const { items } = useInventory();
   const { members } = useHousehold();
+  const { showToast, showError } = useToast();
   const [title, setTitle] = useState('');
   const [why, setWhy] = useState('');
   const [linkId, setLinkId] = useState<string | null>(null);
-  const [personId, setPersonId] = useState<string | null>(
-    () => selfMember(members)?.id ?? null
-  );
+  const [personId, setPersonId] = useState<string | null>(null);
+  const [doneToday, setDoneToday] = useState(true);
   const [saving, setSaving] = useState(false);
   const person = members.find((m) => m.id === personId);
 
@@ -61,8 +62,14 @@ export default function CreateHabitScreen() {
         inventoryItemId: linkId || undefined,
         syncLastDone: linkId ? true : undefined,
       });
+      if (doneToday) {
+        await checkIn(habit.id, dayKey());
+      }
       // Land on the new habit so the form clearly “did something”
+      showToast('Habit added');
       router.replace(`/habits/${habit.id}` as Href);
+    } catch {
+      showError('Couldn’t save the habit — try again.');
     } finally {
       setSaving(false);
     }
@@ -111,8 +118,25 @@ export default function CreateHabitScreen() {
             members={members}
             personId={personId}
             onChange={setPersonId}
-            noneLabel="Just me / unassigned"
+            noneLabel="No one"
           />
+
+          <Pressable
+            onPress={() => setDoneToday((v) => !v)}
+            style={[styles.doneRow, doneToday && styles.doneRowOn]}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: doneToday }}
+          >
+            <View style={[styles.doneBox, doneToday && styles.doneBoxOn]}>
+              {doneToday ? (
+                <Check size={14} color={colors.forestOn} strokeWidth={3} />
+              ) : null}
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.doneTitle}>I already did this today</Text>
+              <Text variant="caption">Logs today as the first check-in.</Text>
+            </View>
+          </Pressable>
 
           {linkables.length ? (
             <>
@@ -155,8 +179,13 @@ export default function CreateHabitScreen() {
             disabled={!title.trim() || saving}
             style={[styles.save, (!title.trim() || saving) && styles.saveDisabled]}
           >
-            <Text style={styles.saveText}>{saving ? 'Saving…' : 'Save habit'}</Text>
+            <Text style={styles.saveText}>
+              {saving ? 'Saving…' : doneToday ? 'Save & log today' : 'Save habit'}
+            </Text>
           </Pressable>
+          {!title.trim() ? (
+            <Text style={styles.saveHint}>Add a habit name to save.</Text>
+          ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
     </Screen>
@@ -166,7 +195,8 @@ export default function CreateHabitScreen() {
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
   content: {
-    padding: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xs,
   },
   label: {
     fontFamily: fonts.sansMedium,
@@ -222,6 +252,40 @@ function makeStyles(colors: ThemeColors) {
   chipTextOn: {
     color: colors.forest,
   },
+  doneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginTop: spacing.lg,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    backgroundColor: colors.white,
+  },
+  doneRowOn: {
+    borderColor: colors.forest,
+    backgroundColor: colors.forestSoft,
+  },
+  doneBox: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: colors.line,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.white,
+  },
+  doneBoxOn: {
+    backgroundColor: colors.forest,
+    borderColor: colors.forest,
+  },
+  doneTitle: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 16,
+    color: colors.ink,
+  },
   save: {
     marginTop: spacing.xl,
     backgroundColor: colors.forest,
@@ -235,7 +299,14 @@ function makeStyles(colors: ThemeColors) {
   saveText: {
     fontFamily: fonts.sansSemi,
     fontSize: 16,
-    color: colors.pure,
+    color: colors.forestOn,
+  },
+  saveHint: {
+    fontFamily: fonts.sans,
+    fontSize: 14,
+    color: colors.mute,
+    textAlign: 'center',
+    marginTop: spacing.sm,
   },
 });
 }

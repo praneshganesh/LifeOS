@@ -1,5 +1,5 @@
 import { Pressable, StyleSheet, View } from 'react-native';
-import { ChevronRight } from 'lucide-react-native';
+import { ChevronRight, X } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { AppIcon, type Icon3DName } from '@/components/ui/Icon3D';
 import { fonts, radius, shadowsFor, spacing } from '@/constants/theme';
@@ -36,6 +36,7 @@ export function ListRow({
   subtitle,
   meta,
   onPress,
+  onDismiss,
   last,
   tone,
 }: {
@@ -44,6 +45,8 @@ export function ListRow({
   subtitle?: string;
   meta?: string;
   onPress?: () => void;
+  /** Show an X that snoozes/hides the row without opening it. */
+  onDismiss?: () => void;
   last?: boolean;
   tone?: string;
 }) {
@@ -58,7 +61,7 @@ export function ListRow({
       ]}
     >
       {tone ? <View style={[styles.dot, { backgroundColor: tone }]} /> : null}
-      {icon ? <AppIcon name={icon} size={40} /> : null}
+      {icon ? <AppIcon name={icon} size={36} /> : null}
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text variant="headline" numberOfLines={1} style={styles.title}>
           {title}
@@ -74,7 +77,23 @@ export function ListRow({
           {meta}
         </Text>
       ) : null}
-      {onPress ? <ChevronRight size={16} color={colors.faint} strokeWidth={1.8} /> : null}
+      {onPress && !onDismiss ? (
+        <ChevronRight size={16} color={colors.faint} strokeWidth={1.8} />
+      ) : null}
+      {onDismiss ? (
+        <Pressable
+          onPress={onDismiss}
+          hitSlop={10}
+          accessibilityLabel={`Dismiss ${title}`}
+          style={({ pressed }) => [
+            styles.dismissBtn,
+            { backgroundColor: colors.surfaceSoft },
+            pressed && { opacity: 0.7 },
+          ]}
+        >
+          <X size={14} color={colors.mute} strokeWidth={2.2} />
+        </Pressable>
+      ) : null}
     </Comp>
   );
 }
@@ -166,7 +185,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     paddingHorizontal: spacing.md,
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
   dot: {
     width: 4,
@@ -180,8 +199,16 @@ const styles = StyleSheet.create({
   meta: {
     fontFamily: fonts.sansMedium,
     fontSize: 16,
-    maxWidth: 88,
+    maxWidth: 150,
     textAlign: 'right',
+    flexShrink: 0,
+  },
+  dismissBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   stats: {
     flexDirection: 'row',
@@ -191,7 +218,7 @@ const styles = StyleSheet.create({
   },
   stat: {
     flex: 1,
-    paddingVertical: 14,
+    paddingVertical: 10,
     paddingHorizontal: 10,
     alignItems: 'center',
   },

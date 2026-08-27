@@ -241,7 +241,7 @@ export function mergeCaptureIntoStub(
     room: fields.room || stub.room,
     spaceId: fields.spaceId || stub.spaceId,
     source: 'capture',
-    insight: 'Receipt linked to a Talk stub on this device — no cloud AI.',
+    insight: 'Receipt linked to a Talk stub automatically.',
     timeline: [
       { date: label, event: 'Receipt / photo linked from Capture' },
       ...stub.timeline,

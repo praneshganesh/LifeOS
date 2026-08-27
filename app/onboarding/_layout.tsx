@@ -21,6 +21,7 @@ export default function OnboardingLayout() {
     >
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="home" options={{ title: 'Your home', headerBackTitle: 'Back' }} />
+      <Stack.Screen name="currency" options={{ title: 'Currency', headerBackTitle: 'Back' }} />
       <Stack.Screen name="family" options={{ title: 'Household', headerBackTitle: 'Back' }} />
       <Stack.Screen name="capture" options={{ title: 'Capture', headerBackTitle: 'Back' }} />
       <Stack.Screen name="talk" options={{ title: 'Talk', headerBackTitle: 'Back' }} />

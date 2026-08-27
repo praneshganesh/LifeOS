@@ -2,16 +2,24 @@ import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Check, ChevronRight, Search as SearchIcon, User } from 'lucide-react-native';
+import {
+  ArrowUpRight,
+  Bell,
+  CalendarDays,
+  Check,
+  Package,
+  Sparkles,
+} from 'lucide-react-native';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { AppIcon } from '@/components/ui/Icon3D';
-import { HomeSurfaceSwitch } from '@/components/HomeSurfaceSwitch';
+import { HomeHeader } from '@/components/HomeHeader';
 import { greetingForNow } from '@/data/mock';
 import {
   buildDashboard,
   formatDashDate,
   givenName,
+  type ChecklistRow,
   type DashRow,
 } from '@/lib/dashboard';
 import { loadHomeSurface } from '@/lib/homeSurface';
@@ -24,9 +32,11 @@ import { useSubscriptions } from '@/lib/SubscriptionsContext';
 import { resolveSelfDisplayName, selfAvatarInitial } from '@/lib/people';
 import { loadLocalProfile } from '@/lib/profile';
 import { blurActiveElement } from '@/lib/a11y';
+import { useTalkOverlay } from '@/lib/TalkOverlayContext';
 import { fonts, radius, shadowsFor, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
 import { dayKey } from '@/lib/habits';
+import { remainingCount } from '@/lib/classes';
 
 const DOCK_CLEARANCE = 108;
 
@@ -41,6 +51,7 @@ export default function HomeDashboard() {
   const { habits, checkIn } = useHabits();
   const { packs: classPacks } = useClasses();
   const { subscriptions } = useSubscriptions();
+  const { openTalk } = useTalkOverlay();
   const [profileName, setProfileName] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
@@ -76,13 +87,25 @@ export default function HomeDashboard() {
         subscriptions,
         classPacks,
         habits,
+        selfName: displayName,
       }),
-    [items, lastDoneItems, subscriptions, classPacks, habits]
+    [items, lastDoneItems, subscriptions, classPacks, habits, displayName]
+  );
+
+  const classesLeft = useMemo(
+    () => classPacks.reduce((n, p) => n + (remainingCount(p) ?? 0), 0),
+    [classPacks]
   );
 
   const hello = first ? `${greetingForNow()}, ${first}` : greetingForNow();
-  const restToday = dash.today.filter((row) => row.id !== dash.featured?.id);
-  const restNext = dash.next.filter((row) => row.id !== dash.featured?.id);
+  const featured = dash.featured;
+  const restToday = dash.today.filter((row) => row.id !== featured?.id);
+  const restNext = dash.next.filter((row) => row.id !== featured?.id);
+  const clear =
+    !featured &&
+    restToday.length === 0 &&
+    restNext.length === 0 &&
+    dash.checklist.length === 0;
 
   async function onHabitCheck(habitId: string) {
     if (busyId) return;
@@ -122,139 +145,138 @@ export default function HomeDashboard() {
 
   return (
     <Screen>
+      <HomeHeader surface="today" avatarLetter={avatarLetter} />
       <ScrollView
         contentContainerStyle={{
-          paddingTop: insets.top + 10,
+          paddingTop: spacing.sm,
           paddingBottom: insets.bottom + DOCK_CLEARANCE,
-          paddingHorizontal: spacing.xl,
+          paddingHorizontal: spacing.lg,
         }}
         showsVerticalScrollIndicator={false}
       >
-        <View>
-          <View style={styles.metaRow}>
-            <Text style={[styles.kicker, { color: colors.mute, flex: 1 }]}>
-              {formatDashDate()}
-            </Text>
-            <Pressable
-              onPress={() => {
-                blurActiveElement();
-                router.push('/(tabs)/search' as Href);
-              }}
-              hitSlop={8}
-              style={styles.iconBtn}
-              accessibilityLabel="Search"
-            >
-              <SearchIcon size={20} color={colors.slate} strokeWidth={1.8} />
-            </Pressable>
-            <Pressable
-              onPress={() => {
-                blurActiveElement();
-                router.push('/profile' as Href);
-              }}
-              style={[styles.avatar, { backgroundColor: colors.ink }]}
-              accessibilityLabel="Profile"
-            >
-              {avatarLetter ? (
-                <Text style={[styles.avatarLetter, { color: colors.onInk }]}>{avatarLetter}</Text>
-              ) : (
-                <User size={16} color={colors.onInk} strokeWidth={1.8} />
-              )}
-            </Pressable>
-          </View>
-          <Text variant="hero" style={styles.hello}>
-            {hello}
-          </Text>
-        </View>
+        <Text style={[styles.kicker, { color: colors.mute }]}>
+          {formatDashDate()}
+        </Text>
+        <Text variant="hero" style={styles.hello}>
+          {hello}
+        </Text>
 
-        <View style={styles.switchRow}>
-          <HomeSurfaceSwitch value="today" />
-        </View>
-
-        {dash.featured ? (
-          <View
-            style={[
-              styles.hero,
-              {
-                backgroundColor: colors.surface,
-                borderColor: colors.line,
-              },
-              shade.float,
-            ]}
-          >
-            <Text variant="label" style={{ color: colors.accent }}>
-              {dash.featured.urgency === 'urgent' ? 'Needs you now' : 'Up next'}
-            </Text>
-            <View style={styles.heroBody}>
-              <AppIcon name={dash.featured.icon} size={56} tone="forest" />
-              <View style={{ flex: 1 }}>
-                <Text variant="title" style={{ fontSize: 24, lineHeight: 30 }} numberOfLines={2}>
-                  {dash.featured.title}
-                </Text>
-                <Text variant="body" style={{ marginTop: 4 }} numberOfLines={2}>
-                  {dash.featured.subtitle}
-                </Text>
-              </View>
-            </View>
-            <View style={styles.heroMeta}>
-              <PulseChip n={dash.overdue} label="overdue" hot={!!dash.overdue} />
-              <PulseChip n={dash.dueToday} label="due today" hot={!!dash.dueToday} />
-              <PulseChip n={dash.habitsOpen} label="habits" hot={!!dash.habitsOpen} />
-            </View>
-            <View style={styles.heroActions}>
-              <Pressable
-                onPress={() => open(dash.featured?.href)}
-                style={({ pressed }) => [
-                  styles.heroOpen,
-                  {
-                    backgroundColor: colors.ink,
-                    opacity: pressed ? 0.9 : 1,
-                  },
-                ]}
-              >
-                <Text style={[styles.heroOpenText, { color: colors.onInk }]}>Open</Text>
-              </Pressable>
-              {checkFor(dash.featured) ? (
-                <Pressable
-                  onPress={checkFor(dash.featured)}
-                  disabled={busyId === dash.featured.habitId || busyId === dash.featured.lastDoneId}
-                  style={({ pressed }) => [
-                    styles.heroCheck,
-                    {
-                      borderColor: colors.lineStrong,
-                      backgroundColor: colors.surfaceSoft,
-                      opacity: pressed ? 0.9 : 1,
-                    },
-                  ]}
-                  accessibilityLabel={`Mark ${dash.featured.title} done`}
-                >
-                  <Check size={18} color={colors.ink} strokeWidth={2.2} />
-                  <Text style={[styles.heroCheckText, { color: colors.ink }]}>Done</Text>
-                </Pressable>
-              ) : null}
-            </View>
+        {dash.overdue || dash.dueToday ? (
+          <View style={styles.pills}>
+            {dash.overdue ? (
+              <StatPill n={dash.overdue} label="overdue" bg={colors.coralSoft} fg={colors.coral} />
+            ) : null}
+            {dash.dueToday ? (
+              <StatPill n={dash.dueToday} label="due today" bg={colors.amberSoft} fg={colors.amber} />
+            ) : null}
           </View>
-        ) : (
-          <View
-            style={[
-              styles.empty,
-              {
-                backgroundColor: colors.surface,
-                borderColor: colors.line,
-              },
+        ) : null}
+
+        {featured ? (
+          <Pressable
+            onPress={() => open(featured.href)}
+            style={({ pressed }) => [
+              styles.featured,
+              { backgroundColor: colors.ink, opacity: pressed ? 0.92 : 1 },
               shade.card,
             ]}
           >
-            <Text variant="title">You’re clear</Text>
-            <Text variant="body" style={{ marginTop: 8, textAlign: 'center' }}>
-              Nothing waiting. Capture a Thing, or switch to Ask and talk it in.
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={[styles.featuredTitle, { color: colors.onInk }]} numberOfLines={1}>
+                {featured.title}
+              </Text>
+              <Text style={[styles.featuredSub, { color: colors.onInk }]} numberOfLines={1}>
+                {featured.subtitle}
+              </Text>
+            </View>
+            {checkFor(featured) ? (
+              <Pressable
+                onPress={checkFor(featured)}
+                disabled={busyId === featured.habitId || busyId === featured.lastDoneId}
+                hitSlop={8}
+                style={({ pressed }) => [
+                  styles.featuredCheck,
+                  { borderColor: colors.onInk, opacity: pressed ? 0.7 : 1 },
+                ]}
+                accessibilityLabel={`Mark ${featured.title} done`}
+              >
+                <Check size={18} color={colors.onInk} strokeWidth={2.4} />
+              </Pressable>
+            ) : (
+              <ArrowUpRight size={20} color={colors.onInk} strokeWidth={2} />
+            )}
+          </Pressable>
+        ) : null}
+
+        {clear ? (
+          <View style={[styles.clearCard, { backgroundColor: colors.surface }, shade.card]}>
+            <View style={[styles.clearBadge, { backgroundColor: colors.accentWash }]}>
+              <Check size={22} color={colors.accent} strokeWidth={2.4} />
+            </View>
+            <Text variant="headline" style={{ fontSize: 20, lineHeight: 26 }}>
+              You’re clear
             </Text>
+            <Text variant="body" style={{ marginTop: 4, textAlign: 'center' }}>
+              Nothing waiting today. Capture a Thing, or talk one in.
+            </Text>
+            <View style={styles.clearActions}>
+              <Pressable
+                onPress={() => router.push('/capture' as Href)}
+                style={({ pressed }) => [
+                  styles.clearBtn,
+                  { backgroundColor: colors.ink },
+                  pressed && { opacity: 0.9 },
+                ]}
+              >
+                <Text style={[styles.clearBtnText, { color: colors.onInk }]}>
+                  Capture
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={openTalk}
+                style={({ pressed }) => [
+                  styles.clearBtn,
+                  styles.clearBtnGhost,
+                  { borderColor: colors.line, backgroundColor: colors.surface },
+                  pressed && { opacity: 0.9 },
+                ]}
+              >
+                <Text style={[styles.clearBtnText, { color: colors.ink }]}>Talk</Text>
+              </Pressable>
+            </View>
           </View>
-        )}
+        ) : null}
+
+        {dash.checklist.length ? (
+          <Section
+            title="Check-ins"
+            meta={
+              dash.habitsOpen + dash.habitsDone > 0
+                ? `${dash.habitsDone} of ${dash.habitsOpen + dash.habitsDone}`
+                : undefined
+            }
+          >
+            <View style={[styles.checkCard, { backgroundColor: colors.surface }, shade.soft]}>
+              {dash.checklist.map((row, i) => (
+                <ChecklistLine
+                  key={row.id}
+                  row={row}
+                  first={i === 0}
+                  busy={busyId === row.habitId}
+                  onOpen={() => open(row.href)}
+                  onCheck={
+                    row.habitId ? () => void onHabitCheck(row.habitId!) : undefined
+                  }
+                />
+              ))}
+            </View>
+          </Section>
+        ) : null}
 
         {restToday.length ? (
           <Section title="Still today">
             {restToday.map((row) => (
-              <DashTile
+              <RowCard
                 key={row.id}
                 row={row}
                 busy={busyId === row.habitId || busyId === row.lastDoneId}
@@ -268,37 +290,60 @@ export default function HomeDashboard() {
         {restNext.length ? (
           <Section title="Coming up">
             {restNext.map((row) => (
-              <DashTile
-                key={row.id}
-                row={row}
-                busy={false}
-                onOpen={() => open(row.href)}
-              />
+              <RowCard key={row.id} row={row} busy={false} onOpen={() => open(row.href)} />
             ))}
           </Section>
         ) : null}
 
         <Section title="Jump in">
-          <View style={styles.jumps}>
-            <Jump
-              icon="sparkles"
+          <View style={styles.tiles}>
+            <Tile
+              Icon={Sparkles}
               label="Habits"
+              value={
+                habits.length
+                  ? `${dash.habitsDone}/${habits.length}`
+                  : '+'
+              }
+              hint={habits.length ? 'done today' : 'start one'}
+              bg={colors.accentWash}
+              fg={colors.accent}
               onPress={() => {
                 blurActiveElement();
                 router.push('/habits' as Href);
               }}
             />
-            <Jump
-              icon="bell"
+            <Tile
+              Icon={Bell}
               label="Reminders"
+              value={lastDoneItems.length ? String(lastDoneItems.length) : '+'}
+              hint={lastDoneItems.length ? 'tracked' : 'add one'}
+              bg={colors.amberSoft}
+              fg={colors.amber}
               onPress={() => {
                 blurActiveElement();
                 router.push('/last-done' as Href);
               }}
             />
-            <Jump
-              icon="package"
+            <Tile
+              Icon={CalendarDays}
+              label="Classes"
+              value={classesLeft ? String(classesLeft) : '+'}
+              hint={classesLeft ? 'sessions left' : 'add a pack'}
+              bg={colors.skySoft}
+              fg={colors.sky}
+              onPress={() => {
+                blurActiveElement();
+                router.push('/classes' as Href);
+              }}
+            />
+            <Tile
+              Icon={Package}
               label="Things"
+              value={items.length ? String(items.length) : '+'}
+              hint={items.length ? 'saved' : 'capture one'}
+              bg={colors.violetSoft}
+              fg={colors.violet}
               onPress={() => {
                 blurActiveElement();
                 router.push('/(tabs)/spaces' as Href);
@@ -311,44 +356,116 @@ export default function HomeDashboard() {
   );
 }
 
-function PulseChip({ n, label, hot }: { n: number; label: string; hot: boolean }) {
-  const { colors } = useTheme();
+function StatPill({ n, label, bg, fg }: { n: number; label: string; bg: string; fg: string }) {
   return (
-    <View
-      style={[
-        styles.chip,
-        {
-          backgroundColor: hot ? colors.accentWash : colors.surfaceSoft,
-          borderColor: hot ? colors.accentSoft : colors.line,
-        },
-      ]}
-    >
-      <Text style={[styles.chipN, { color: hot ? colors.accent : colors.mute }]}>{n}</Text>
-      <Text style={[styles.chipL, { color: hot ? colors.accent : colors.mute }]}>{label}</Text>
+    <View style={[styles.pill, { backgroundColor: bg }]}>
+      <Text style={[styles.pillN, { color: fg }]}>{n}</Text>
+      <Text style={[styles.pillL, { color: fg }]}>{label}</Text>
     </View>
   );
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({
+  title,
+  meta,
+  children,
+}: {
+  title: string;
+  meta?: string;
+  children: ReactNode;
+}) {
   const { colors } = useTheme();
   return (
-    <View style={{ marginTop: 28 }}>
-      <Text variant="label" style={{ color: colors.mute, marginBottom: 12 }}>
-        {title}
-      </Text>
+    <View style={{ marginTop: spacing.xl }}>
+      <View style={styles.sectionHead}>
+        <Text style={[styles.sectionTitle, { color: colors.ink }]}>{title}</Text>
+        {meta ? (
+          <Text style={[styles.sectionMeta, { color: colors.mute }]}>{meta}</Text>
+        ) : null}
+      </View>
       {children}
     </View>
   );
 }
 
-function DashTile({
+function ChecklistLine({
+  row,
+  first,
+  busy,
+  onOpen,
+  onCheck,
+}: {
+  row: ChecklistRow;
+  first: boolean;
+  busy: boolean;
+  onOpen: () => void;
+  onCheck?: () => void;
+}) {
+  const { colors } = useTheme();
+
+  return (
+    <View
+      style={[
+        styles.checkRow,
+        !first && {
+          borderTopWidth: StyleSheet.hairlineWidth,
+          borderTopColor: colors.line,
+        },
+      ]}
+    >
+      {row.done ? (
+        <View style={[styles.checkCircle, { backgroundColor: colors.forestSoft }]}>
+          <Check size={15} color={colors.forest} strokeWidth={2.8} />
+        </View>
+      ) : (
+        <Pressable
+          onPress={() => {
+            if (!busy) onCheck?.();
+          }}
+          hitSlop={10}
+          style={[
+            styles.checkCircle,
+            {
+              borderWidth: 1.5,
+              borderColor: busy ? colors.faint : colors.slate,
+            },
+          ]}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: false }}
+          accessibilityLabel={`Check in ${row.title}`}
+        />
+      )}
+      <Pressable
+        onPress={onOpen}
+        style={({ pressed }) => [styles.checkBody, { opacity: pressed ? 0.85 : 1 }]}
+      >
+        <Text
+          variant="bodyMedium"
+          numberOfLines={1}
+          style={row.done ? { color: colors.mute } : undefined}
+        >
+          {row.title}
+        </Text>
+        {row.meta ? (
+          <Text variant="caption" style={{ flexShrink: 0 }}>
+            {row.meta}
+          </Text>
+        ) : null}
+      </Pressable>
+    </View>
+  );
+}
+
+function RowCard({
   row,
   busy,
+  done,
   onOpen,
   onCheck,
 }: {
   row: DashRow;
   busy: boolean;
+  done?: boolean;
   onOpen: () => void;
   onCheck?: () => void;
 }) {
@@ -356,33 +473,26 @@ function DashTile({
   const shade = shadowsFor(resolved);
 
   return (
-    <View
-      style={[
-        styles.tile,
-        {
-          backgroundColor: colors.surface,
-          borderColor: colors.line,
-        },
-        shade.soft,
-      ]}
-    >
+    <View style={[styles.rowCard, { backgroundColor: colors.surface }, shade.soft]}>
       <Pressable
         onPress={onOpen}
-        style={({ pressed }) => [
-          styles.tileMain,
-          { opacity: pressed ? 0.92 : 1 },
-        ]}
+        style={({ pressed }) => [styles.rowMain, { opacity: pressed ? 0.9 : 1 }]}
       >
-        <AppIcon name={row.icon} size={44} />
-        <View style={{ flex: 1 }}>
-          <Text variant="bodyMedium" style={{ color: colors.ink }} numberOfLines={1}>
+        {done ? (
+          <View style={[styles.doneBadge, { backgroundColor: colors.forestSoft }]}>
+            <Check size={18} color={colors.forest} strokeWidth={2.6} />
+          </View>
+        ) : (
+          <AppIcon name={row.icon} size={40} />
+        )}
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text variant="bodyMedium" numberOfLines={1}>
             {row.title}
           </Text>
           <Text variant="caption" style={{ marginTop: 2 }} numberOfLines={1}>
             {row.subtitle}
           </Text>
         </View>
-        {onCheck ? null : <ChevronRight size={16} color={colors.faint} strokeWidth={1.8} />}
       </Pressable>
       {onCheck ? (
         <Pressable
@@ -391,28 +501,37 @@ function DashTile({
           }}
           hitSlop={8}
           style={[
-            styles.check,
+            styles.rowCheck,
             {
-              borderColor: colors.lineStrong,
-              backgroundColor: busy ? colors.surfaceTint : colors.surfaceSoft,
+              backgroundColor: busy ? colors.surfaceTint : colors.accentWash,
             },
           ]}
           accessibilityLabel={`Mark ${row.title} done`}
         >
-          <Check size={16} color={colors.ink} strokeWidth={2.2} />
+          <Check size={18} color={colors.accent} strokeWidth={2.4} />
         </Pressable>
-      ) : null}
+      ) : (
+        <ArrowUpRight size={18} color={colors.faint} strokeWidth={1.8} />
+      )}
     </View>
   );
 }
 
-function Jump({
-  icon,
+function Tile({
+  Icon,
   label,
+  value,
+  hint,
+  bg,
+  fg,
   onPress,
 }: {
-  icon: 'sparkles' | 'bell' | 'package';
+  Icon: typeof Sparkles;
   label: string;
+  value: string;
+  hint: string;
+  bg: string;
+  fg: string;
   onPress: () => void;
 }) {
   const { colors, resolved } = useTheme();
@@ -421,30 +540,26 @@ function Jump({
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [
-        styles.jump,
-        {
-          backgroundColor: colors.surface,
-          borderColor: colors.line,
-          opacity: pressed ? 0.9 : 1,
-        },
-        shade.soft,
+        styles.tile,
+        { backgroundColor: bg },
+        pressed ? shade.pressed : shade.soft,
       ]}
+      accessibilityLabel={`${label} — ${value} ${hint}`}
     >
-      <AppIcon name={icon} size={40} />
-      <Text variant="bodyMedium" style={{ marginTop: 10 }}>
-        {label}
+      <View style={styles.tileTop}>
+        <Icon size={20} color={fg} strokeWidth={2} />
+        <ArrowUpRight size={16} color={colors.faint} strokeWidth={2} />
+      </View>
+      <Text style={[styles.tileValue, { color: colors.ink }]} numberOfLines={1}>
+        {value}
+        <Text style={[styles.tileHint, { color: colors.mute }]}>  {hint}</Text>
       </Text>
+      <Text style={[styles.tileLabel, { color: colors.slate }]}>{label}</Text>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    minHeight: 40,
-    gap: 4,
-  },
   kicker: {
     fontFamily: fonts.sansMedium,
     fontSize: 16,
@@ -452,137 +567,200 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   hello: {
-    marginTop: 8,
-    fontSize: 38,
-    lineHeight: 44,
-    letterSpacing: -1.4,
+    marginTop: 4,
   },
-  iconBtn: {
-    width: 40,
-    height: 40,
+  pills: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: spacing.lg,
+  },
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: radius.full,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  pillN: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 16,
+  },
+  pillL: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 16,
+  },
+  featured: {
+    marginTop: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 14,
+  },
+  featuredTitle: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 18,
+    lineHeight: 24,
+    letterSpacing: -0.3,
+  },
+  featuredSub: {
+    fontFamily: fonts.sans,
+    fontSize: 16,
+    lineHeight: 21,
+    opacity: 0.65,
+    marginTop: 1,
+  },
+  featuredCheck: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatar: {
+  clearCard: {
+    marginTop: spacing.lg,
+    borderRadius: radius.lg,
+    paddingVertical: 22,
+    paddingHorizontal: spacing.xl,
+    alignItems: 'center',
+  },
+  clearBadge: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  clearActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  clearBtn: {
+    paddingHorizontal: 22,
+    paddingVertical: 10,
+    borderRadius: radius.full,
+  },
+  clearBtnGhost: {
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  clearBtnText: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 15,
+  },
+  sectionHead: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+  },
+  sectionTitle: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 18,
+    lineHeight: 24,
+    letterSpacing: -0.3,
+  },
+  sectionMeta: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 16,
+    lineHeight: 20,
+  },
+  checkCard: {
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+  },
+  checkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    minHeight: 46,
+    paddingVertical: 6,
+  },
+  checkCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkBody: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    alignSelf: 'stretch',
+  },
+  rowCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderRadius: radius.lg,
+    paddingVertical: 10,
+    paddingLeft: 10,
+    paddingRight: spacing.md,
+    marginBottom: 8,
+  },
+  rowMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    minWidth: 0,
+  },
+  rowCheck: {
     width: 40,
     height: 40,
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarLetter: {
-    fontFamily: fonts.sansSemi,
-    fontSize: 16,
-  },
-  switchRow: {
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  hero: {
-    marginTop: 18,
-    borderRadius: radius.xl,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 22,
-    overflow: 'hidden',
-  },
-  heroBody: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 14,
-    marginTop: 14,
-  },
-  heroMeta: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 18,
-  },
-  heroActions: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 18,
-  },
-  heroOpen: {
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: radius.full,
-  },
-  heroOpenText: {
-    fontFamily: fonts.sansSemi,
-    fontSize: 16,
-  },
-  heroCheck: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 11,
-    borderRadius: radius.full,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  heroCheckText: {
-    fontFamily: fonts.sansSemi,
-    fontSize: 16,
-  },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderRadius: radius.full,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  chipN: {
-    fontFamily: fonts.sansSemi,
-    fontSize: 16,
-  },
-  chipL: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-  },
-  empty: {
-    marginTop: 22,
-    borderRadius: radius.xl,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingVertical: 36,
-    paddingHorizontal: spacing.xl,
-    alignItems: 'center',
-  },
-  tile: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingVertical: 12,
-    paddingLeft: 12,
-    paddingRight: 10,
-    marginBottom: 10,
-  },
-  tileMain: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  check: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
+  doneBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  jumps: {
+  tiles: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
   },
-  jump: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 16,
+  tile: {
+    flexGrow: 1,
+    flexBasis: '44%',
     borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  tileTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  tileValue: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 22,
+    lineHeight: 26,
+    letterSpacing: -0.4,
+  },
+  tileHint: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 16,
+    letterSpacing: 0,
+  },
+  tileLabel: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 16,
+    lineHeight: 20,
+    marginTop: 1,
   },
 });

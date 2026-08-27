@@ -1,23 +1,23 @@
 {
   "expo": {
-    "name": "LifeOS",
+    "name": "Saavi",
     "slug": "life-os",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "lifeos",
+    "scheme": "saavi",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "app.lifeos.mobile",
+      "bundleIdentifier": "com.praneshganesh.lifeos",
       "infoPlist": {
-        "NSSpeechRecognitionUsageDescription": "LifeOS uses on-device speech recognition for Talk.",
-        "NSMicrophoneUsageDescription": "LifeOS needs the microphone so you can add things by talking.",
+        "NSSpeechRecognitionUsageDescription": "Saavi uses on-device speech recognition for Talk.",
+        "NSMicrophoneUsageDescription": "Saavi needs the microphone so you can add things by talking.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
-      "package": "app.lifeos.mobile",
+      "package": "com.praneshganesh.lifeos",
       "adaptiveIcon": {
         "backgroundColor": "#E8ECF1",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -54,21 +54,21 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "LifeOS needs the camera to capture things you own."
+          "cameraPermission": "Saavi needs the camera to capture things you own."
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "LifeOS can attach photos of your things and documents."
+          "photosPermission": "Saavi can attach photos of your things and documents."
         }
       ],
       "expo-document-picker",
       [
         "expo-speech-recognition",
         {
-          "microphonePermission": "LifeOS needs the microphone so you can add things by talking.",
-          "speechRecognitionPermission": "LifeOS uses on-device speech recognition for Talk.",
+          "microphonePermission": "Saavi needs the microphone so you can add things by talking.",
+          "speechRecognitionPermission": "Saavi uses on-device speech recognition for Talk.",
           "androidSpeechServicePackages": [
             "com.google.android.googlequicksearchbox"
           ]
@@ -86,7 +86,7 @@
       [
         "expo-local-authentication",
         {
-          "faceIDPermission": "LifeOS uses Face ID to unlock the app."
+          "faceIDPermission": "Saavi uses Face ID to unlock the app."
         }
       ],
       "expo-secure-store"

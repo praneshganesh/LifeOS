@@ -71,10 +71,21 @@ export function composeAppliedReply(params: {
   reminderAt?: string | null;
   removedLastDoneLabel?: string | null;
   updatedClassPack?: boolean;
+  renamedPersonFrom?: string | null;
+  renamedPersonTo?: string | null;
 }): string {
   const actions = params.actions ?? [];
   const removed = params.removedNames ?? [];
   const updatedIds = params.updatedIds ?? [];
+
+  if (params.renamedPersonTo?.trim()) {
+    return params.renamedPersonFrom?.trim()
+      ? `Got it — ${params.renamedPersonFrom.trim()} is now ${params.renamedPersonTo.trim()}.`
+      : `Renamed to ${params.renamedPersonTo.trim()}.`;
+  }
+  if (actions.some((a) => a?.type === 'rename_person')) {
+    return 'Couldn’t find that person to rename — check Household.';
+  }
 
   if (removed.length === 1) {
     return `Deleted ${removed[0]}.`;
