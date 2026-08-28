@@ -12,9 +12,12 @@ import {
   daysLeftInWindow,
   formatPackWindow,
   loggedOn,
+  nextScheduledClassOccurrence,
   paceHint,
   packStatus,
   remainingCount,
+  SCHEDULE_DAYS,
+  type ScheduleDay,
   usedCount,
 } from '@/lib/classes';
 import { confirmDelete } from '@/lib/confirmDelete';
@@ -39,13 +42,29 @@ export default function ClassPackDetailScreen() {
   const packEarly = id && id !== 'new' ? getById(id) : undefined;
   const [title, setTitle] = useState('');
   const [total, setTotal] = useState('');
+  const [scheduleDays, setScheduleDays] = useState<ScheduleDay[]>([]);
+  const [scheduleTime, setScheduleTime] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!packEarly) return;
     setTitle(packEarly.title);
     setTotal(packEarly.total > 0 ? String(packEarly.total) : '');
-  }, [packEarly?.id, packEarly?.title, packEarly?.total]);
+    setScheduleDays(packEarly.scheduleDays || []);
+    setScheduleTime(packEarly.scheduleTime || '');
+  }, [
+    packEarly?.id,
+    packEarly?.title,
+    packEarly?.total,
+    packEarly?.scheduleDays,
+    packEarly?.scheduleTime,
+  ]);
+
+  const toggleDay = (dayId: ScheduleDay) => {
+    setScheduleDays((prev) =>
+      prev.includes(dayId) ? prev.filter((d) => d !== dayId) : [...prev, dayId]
+    );
+  };
 
   if (id === 'new') {
     return <CreateClassPackScreen />;
@@ -97,6 +116,13 @@ export default function ClassPackDetailScreen() {
 
   const ownerName = displayNameFor(members, pack.personId, pack.assignedTo);
 
+  const nextOcc = nextScheduledClassOccurrence(pack);
+  const scheduleDesc = pack.scheduleDays?.length
+    ? `Every ${pack.scheduleDays
+        .map((d) => SCHEDULE_DAYS.find((s) => s.id === d)?.short || d)
+        .join(', ')}${pack.scheduleTime ? ` at ${pack.scheduleTime}` : ''}${pack.scheduleTimeInferred ? ' · Time assumed' : ''}`
+    : undefined;
+
   return (
     <ModuleScreen
       title={pack.title}
@@ -116,6 +142,11 @@ export default function ClassPackDetailScreen() {
             ? `classes logged · until ${formatPackWindow(pack)}`
             : `classes left · until ${formatPackWindow(pack)}`}
         </Text>
+        {scheduleDesc ? (
+          <Text variant="caption" style={{ marginTop: 4, color: colors.mute }}>
+            {scheduleDesc}
+          </Text>
+        ) : null}
         {pace ? (
           <Text variant="caption" style={{ marginTop: 6, color: colors.forest }}>
             {pace}
@@ -136,6 +167,12 @@ export default function ClassPackDetailScreen() {
           title="Used"
           meta={pack.total > 0 ? `${used} of ${pack.total}` : String(used)}
         />
+        {nextOcc ? (
+          <ListRow
+            title="Next class"
+            meta={`${nextOcc.daysAhead === 0 ? 'Today' : nextOcc.daysAhead === 1 ? 'Tomorrow' : nextOcc.dayName}${pack.scheduleTime ? ` · ${pack.scheduleTime}` : ''}`}
+          />
+        ) : null}
         <ListRow title="Window" meta={statusLabel} last />
       </ListCard>
 
@@ -158,6 +195,34 @@ export default function ClassPackDetailScreen() {
         placeholder="Not set yet"
         placeholderTextColor={colors.faint}
       />
+
+      <Text style={styles.fieldLabel}>Schedule days</Text>
+      <View style={styles.chips}>
+        {SCHEDULE_DAYS.map((day) => {
+          const on = scheduleDays.includes(day.id);
+          return (
+            <Pressable
+              key={day.id}
+              onPress={() => toggleDay(day.id)}
+              style={[styles.chip, on && styles.chipOn]}
+            >
+              <Text style={[styles.chipText, on && styles.chipTextOn]}>
+                {day.short}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <Text style={styles.fieldLabel}>Schedule time</Text>
+      <TextInput
+        value={scheduleTime}
+        onChangeText={setScheduleTime}
+        style={styles.input}
+        placeholder="e.g. 10:00 AM"
+        placeholderTextColor={colors.faint}
+      />
+
       <Text style={styles.fieldLabel}>Starts</Text>
       <DateField
         value={pack.startsOn}
@@ -221,6 +286,9 @@ export default function ClassPackDetailScreen() {
           void updatePack(pack.id, {
             title: title.trim(),
             total: nextTotal,
+            scheduleDays: scheduleDays.length ? scheduleDays : undefined,
+            scheduleTime: scheduleTime.trim() || undefined,
+            scheduleTimeInferred: false,
           })
             .then(() => {
               showToast('Class pack saved');

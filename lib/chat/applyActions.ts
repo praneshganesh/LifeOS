@@ -16,11 +16,16 @@ import {
 import type { Habit, NewHabitInput } from '@/lib/habits';
 import { currentStreak, dayKey, loggedOn, shouldSyncLastDone } from '@/lib/habits';
 import {
+  adjustCompletedCount,
+  classCompletedCountFromUtterance,
   classDeadlineFromUtterance,
   classPackFromUtterance,
+  classScheduleDaysFromUtterance,
+  classScheduleTimeFromUtterance,
   classTitleFromUtterance,
   looksLikeClassAttendance,
   looksLikeClassEnrollment,
+  normalizeScheduleDays,
   pickAttendancePack,
   remainingCount,
   usedCount,
@@ -201,14 +206,28 @@ function titleCase(s: string) {
     .join(' ');
 }
 
-/** Accept YYYY-MM-DD or common spoken dates; reject junk. */
-function normalizeDateField(raw: string): string | undefined {
+export function isIsoDate(value: unknown): boolean {
+  const s = String(value || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    return false;
+  }
+  const d = new Date(`${s}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+}
+
+/** Accept valid YYYY-MM-DD or parseable dates; reject junk and impossible calendar dates. */
+export function normalizeDateField(raw: string): string | undefined {
   const s = raw.trim();
   if (!s || s === '—' || s === '-') return undefined;
-  const iso = s.match(/^(\d{4}-\d{2}-\d{2})/);
-  if (iso) return iso[1];
+  const isoMatch = s.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (isoMatch) {
+    return isIsoDate(isoMatch[1]) ? isoMatch[1] : undefined;
+  }
   const d = new Date(s);
-  if (!Number.isNaN(d.getTime())) return dayKey(d);
+  if (!Number.isNaN(d.getTime())) {
+    const key = dayKey(d);
+    return isIsoDate(key) ? key : undefined;
+  }
   return undefined;
 }
 
@@ -278,13 +297,14 @@ function addActionToInput(
   action: ChatAddAction,
   source: InventoryItem['source'],
   lastUserText?: string,
-  household: HouseholdMember[] = []
+  household: HouseholdMember[] = [],
+  todayAnchor?: string
 ): Omit<InventoryItem, 'id' | 'createdAt'> {
   const name = titleCase(action.name.trim());
   const blob = `${name} ${action.category || ''} ${action.room || ''}`;
   const inferred = inferMeta(blob);
-  const today = dayKey();
-  const label = new Date().toLocaleDateString(undefined, {
+  const today = isIsoDate(todayAnchor) ? (todayAnchor as string) : dayKey();
+  const label = new Date(`${today}T12:00:00`).toLocaleDateString(undefined, {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
@@ -411,6 +431,7 @@ export type ApplyActionsResult = {
   classPackTitle: string | null;
   classPackRemaining: number | null;
   classPackTotal: number | null;
+  classPackScheduleTimeInferred?: boolean;
   classLoggedTitle: string | null;
   classLogAttemptFor: string | null;
   reminderLabel: string | null;
@@ -456,8 +477,13 @@ export async function applyChatActions(
     lastTalkFocus?: TalkFocus | null;
     /** Household default ISO currency (from profile / onboarding). */
     defaultCurrency?: string;
+    /** User's local calendar date (YYYY-MM-DD). */
+    localDate?: string;
   }
 ): Promise<ApplyActionsResult> {
+  const today = isIsoDate(options?.localDate)
+    ? (options!.localDate as string)
+    : dayKey();
   const defaultCurrency =
     options?.defaultCurrency?.trim().toUpperCase() ||
     getRuntimeDefaultCurrency();
@@ -496,6 +522,7 @@ export async function applyChatActions(
   let classPackTitle: string | null = null;
   let classPackRemaining: number | null = null;
   let classPackTotal: number | null = null;
+  let classPackScheduleTimeInferred = false;
   let classLoggedTitle: string | null = null;
   let classLogAttemptFor: string | null = null;
   let reminderLabel: string | null = null;
@@ -558,7 +585,7 @@ export async function applyChatActions(
     if (!action || action.type === 'none') continue;
     if (action.type === 'add_item' && action.name?.trim()) {
       const item = await api.addItem(
-        addActionToInput(action, source, lastUserText, household)
+        addActionToInput(action, source, lastUserText, household, today)
       );
       lastAddedId = item.id;
       lastAddedName = item.name;
@@ -1085,9 +1112,14 @@ export async function applyChatActions(
       const label = action.label.trim();
       const inventoryItemId =
         (action.inventoryItemId || fallback || '').trim() || undefined;
+      const doneAt = action.doneAt ? normalizeDateField(action.doneAt) : today;
+      if (!doneAt) {
+        console.log('[LifeOS chat] skip log_done — invalid date', action.doneAt);
+        continue;
+      }
       const saved = await options.lastDone.logDone({
         label,
-        doneAt: action.doneAt,
+        doneAt,
         inventoryItemId: inventoryItemId ?? null,
       });
       loggedDoneLabel = saved.label;
@@ -1155,7 +1187,11 @@ export async function applyChatActions(
         lastUserText,
         defaultCurrency
       );
-      const date = action.date ? normalizeDateField(action.date) : undefined;
+      const date = action.date ? normalizeDateField(action.date) : today;
+      if (!date) {
+        console.log('[LifeOS chat] skip add_expense — invalid date', action.date);
+        continue;
+      }
       const merchant =
         formatPurchasedFrom(action.merchant) ||
         merchantFromUtterance(lastUserText) ||
@@ -1276,8 +1312,8 @@ export async function applyChatActions(
       }
       if (action.patch?.provider?.trim()) patch.provider = action.patch.provider.trim();
       if (action.patch?.note?.trim()) patch.note = action.patch.note.trim();
-      if (!id || !Object.keys(patch).length) {
-        console.log('[LifeOS chat] skip update_subscription — missing id/patch');
+      if (!id || !Object.keys(patch).length || (!row && options.subscriptions.getById)) {
+        console.log('[LifeOS chat] skip update_subscription — missing id/patch or not found', id);
         continue;
       }
       await options.subscriptions.updateSubscription(id, patch);
@@ -1300,8 +1336,8 @@ export async function applyChatActions(
       const row =
         options.subscriptions.getById?.(id) ||
         options.subscriptionsList?.find((s) => s.id === id);
-      if (!id) {
-        console.log('[LifeOS chat] skip remove_subscription — not found');
+      if (!id || (!row && options.subscriptions.getById)) {
+        console.log('[LifeOS chat] skip remove_subscription — not found', action.id);
         continue;
       }
       await options.subscriptions.removeSubscription(id);
@@ -1315,8 +1351,11 @@ export async function applyChatActions(
     }
     if (action.type === 'habit_check_in' && action.title?.trim() && options?.habits) {
       const title = titleCase(action.title.trim());
-      const date =
-        (action.date ? normalizeDateField(action.date) : undefined) || dayKey();
+      const date = action.date ? normalizeDateField(action.date) : today;
+      if (!date) {
+        console.log('[LifeOS chat] skip habit_check_in — invalid date', action.date);
+        continue;
+      }
       const linkId = action.inventoryItemId?.trim() || undefined;
       const person = await ensurePerson(
         resolveAssignment({
@@ -1429,6 +1468,17 @@ export async function applyChatActions(
       const total = Number.isFinite(totalN) && totalN > 0 ? totalN : 0;
       const monthsRaw = spoken.months ?? action.months;
       const months = monthsRaw != null ? Math.round(Number(monthsRaw)) : undefined;
+      const scheduleDays =
+        normalizeScheduleDays(action.scheduleDays) ||
+        classScheduleDaysFromUtterance(lastUserText);
+      const scheduleTime =
+        action.scheduleTime?.trim() || classScheduleTimeFromUtterance(lastUserText);
+      const completedRaw = action.completed ?? classCompletedCountFromUtterance(lastUserText);
+      const completed =
+        completedRaw != null && Number.isFinite(Number(completedRaw))
+          ? Math.round(Number(completedRaw))
+          : undefined;
+
       const person = await ensurePerson(
         resolveAssignment({
           assignedTo: action.assignedTo,
@@ -1441,8 +1491,7 @@ export async function applyChatActions(
       // The model doesn't reliably know today's date — "before November" can
       // come back as 2023. Spoken deadline wins; reject windows that already
       // ended and starts that are ancient or after the end.
-      const today = dayKey();
-      const yearAgoDate = new Date();
+      const yearAgoDate = new Date(`${today}T12:00:00`);
       yearAgoDate.setFullYear(yearAgoDate.getFullYear() - 1);
       const yearAgo = dayKey(yearAgoDate);
       let startsOn = action.startsOn
@@ -1458,15 +1507,19 @@ export async function applyChatActions(
       const pack = await options.classes.addPack({
         title,
         total: total || undefined,
+        completed,
         months: months && months > 0 ? months : undefined,
         startsOn,
         endsOn,
+        scheduleDays,
+        scheduleTime,
         personId: person?.personId,
         assignedTo: person?.assignedTo,
       });
       classPackTitle = pack.title;
       classPackRemaining = remainingCount(pack);
       classPackTotal = pack.total;
+      classPackScheduleTimeInferred = Boolean(pack.scheduleTimeInferred);
       lastAssignedTo = pack.assignedTo ?? lastAssignedTo;
       remember('class', pack.id);
       console.log(
@@ -1511,7 +1564,11 @@ export async function applyChatActions(
         console.log('[LifeOS chat] skip log_class — pack not found', action.title);
         continue;
       }
-      const date = action.date ? normalizeDateField(action.date) : dayKey();
+      const date = action.date ? normalizeDateField(action.date) : today;
+      if (!date) {
+        console.log('[LifeOS chat] skip log_class — invalid date', action.date);
+        continue;
+      }
       const updated = await options.classes.logClass(pack.id, date);
       if (updated) {
         classLoggedTitle = updated.title;
@@ -1597,6 +1654,29 @@ export async function applyChatActions(
           patch.assignedTo = person.assignedTo;
         }
       }
+      if (action.patch?.scheduleDays !== undefined) {
+        patch.scheduleDays = normalizeScheduleDays(action.patch.scheduleDays);
+      } else {
+        const spokenDays = classScheduleDaysFromUtterance(lastUserText);
+        if (spokenDays) patch.scheduleDays = spokenDays;
+      }
+      if (action.patch?.scheduleTime !== undefined) {
+        patch.scheduleTime = action.patch.scheduleTime?.trim() || undefined;
+        patch.scheduleTimeInferred = false;
+      } else {
+        const spokenTime = classScheduleTimeFromUtterance(lastUserText);
+        if (spokenTime) {
+          patch.scheduleTime = spokenTime;
+          patch.scheduleTimeInferred = false;
+        }
+      }
+      const completedRaw =
+        action.patch?.completed ?? classCompletedCountFromUtterance(lastUserText);
+      if (completedRaw != null && Number.isFinite(Number(completedRaw))) {
+        const adjusted = adjustCompletedCount(pack, Number(completedRaw));
+        patch.logs = adjusted.logs;
+      }
+
       if (!Object.keys(patch).length) {
         console.log('[LifeOS chat] skip update_class_pack — empty patch');
         continue;
@@ -1660,8 +1740,8 @@ export async function applyChatActions(
         (talkFocus?.kind === 'lastDone' ? talkFocus.id : '') ||
         '';
       const row = options.lastDoneList?.find((d) => d.id === id);
-      if (!id) {
-        console.log('[LifeOS chat] skip remove_last_done — not found');
+      if (!id || (!row && options.lastDoneList)) {
+        console.log('[LifeOS chat] skip remove_last_done — not found', action.id);
         continue;
       }
       await options.lastDone.remove(id);
@@ -1712,6 +1792,7 @@ export async function applyChatActions(
     classPackTitle,
     classPackRemaining,
     classPackTotal,
+    classPackScheduleTimeInferred,
     classLoggedTitle,
     classLogAttemptFor,
     reminderLabel,

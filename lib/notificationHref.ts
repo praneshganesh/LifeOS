@@ -9,5 +9,8 @@ export function hrefFromNotificationData(
   if (data.type === 'last_done' && typeof data.itemId === 'string') {
     return `/last-done/${data.itemId}`;
   }
+  if (data.type === 'class' && typeof data.packId === 'string') {
+    return `/classes/${data.packId}`;
+  }
   return null;
 }

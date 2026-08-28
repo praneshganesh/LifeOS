@@ -15,9 +15,12 @@ import {
 import type { ClassPack } from '@/lib/classes';
 import {
   daysLeftInWindow,
+  loggedOn,
+  nextScheduledClassOccurrence,
   packStatus,
   remainingCount,
 } from '@/lib/classes';
+import { localDayKey } from '@/lib/dates';
 
 export type AttentionUrgency = 'urgent' | 'soon' | 'info' | 'ok';
 
@@ -94,7 +97,8 @@ export function buildAttentionItems(
   inventory: InventoryItem[],
   lastDone: LastDoneItem[] = [],
   subscriptions: Subscription[] = [],
-  classPacks: ClassPack[] = []
+  classPacks: ClassPack[] = [],
+  now = new Date()
 ): AttentionItem[] {
   const out: AttentionItem[] = [];
 
@@ -140,7 +144,6 @@ export function buildAttentionItems(
     }
   }
 
-  const now = new Date();
   for (const activity of lastDone) {
     if (!activity.remindAt) continue;
     const daysLeft = daysUntil(activity.remindAt, now);
@@ -195,8 +198,36 @@ export function buildAttentionItems(
     if (remaining === 0) continue;
     const status = packStatus(pack);
     const daysLeft = daysLeftInWindow(pack);
-    if (status === 'active') continue;
     const who = pack.assignedTo ? `${pack.assignedTo} · ` : '';
+
+    // 1. Upcoming scheduled class sessions (e.g. today or tomorrow)
+    if (status !== 'expired' && pack.scheduleDays?.length) {
+      const occ = nextScheduledClassOccurrence(pack, now);
+      if (occ) {
+        const todayStr = localDayKey(now);
+        const isToday = occ.daysAhead === 0;
+        const alreadyDoneToday = isToday && loggedOn(pack, todayStr);
+        if (!alreadyDoneToday && occ.daysAhead <= 1) {
+          const title = isToday
+            ? `${who}${pack.title} class today${pack.scheduleTime ? ` at ${pack.scheduleTime}` : ''}`
+            : `${who}${pack.title} class tomorrow${pack.scheduleTime ? ` at ${pack.scheduleTime}` : ''}`;
+          const subtitle = `${remaining != null ? `${remaining} left · ` : ''}Every ${occ.dayName}${pack.scheduleTime ? ` · ${pack.scheduleTime}` : ''}`;
+          out.push({
+            id: `cls-sched-${pack.id}-${occ.date}`,
+            title,
+            subtitle,
+            urgency: isToday ? 'urgent' : 'soon',
+            category: 'Classes',
+            icon: 'today',
+            daysLeft: occ.daysAhead,
+            href: `/classes/${pack.id}`,
+          });
+        }
+      }
+    }
+
+    // 2. Class pack window expiration or ending-soon notices
+    if (status === 'active') continue;
     if (status === 'expired') {
       out.push({
         id: `cls-${pack.id}`,
@@ -240,9 +271,10 @@ export function dueSoonForHome(
   lastDone: LastDoneItem[] = [],
   subscriptions: Subscription[] = [],
   classPacks: ClassPack[] = [],
-  limit = 3
+  limit = 3,
+  now = new Date()
 ): AttentionItem[] {
-  return buildAttentionItems(inventory, lastDone, subscriptions, classPacks)
+  return buildAttentionItems(inventory, lastDone, subscriptions, classPacks, now)
     .filter((a) => a.urgency === 'urgent' || a.urgency === 'soon')
     .slice(0, limit);
 }

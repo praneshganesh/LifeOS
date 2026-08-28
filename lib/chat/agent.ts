@@ -9,6 +9,7 @@ import {
   buildSubscriptionSummary,
 } from '@/lib/chat/prompt';
 import { normalizeAgentResponse } from '@/lib/chat/applyActions';
+import { localDayKey } from '@/lib/dates';
 import type {
   ChatAgentResponse,
   ChatMessage,
@@ -134,6 +135,8 @@ export async function runChatAgent(params: {
     remaining?: number;
     startsOn: string;
     endsOn: string;
+    scheduleDays?: string[];
+    scheduleTime?: string;
   }>;
   subscriptions?: Array<{
     id: string;
@@ -150,6 +153,8 @@ export async function runChatAgent(params: {
   household?: Array<{ id: string; name: string; relation: string; role: string }>;
   /** Household default ISO 4217 currency. */
   defaultCurrency?: string;
+  /** User's local calendar date YYYY-MM-DD for consistent single-turn evaluation. */
+  localDate?: string;
 }): Promise<ChatAgentResponse> {
   const url = chatApiUrl();
   const inventorySummary = buildInventorySummary(params.inventory);
@@ -195,9 +200,17 @@ export async function runChatAgent(params: {
         session: params.session ?? {},
         household: params.household ?? [],
         defaultCurrency: params.defaultCurrency ?? '',
+        localDate: params.localDate || localDayKey(),
+        timezone:
+          typeof Intl !== 'undefined' && Intl.DateTimeFormat
+            ? Intl.DateTimeFormat().resolvedOptions().timeZone
+            : undefined,
       }),
     });
   } catch (err) {
+    if (__DEV__) {
+      console.warn('[Saavi chat] request failed', err);
+    }
     const aborted =
       (err instanceof Error && err.name === 'AbortError') ||
       (typeof DOMException !== 'undefined' &&

@@ -1,4 +1,4 @@
-import { localDayKey } from '@/lib/dates';
+import { isIsoDate, localDayKey } from '@/lib/dates';
 
 /** Shared Saavi chat system rules (mirrored on the server). */
 export const CHAT_SYSTEM_BRIEF = `Saavi assistant. Conversational, concise. Never invent purchase dates, prices, stores, warranty, serials, service history, spend totals, or remaining class counts — if a field is missing, say it isn’t recorded.`;
@@ -9,14 +9,19 @@ function meaningful(value?: string | null) {
   return v !== '—' && v !== '-' && v.toLowerCase() !== 'unknown';
 }
 
-function dayOnly(isoOrDate?: string | null) {
+export function dayOnly(isoOrDate?: string | null): string | undefined {
   if (!meaningful(isoOrDate)) return undefined;
   const s = isoOrDate!.trim();
   const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
-  if (m) return m[1];
+  if (m) {
+    return isIsoDate(m[1]) ? m[1] : undefined;
+  }
   const d = new Date(s);
-  if (!Number.isNaN(d.getTime())) return localDayKey(d);
-  return s;
+  if (!Number.isNaN(d.getTime())) {
+    const key = localDayKey(d);
+    return isIsoDate(key) ? key : undefined;
+  }
+  return undefined;
 }
 
 export type InventorySummaryInput = {
@@ -179,6 +184,8 @@ export type ClassPackSummaryInput = {
   remaining?: number;
   startsOn: string;
   endsOn: string;
+  scheduleDays?: string[];
+  scheduleTime?: string;
 };
 
 export function buildClassPackSummary(
@@ -195,6 +202,10 @@ export function buildClassPackSummary(
       endsOn: dayOnly(p.endsOn) || p.endsOn,
     };
     if (typeof p.remaining === 'number') row.remaining = p.remaining;
+    if (Array.isArray(p.scheduleDays) && p.scheduleDays.length) {
+      row.scheduleDays = p.scheduleDays;
+    }
+    if (meaningful(p.scheduleTime)) row.scheduleTime = p.scheduleTime!.trim();
     if (meaningful(p.assignedTo)) row.assignedTo = p.assignedTo!.trim();
     if (meaningful(p.personId)) row.personId = p.personId!.trim();
     return row;

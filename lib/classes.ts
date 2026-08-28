@@ -1,6 +1,25 @@
 import { addCalendarMonths, localDayKey } from '@/lib/dates';
 import { daysUntil } from '@/lib/lastDone';
 
+export type ScheduleDay =
+  | 'monday'
+  | 'tuesday'
+  | 'wednesday'
+  | 'thursday'
+  | 'friday'
+  | 'saturday'
+  | 'sunday';
+
+export const SCHEDULE_DAYS: { id: ScheduleDay; label: string; short: string; dayIndex: number }[] = [
+  { id: 'monday', label: 'Monday', short: 'Mon', dayIndex: 1 },
+  { id: 'tuesday', label: 'Tuesday', short: 'Tue', dayIndex: 2 },
+  { id: 'wednesday', label: 'Wednesday', short: 'Wed', dayIndex: 3 },
+  { id: 'thursday', label: 'Thursday', short: 'Thu', dayIndex: 4 },
+  { id: 'friday', label: 'Friday', short: 'Fri', dayIndex: 5 },
+  { id: 'saturday', label: 'Saturday', short: 'Sat', dayIndex: 6 },
+  { id: 'sunday', label: 'Sunday', short: 'Sun', dayIndex: 0 },
+];
+
 export type ClassLog = {
   id: string;
   /** YYYY-MM-DD */
@@ -17,6 +36,10 @@ export type ClassPack = {
   startsOn: string;
   endsOn: string;
   logs: ClassLog[];
+  scheduleDays?: ScheduleDay[];
+  scheduleTime?: string;
+  /** True when scheduleTime was defaulted to 9:00 AM because user did not specify time */
+  scheduleTimeInferred?: boolean;
   notes?: string;
   createdAt: string;
 };
@@ -25,10 +48,14 @@ export type NewClassPackInput = {
   title: string;
   /** 0 / omit = count not set yet */
   total?: number;
+  completed?: number;
   startsOn?: string;
   endsOn?: string;
   /** Used when endsOn is omitted — default 3 */
   months?: number;
+  scheduleDays?: (ScheduleDay | string)[];
+  scheduleTime?: string;
+  scheduleTimeInferred?: boolean;
   personId?: string;
   assignedTo?: string;
   notes?: string;
@@ -36,6 +63,77 @@ export type NewClassPackInput = {
 };
 
 export type ClassPackStatus = 'active' | 'ending-soon' | 'expired' | 'complete';
+
+const VALID_DAYS = new Set<ScheduleDay>([
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+  'sunday',
+]);
+
+export function normalizeScheduleDays(
+  days?: (string | ScheduleDay)[]
+): ScheduleDay[] | undefined {
+  if (!Array.isArray(days) || !days.length) return undefined;
+  const set = new Set<ScheduleDay>();
+  for (const d of days) {
+    if (typeof d !== 'string') continue;
+    const clean = d.trim().toLowerCase() as ScheduleDay;
+    if (VALID_DAYS.has(clean)) set.add(clean);
+  }
+  return set.size ? Array.from(set) : undefined;
+}
+
+export function generatePastLogs(count: number, startsOn?: string): ClassLog[] {
+  const logs: ClassLog[] = [];
+  const now = new Date();
+  for (let i = 0; i < count; i++) {
+    const d = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() - (count - i)
+    );
+    const dayKey = localDayKey(d);
+    logs.push({
+      id: `clog-init-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
+      doneAt: dayKey,
+    });
+  }
+  return logs;
+}
+
+export function adjustCompletedCount(pack: ClassPack, targetCompleted: number): ClassPack {
+  const target = Math.max(0, Math.min(pack.total > 0 ? pack.total : 999, Math.round(targetCompleted)));
+  const currentLogs = [...pack.logs];
+  if (currentLogs.length === target) return pack;
+  if (currentLogs.length > target) {
+    return {
+      ...pack,
+      logs: currentLogs.slice(0, target),
+    };
+  }
+  const toAdd = target - currentLogs.length;
+  const newLogs = [...currentLogs];
+  const now = new Date();
+  for (let i = 0; i < toAdd; i++) {
+    const d = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() - (toAdd - i)
+    );
+    newLogs.push({
+      id: `clog-adj-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
+      doneAt: localDayKey(d),
+    });
+  }
+  return {
+    ...pack,
+    logs: newLogs,
+  };
+}
 
 export function normalizeClassKey(title: string): string {
   return title
@@ -63,8 +161,20 @@ export function mergeClassPackUpdate(
   } else if (input.months && input.months > 0) {
     patch.endsOn = addCalendarMonths(existing.startsOn, input.months);
   }
-  if (!Object.keys(patch).length) return null;
-  return { ...existing, ...patch };
+  if (input.scheduleDays !== undefined) {
+    patch.scheduleDays = normalizeScheduleDays(input.scheduleDays);
+  }
+  if (input.scheduleTime !== undefined) {
+    const trimmed = input.scheduleTime.trim();
+    patch.scheduleTime = trimmed || undefined;
+    patch.scheduleTimeInferred = input.scheduleTimeInferred ?? false;
+  }
+  let base: ClassPack = { ...existing, ...patch };
+  if (input.completed != null && Number.isFinite(Number(input.completed))) {
+    base = adjustCompletedCount(base, Number(input.completed));
+  }
+  if (!Object.keys(patch).length && input.completed == null) return null;
+  return base;
 }
 
 export function createClassPack(input: NewClassPackInput): ClassPack {
@@ -77,6 +187,22 @@ export function createClassPack(input: NewClassPackInput): ClassPack {
   const endsOn = (input.endsOn || addCalendarMonths(startsOn, months)).slice(0, 10);
   const n = Math.round(Number(input.total));
   const total = Number.isFinite(n) && n > 0 ? n : 0;
+  const scheduleDays = normalizeScheduleDays(input.scheduleDays);
+  let scheduleTime = input.scheduleTime?.trim() || undefined;
+  let scheduleTimeInferred = input.scheduleTimeInferred;
+
+  if (scheduleDays && scheduleDays.length) {
+    if (!scheduleTime) {
+      scheduleTime = '9:00 AM';
+      scheduleTimeInferred = true;
+    } else if (scheduleTimeInferred === undefined) {
+      scheduleTimeInferred = false;
+    }
+  }
+
+  const completedN = input.completed != null ? Math.round(Number(input.completed)) : 0;
+  const initialLogs = completedN > 0 ? generatePastLogs(completedN, startsOn) : [];
+
   return {
     id: input.id ?? `cls-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     title,
@@ -85,7 +211,10 @@ export function createClassPack(input: NewClassPackInput): ClassPack {
     total,
     startsOn,
     endsOn,
-    logs: [],
+    logs: initialLogs,
+    scheduleDays,
+    scheduleTime,
+    scheduleTimeInferred,
     notes: input.notes?.trim() || undefined,
     createdAt: new Date().toISOString(),
   };
@@ -104,6 +233,18 @@ export function normalizeClassPack(raw: unknown): ClassPack | null {
         }))
     : [];
   const startsOn = String(o.startsOn || localDayKey()).slice(0, 10);
+  const scheduleDays = normalizeScheduleDays(
+    Array.isArray(o.scheduleDays) ? (o.scheduleDays as string[]) : undefined
+  );
+  const scheduleTime =
+    typeof o.scheduleTime === 'string' && o.scheduleTime.trim()
+      ? o.scheduleTime.trim()
+      : undefined;
+  const scheduleTimeInferred =
+    typeof o.scheduleTimeInferred === 'boolean'
+      ? o.scheduleTimeInferred
+      : undefined;
+
   return {
     id: o.id,
     title: String(o.title).trim() || 'Class',
@@ -113,6 +254,9 @@ export function normalizeClassPack(raw: unknown): ClassPack | null {
     startsOn,
     endsOn: String(o.endsOn || addCalendarMonths(startsOn, 3)).slice(0, 10),
     logs,
+    scheduleDays,
+    scheduleTime,
+    scheduleTimeInferred,
     notes: typeof o.notes === 'string' ? o.notes : undefined,
     createdAt:
       typeof o.createdAt === 'string' && o.createdAt
@@ -319,9 +463,143 @@ export function classTitleFromUtterance(text?: string): string | undefined {
 export function looksLikeClassEnrollment(text?: string): boolean {
   if (!text?.trim()) return false;
   return (
-    /\b(enrolled|enrol|signed up|sign up|joining|joined)\b/i.test(text) &&
-    /\b(class|classes|lesson|lessons|course|pack)\b/i.test(text)
+    (/\b(enrolled|enrol|signed up|sign up|joining|joined|has|takes|started|starting|registered)\b/i.test(
+      text
+    ) &&
+      /\b(class|classes|lesson|lessons|course|pack|skating|swimming|piano|tennis|football|soccer|dance|yoga|karate|guitar|violin|chess|coding|art|boxing|ballet|cricket|golf)\b/i.test(
+        text
+      )) ||
+    /\b(total of\s+\d+|\d+\s+classes|pack of\s+\d+)\b/i.test(text)
   );
+}
+
+export function classScheduleDaysFromUtterance(
+  text?: string
+): ScheduleDay[] | undefined {
+  if (!text?.trim()) return undefined;
+  const lower = text.toLowerCase();
+  const set = new Set<ScheduleDay>();
+
+  if (/\b(every\s+day|daily|all\s+days)\b/.test(lower)) {
+    return [
+      'monday',
+      'tuesday',
+      'wednesday',
+      'thursday',
+      'friday',
+      'saturday',
+      'sunday',
+    ];
+  }
+  if (/\b(weekdays)\b/.test(lower)) {
+    return ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+  }
+  if (/\b(weekends)\b/.test(lower)) {
+    return ['saturday', 'sunday'];
+  }
+
+  const DAY_PATTERNS: { id: ScheduleDay; regex: RegExp }[] = [
+    { id: 'monday', regex: /\b(mondays?|mon)\b/ },
+    { id: 'tuesday', regex: /\b(tuesdays?|tue|tues)\b/ },
+    { id: 'wednesday', regex: /\b(wednesdays?|wed)\b/ },
+    { id: 'thursday', regex: /\b(thursdays?|thu|thur|thurs)\b/ },
+    { id: 'friday', regex: /\b(fridays?|fri)\b/ },
+    { id: 'saturday', regex: /\b(saturdays?|sat)\b/ },
+    { id: 'sunday', regex: /\b(sundays?|sun)\b/ },
+  ];
+
+  for (const { id, regex } of DAY_PATTERNS) {
+    if (regex.test(lower)) {
+      set.add(id);
+    }
+  }
+
+  return set.size ? Array.from(set) : undefined;
+}
+
+export function classScheduleTimeFromUtterance(text?: string): string | undefined {
+  if (!text?.trim()) return undefined;
+  const m =
+    text.match(/\b(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i) ||
+    text.match(/\bat\s+(\d{1,2})(?::(\d{2}))\b/i);
+  if (!m) return undefined;
+  const hours = Number(m[1]);
+  if (hours < 0 || hours > 24) return undefined;
+  const mins = m[2] ? m[2] : '00';
+  const ampm = m[3]
+    ? m[3].toUpperCase()
+    : hours >= 12
+      ? 'PM'
+      : 'AM';
+  const formattedHours = m[3] ? hours : hours % 12 || 12;
+  return `${formattedHours}:${mins} ${ampm}`;
+}
+
+export function classCompletedCountFromUtterance(
+  text?: string
+): number | undefined {
+  if (!text?.trim()) return undefined;
+  const m =
+    text.match(
+      /\b(\d{1,3})\s+(?:are\s+)?(?:already\s+)?(?:done|completed|attended|finished)\b/i
+    ) ||
+    text.match(
+      /\b(?:already\s+)?(?:done|completed|attended|finished)\s+(?:with\s+)?(\d{1,3})\b/i
+    ) ||
+    text.match(
+      /\b(?:done|completed|attended)\s+(\d{1,3})\s+of\s+(?:them|the\s+\d+)\b/i
+    );
+  if (!m) return undefined;
+  const n = Number(m[1]);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
+export function nextScheduledClassOccurrence(
+  pack: ClassPack,
+  now = new Date()
+): { date: string; daysAhead: number; dayName: string; dayId: ScheduleDay } | null {
+  if (!pack.scheduleDays || !pack.scheduleDays.length) return null;
+  const currentDayIndex = now.getDay(); // 0 = Sun, 1 = Mon, ... 6 = Sat
+  const dayIndexMap: Record<ScheduleDay, number> = {
+    sunday: 0,
+    monday: 1,
+    tuesday: 2,
+    wednesday: 3,
+    thursday: 4,
+    friday: 5,
+    saturday: 6,
+  };
+
+  let best: {
+    date: string;
+    daysAhead: number;
+    dayName: string;
+    dayId: ScheduleDay;
+  } | null = null;
+  let minDaysAhead = 999;
+
+  for (const dayId of pack.scheduleDays) {
+    const targetDayIndex = dayIndexMap[dayId];
+    if (targetDayIndex == null) continue;
+    const daysAhead = (targetDayIndex - currentDayIndex + 7) % 7;
+    if (daysAhead < minDaysAhead) {
+      minDaysAhead = daysAhead;
+      const targetDate = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() + daysAhead
+      );
+      const dateStr = localDayKey(targetDate);
+      const dayItem = SCHEDULE_DAYS.find((d) => d.id === dayId);
+      best = {
+        date: dateStr,
+        daysAhead,
+        dayName: dayItem?.label || dayId,
+        dayId,
+      };
+    }
+  }
+  return best;
 }
 
 export function looksLikeClassAttendance(text?: string): boolean {

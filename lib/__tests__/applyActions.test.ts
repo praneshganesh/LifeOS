@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { applyChatActions } from '../chat/applyActions';
+import { applyChatActions, normalizeDateField } from '../chat/applyActions';
 import { composeAppliedReply } from '../chat/composeReply';
 import type { ChatAction } from '../chat/types';
 import { findDuplicateExpense } from '../expenses';
@@ -238,7 +238,7 @@ describe('applyChatActions', () => {
         loggedExpenseAmount: applied.loggedExpenseAmount,
         loggedExpenseMerchant: applied.loggedExpenseMerchant,
       }),
-      'Logged Juice at Spinis — AED 13.'
+      'Logged Juice at Spinis · AED 13.'
     );
   });
 
@@ -1064,6 +1064,115 @@ describe('talk focus across modules', () => {
     assert.equal(applied.removedLastDoneLabel, 'Apply for passport');
   });
 
+  it('creates class pack with schedule days, time, and completed count from Talk', async () => {
+    const { api, packs } = memoryClasses();
+    const applied = await applyChatActions(
+      [
+        {
+          type: 'add_class_pack',
+          title: 'Skating',
+          total: 12,
+          completed: 6,
+          scheduleDays: ['saturday'],
+          scheduleTime: '10:00 AM',
+          assignedTo: 'Ishaan',
+        },
+      ] as ChatAction[],
+      unusedInv,
+      'talk',
+      {
+        lastUserText:
+          'Ishaan has skating class at 10 AM on saturdays and a total of 12 classes before november to take. out of the 12 classes, 6 are already done',
+        classes: api,
+        household: [
+          {
+            id: 'fm-ishaan',
+            name: 'Ishaan',
+            role: 'child',
+            relation: 'Son',
+            avatarLetter: 'IS',
+            icon: 'school',
+            permission: 'viewer',
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      }
+    );
+    assert.equal(packs.length, 1);
+    assert.equal(packs[0].title, 'Skating');
+    assert.equal(packs[0].total, 12);
+    assert.equal(packs[0].logs.length, 6);
+    assert.equal(packs[0].assignedTo, 'Ishaan');
+    assert.deepEqual(packs[0].scheduleDays, ['saturday']);
+    assert.equal(packs[0].scheduleTime, '10:00 AM');
+    assert.equal(packs[0].scheduleTimeInferred, false);
+    assert.ok(packs[0].endsOn.includes('-11-01'));
+  });
+
+  it('infers 9:00 AM and informs user when schedule time is omitted in Talk', async () => {
+    const { api, packs } = memoryClasses();
+    const applied = await applyChatActions(
+      [
+        {
+          type: 'add_class_pack',
+          title: 'Skating',
+          total: 12,
+          scheduleDays: ['saturday'],
+        },
+      ] as ChatAction[],
+      unusedInv,
+      'talk',
+      {
+        lastUserText: 'Ishaan has skating class on saturdays with 12 classes',
+        classes: api,
+      }
+    );
+    assert.equal(packs.length, 1);
+    assert.equal(packs[0].scheduleTime, '9:00 AM');
+    assert.equal(packs[0].scheduleTimeInferred, true);
+    assert.equal(applied.classPackScheduleTimeInferred, true);
+
+    const reply = composeAppliedReply({
+      actions: [{ type: 'add_class_pack', title: 'Skating' }],
+      modelReply: 'Added Skating.',
+      classPackTitle: applied.classPackTitle,
+      classPackTotal: applied.classPackTotal,
+      classPackScheduleTimeInferred: applied.classPackScheduleTimeInferred,
+    });
+    assert.match(reply, /assumed 9:00 AM/i);
+  });
+
+  it('updates class pack completed count from Talk', async () => {
+    const { api, packs } = memoryClasses();
+    const created = await api.addPack({
+      title: 'Skating',
+      total: 12,
+      scheduleDays: ['saturday'],
+      scheduleTime: '10:00 AM',
+    });
+    assert.equal(packs[0].logs.length, 0);
+
+    const applied = await applyChatActions(
+      [
+        {
+          type: 'update_class_pack',
+          id: created.id,
+          patch: { completed: 6 },
+        },
+      ] as ChatAction[],
+      unusedInv,
+      'talk',
+      {
+        lastUserText: 'out of the 12 classes, 6 are already done',
+        classes: api,
+        classPacksList: [{ id: created.id, title: 'Skating' }],
+        lastTalkFocus: { kind: 'class', id: created.id },
+      }
+    );
+    assert.equal(applied.updatedClassPack, true);
+    assert.equal(packs[0].logs.length, 6);
+  });
+
   it('compose opens the focused module, not a Thing', () => {
     const reply = composeAppliedReply({
       actions: [{ type: 'open_item', id: 'inv-1' }],
@@ -1072,6 +1181,144 @@ describe('talk focus across modules', () => {
       openItemId: null,
     });
     assert.equal(reply, 'Opening that habit.');
+  });
+
+  it('rejects impossible calendar dates in normalizeDateField', () => {
+    assert.equal(normalizeDateField('2026-99-99'), undefined);
+    assert.equal(normalizeDateField('2026-02-30'), undefined);
+    assert.equal(normalizeDateField('2026-04-31'), undefined);
+    assert.equal(normalizeDateField('2026-08-28'), '2026-08-28');
+  });
+
+  it('guards destructive operations against unknown IDs', async () => {
+    let deletedSub = false;
+    let deletedLd = false;
+    let updatedSub = false;
+
+    await applyChatActions(
+      [
+        { type: 'remove_subscription', id: 'unknown-sub-id' },
+        { type: 'remove_last_done', id: 'unknown-ld-id' },
+        { type: 'update_subscription', id: 'unknown-sub-id', patch: { amount: 50 } },
+      ] as ChatAction[],
+      unusedInv,
+      'talk',
+      {
+        subscriptions: {
+          addSubscription: async () => {
+            throw new Error('unused');
+          },
+          removeSubscription: async () => {
+            deletedSub = true;
+          },
+          updateSubscription: async () => {
+            updatedSub = true;
+          },
+          getById: () => undefined,
+        },
+        subscriptionsList: [{ id: 'sub-real', title: 'Netflix' }],
+        lastDone: {
+          logDone: async () => {
+            throw new Error('unused');
+          },
+          setReminder: async () => {
+            throw new Error('unused');
+          },
+          remove: async () => {
+            deletedLd = true;
+          },
+        },
+        lastDoneList: [{ id: 'ld-real', label: 'AC Service' }],
+      }
+    );
+
+    assert.equal(deletedSub, false);
+    assert.equal(deletedLd, false);
+    assert.equal(updatedSub, false);
+  });
+
+  it('skips mutations with explicit invalid dates instead of defaulting to today', async () => {
+    let loggedExpense = false;
+    let loggedDone = false;
+    let checkedInHabit = false;
+    let loggedClass = false;
+
+    await applyChatActions(
+      [
+        { type: 'add_expense', title: 'Coffee', amount: 15, date: '2026-99-99' },
+        { type: 'log_done', label: 'AC Service', doneAt: '2026-02-30' },
+        { type: 'habit_check_in', title: 'Walk', date: '2026-04-31' },
+        { type: 'log_class', id: 'cls-1', title: 'Skating', date: '2026-13-40' },
+      ] as ChatAction[],
+      unusedInv,
+      'talk',
+      {
+        expenses: {
+          addExpense: async () => {
+            loggedExpense = true;
+            return { id: 'e-1', title: 'Coffee', amount: 15 };
+          },
+          updateExpense: async () => {},
+        },
+        lastDone: {
+          logDone: async () => {
+            loggedDone = true;
+            return { id: 'ld-1', label: 'AC Service' };
+          },
+        },
+        habits: {
+          addHabit: async () => ({ id: 'hab-1', title: 'Walk', logs: [] } as any),
+          checkIn: async () => {
+            checkedInHabit = true;
+            return null;
+          },
+          findByTitle: () => ({ id: 'hab-1', title: 'Walk', logs: [] } as any),
+          getById: () => ({ id: 'hab-1', title: 'Walk', logs: [] } as any),
+        },
+        classes: {
+          addPack: async () => ({} as any),
+          logClass: async () => {
+            loggedClass = true;
+            return null;
+          },
+          findPack: () => ({ id: 'cls-1', title: 'Skating', logs: [] } as any),
+          getById: () => ({ id: 'cls-1', title: 'Skating', logs: [] } as any),
+        },
+      }
+    );
+
+    assert.equal(loggedExpense, false);
+    assert.equal(loggedDone, false);
+    assert.equal(checkedInHabit, false);
+    assert.equal(loggedClass, false);
+  });
+
+  it('uses provided localDate anchor for mutations', async () => {
+    let loggedDate: string | undefined;
+
+    await applyChatActions(
+      [
+        {
+          type: 'add_expense',
+          title: 'Lunch',
+          amount: 20,
+        },
+      ] as ChatAction[],
+      unusedInv,
+      'talk',
+      {
+        localDate: '2026-08-29',
+        expenses: {
+          addExpense: async (input) => {
+            loggedDate = input.date;
+            return { id: 'exp-1', title: input.title, amount: input.amount };
+          },
+          updateExpense: async () => {},
+        },
+      }
+    );
+
+    assert.equal(loggedDate, '2026-08-29');
   });
 });
 

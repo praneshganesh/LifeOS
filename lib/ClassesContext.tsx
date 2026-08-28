@@ -23,6 +23,11 @@ import {
   loadVersionedArray,
   saveVersionedArray,
 } from '@/lib/storage/versioned';
+import {
+  cancelClassReminders,
+  scheduleClassReminders,
+  syncClassReminders,
+} from '@/lib/classNotifications';
 
 const STORAGE_KEY = 'lifeos:classes:v1';
 const SCHEMA_VERSION = 1;
@@ -74,6 +79,7 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
         );
         packsRef.current = sortPacks(loaded);
         setPacks(packsRef.current);
+        void syncClassReminders(packsRef.current);
       } catch {
         /* ignore */
       } finally {
@@ -95,10 +101,12 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
         await commit(
           packsRef.current.map((p) => (p.id === existing.id ? merged : p))
         );
+        void scheduleClassReminders(merged);
         return merged;
       }
       const pack = createClassPack(input);
       await commit([pack, ...packsRef.current]);
+      void scheduleClassReminders(pack);
       return pack;
     },
     [commit]
@@ -106,9 +114,16 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
 
   const updatePack = useCallback(
     async (id: string, patch: Partial<ClassPack>) => {
-      await commit(
-        packsRef.current.map((p) => (p.id === id ? { ...p, ...patch, id: p.id } : p))
-      );
+      let updated: ClassPack | undefined;
+      const next = packsRef.current.map((p) => {
+        if (p.id !== id) return p;
+        updated = { ...p, ...patch, id: p.id };
+        return updated;
+      });
+      await commit(next);
+      if (updated) {
+        void scheduleClassReminders(updated);
+      }
     },
     [commit]
   );
@@ -116,6 +131,7 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
   const removePack = useCallback(
     async (id: string) => {
       await commit(packsRef.current.filter((p) => p.id !== id));
+      void cancelClassReminders(id);
     },
     [commit]
   );
@@ -129,6 +145,9 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
         return updated;
       });
       await commit(next);
+      if (updated) {
+        void scheduleClassReminders(updated);
+      }
       return updated;
     },
     [commit]

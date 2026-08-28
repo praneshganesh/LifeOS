@@ -52,6 +52,7 @@ import { resolveOpenItemId } from '@/lib/chat/openItem';
 import { hrefForTalkFocus, type TalkFocus } from '@/lib/chat/focus';
 import type { ChatMessage } from '@/lib/chat/types';
 import { blurActiveElement } from '@/lib/a11y';
+import { localDayKey } from '@/lib/dates';
 import { saveHomeSurface } from '@/lib/homeSurface';
 import { rememberedCaptureHref } from '@/lib/captureContext';
 import { getHouseholdPeople } from '@/lib/people';
@@ -548,6 +549,7 @@ export function TalkOrb() {
       ];
 
       try {
+        const turnLocalDate = localDayKey();
         console.log('[Talk] → OpenAI', text, 'focus', focusItemIdRef.current);
         const result = await runChatAgent({
           messages: nextHistory,
@@ -564,6 +566,7 @@ export function TalkOrb() {
           },
           household: householdPeople,
           defaultCurrency: currencyRef.current,
+          localDate: turnLocalDate,
         });
         if (!openRef.current || !sessionActiveRef.current) return;
         const applied = await applyChatActions(
@@ -631,6 +634,7 @@ export function TalkOrb() {
             inventoryList: items.map((i) => ({ id: i.id, name: i.name })),
             lastFocusExpenseId: focusExpenseIdRef.current,
             lastTalkFocus: talkFocusRef.current,
+            localDate: turnLocalDate,
           }
         );
         if (applied.talkFocus) setTalkFocus(applied.talkFocus);
@@ -663,6 +667,7 @@ export function TalkOrb() {
           classPackTitle: applied.classPackTitle,
           classPackRemaining: applied.classPackRemaining,
           classPackTotal: applied.classPackTotal,
+          classPackScheduleTimeInferred: applied.classPackScheduleTimeInferred,
           classLoggedTitle: applied.classLoggedTitle,
           classLogAttemptFor: applied.classLogAttemptFor,
           reminderLabel: applied.reminderLabel,
@@ -1026,9 +1031,15 @@ export function TalkOrb() {
 
             <View style={styles.replySlot}>
               {reply ? (
-                <Text style={styles.reply}>{reply}</Text>
+                <View style={styles.replyBubble}>
+                  <Text style={styles.reply}>{reply}</Text>
+                </View>
               ) : null}
-              {error ? <Text style={styles.error}>{error}</Text> : null}
+              {error ? (
+                <View style={styles.errorBubble}>
+                  <Text style={styles.error}>{error}</Text>
+                </View>
+              ) : null}
             </View>
           </View>
         </View>
@@ -1245,24 +1256,42 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   replySlot: {
-    marginTop: spacing.lg,
+    marginTop: spacing.xl,
     minHeight: 88,
     width: '100%',
     alignItems: 'center',
     justifyContent: 'flex-start',
   },
+  replyBubble: {
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    width: '100%',
+  },
   reply: {
-    fontFamily: fonts.sans,
+    fontFamily: fonts.sansMedium,
     fontSize: 16,
     lineHeight: 24,
-    color: 'rgba(255,255,255,0.88)',
+    color: '#FFFFFF',
     textAlign: 'center',
     width: '100%',
   },
+  errorBubble: {
+    backgroundColor: 'rgba(246, 199, 122, 0.12)',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: 'rgba(246, 199, 122, 0.25)',
+    marginTop: spacing.sm,
+    width: '100%',
+  },
   error: {
-    marginTop: spacing.md,
     fontFamily: fonts.sans,
-    fontSize: 16,
+    fontSize: 15,
     color: '#F6C77A',
     textAlign: 'center',
     width: '100%',

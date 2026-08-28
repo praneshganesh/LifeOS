@@ -21,6 +21,10 @@ import { useHousehold } from '@/lib/HouseholdContext';
 import { selfMember } from '@/lib/people';
 import { sanitizeIntegerInput } from '@/lib/currency';
 import { addCalendarMonths, localDayKey } from '@/lib/dates';
+import {
+  SCHEDULE_DAYS,
+  type ScheduleDay,
+} from '@/lib/classes';
 import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
 
 const MONTH_CHIPS = [1, 2, 3, 6] as const;
@@ -35,12 +39,21 @@ export default function CreateClassPackScreen() {
   const { showToast, showError } = useToast();
   const [title, setTitle] = useState('');
   const [total, setTotal] = useState('24');
+  const [completed, setCompleted] = useState('0');
+  const [scheduleDays, setScheduleDays] = useState<ScheduleDay[]>([]);
+  const [scheduleTime, setScheduleTime] = useState('');
   const [months, setMonths] = useState(3);
   const [startsOn, setStartsOn] = useState(localDayKey());
   const [personId, setPersonId] = useState<string | null>(
     () => selfMember(members)?.id ?? null
   );
   const [saving, setSaving] = useState(false);
+
+  const toggleDay = (dayId: ScheduleDay) => {
+    setScheduleDays((prev) =>
+      prev.includes(dayId) ? prev.filter((d) => d !== dayId) : [...prev, dayId]
+    );
+  };
 
   const endsOn = useMemo(
     () => addCalendarMonths(startsOn, months),
@@ -50,6 +63,7 @@ export default function CreateClassPackScreen() {
   // Digits only — "24 classes" or "1,500" must not turn into NaN or a
   // silently coerced 1.
   const totalN = Math.round(Number(total.replace(/[^\d]/g, '')) || 0);
+  const completedN = Math.round(Number(completed.replace(/[^\d]/g, '')) || 0);
   const canSave = Boolean(title.trim()) && totalN > 0;
 
   async function save() {
@@ -59,6 +73,9 @@ export default function CreateClassPackScreen() {
       const pack = await addPack({
         title: title.trim(),
         total: totalN,
+        completed: completedN > 0 ? completedN : undefined,
+        scheduleDays: scheduleDays.length ? scheduleDays : undefined,
+        scheduleTime: scheduleTime.trim() || undefined,
         months,
         startsOn,
         endsOn,
@@ -108,6 +125,43 @@ export default function CreateClassPackScreen() {
             onChangeText={(t) => setTotal(sanitizeIntegerInput(t))}
             keyboardType="number-pad"
             placeholder="24"
+            placeholderTextColor={colors.faint}
+            style={styles.input}
+          />
+
+          <Text style={styles.label}>Already completed (optional)</Text>
+          <TextInput
+            value={completed}
+            onChangeText={(t) => setCompleted(sanitizeIntegerInput(t))}
+            keyboardType="number-pad"
+            placeholder="0"
+            placeholderTextColor={colors.faint}
+            style={styles.input}
+          />
+
+          <Text style={styles.label}>Schedule days (optional)</Text>
+          <View style={styles.chips}>
+            {SCHEDULE_DAYS.map((day) => {
+              const on = scheduleDays.includes(day.id);
+              return (
+                <Pressable
+                  key={day.id}
+                  onPress={() => toggleDay(day.id)}
+                  style={[styles.chip, on && styles.chipOn]}
+                >
+                  <Text style={[styles.chipText, on && styles.chipTextOn]}>
+                    {day.short}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <Text style={styles.label}>Schedule time (optional)</Text>
+          <TextInput
+            value={scheduleTime}
+            onChangeText={setScheduleTime}
+            placeholder="e.g. 10:00 AM"
             placeholderTextColor={colors.faint}
             style={styles.input}
           />

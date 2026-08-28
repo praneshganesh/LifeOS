@@ -26,6 +26,7 @@ import {
   daysInMonth,
 } from '../habitHeatmap';
 import { hrefFromNotificationData } from '../notificationHref';
+import { dayOnly } from '../chat/prompt';
 import { classifyDocumentFromText, parseMrzFromOcr } from '../ocr/mrz';
 
 describe('document classification', () => {
@@ -416,5 +417,34 @@ describe('notification deep links', () => {
       '/last-done/xyz'
     );
     assert.equal(hrefFromNotificationData({ href: 'https://evil' }), null);
+  });
+});
+
+describe('dayOnly prompt context date helper', () => {
+  it('normalizes valid ISO and ISO-like timestamps', () => {
+    assert.equal(dayOnly('2026-08-28'), '2026-08-28');
+    assert.equal(dayOnly('2026-08-28T10:30:00Z'), '2026-08-28');
+    assert.equal(dayOnly('2026-01-05T00:00:00.000Z'), '2026-01-05');
+  });
+
+  it('rejects impossible calendar dates', () => {
+    assert.equal(dayOnly('2026-99-99'), undefined);
+    assert.equal(dayOnly('2026-02-30'), undefined);
+    assert.equal(dayOnly('2026-04-31'), undefined);
+  });
+
+  it('rejects placeholders and non-date garbage strings', () => {
+    assert.equal(dayOnly('—'), undefined);
+    assert.equal(dayOnly('-'), undefined);
+    assert.equal(dayOnly('unknown'), undefined);
+    assert.equal(dayOnly('blah'), undefined);
+    assert.equal(dayOnly(''), undefined);
+    assert.equal(dayOnly(null), undefined);
+    assert.equal(dayOnly(undefined), undefined);
+  });
+
+  it('normalizes valid legacy parseable date strings', () => {
+    const res = dayOnly('March 5, 2026');
+    assert.equal(res, '2026-03-05');
   });
 });

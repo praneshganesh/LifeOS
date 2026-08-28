@@ -65,6 +65,7 @@ export function composeAppliedReply(params: {
   classPackTitle?: string | null;
   classPackRemaining?: number | null;
   classPackTotal?: number | null;
+  classPackScheduleTimeInferred?: boolean | null;
   classLoggedTitle?: string | null;
   classLogAttemptFor?: string | null;
   reminderLabel?: string | null;
@@ -138,7 +139,7 @@ export function composeAppliedReply(params: {
       const warranty = displayWarrantyExpiry(add.warrantyExpiry);
       if (warranty) bits.push(`warranty until ${warranty}`);
     }
-    return `${bits.join(' — ')}.`;
+    return `${bits.join(' · ')}.`;
   }
   if (actions.some((a) => a?.type === 'add_item')) {
     return 'Couldn’t add that — try again.';
@@ -152,8 +153,8 @@ export function composeAppliedReply(params: {
       : '';
     const verb = params.updatedExpense ? 'Updated' : 'Logged';
     return amt
-      ? `${verb} ${expense}${at} — ${amt}.`
-      : `${verb} that expense (${expense}${at}).`;
+      ? `${verb} ${expense}${at} · ${amt}.`
+      : `${verb} ${expense}${at}.`;
   }
   if (actions.some((a) => a?.type === 'add_expense')) {
     return 'Couldn’t log that expense — check the amount and try again.';
@@ -167,7 +168,7 @@ export function composeAppliedReply(params: {
     const amt = params.loggedSubscriptionAmount;
     const verb = params.updatedSubscription ? 'Updated' : 'Added';
     return amt
-      ? `${verb} ${subscription} — ${amt}.`
+      ? `${verb} ${subscription} · ${amt}.`
       : params.updatedSubscription
         ? `Updated ${subscription}.`
         : `Added ${subscription} to subscriptions.`;
@@ -191,7 +192,7 @@ export function composeAppliedReply(params: {
   if (params.reminderLabel) {
     const when = formatRemindDay(params.reminderAt);
     return when
-      ? `Reminder set: ${params.reminderLabel} — ${when}.`
+      ? `Reminder set: ${params.reminderLabel} · ${when}.`
       : `Reminder set: ${params.reminderLabel}.`;
   }
 
@@ -204,7 +205,7 @@ export function composeAppliedReply(params: {
     const total = params.classPackTotal;
     const who = params.assignedTo ? ` for ${params.assignedTo}` : '';
     if (left != null && total != null && total > 0) {
-      return `Logged ${params.classLoggedTitle}${who} — ${total - left} of ${total} used, ${left} left.`;
+      return `Logged ${params.classLoggedTitle}${who} · ${total - left} of ${total} used, ${left} left.`;
     }
     return `Logged ${params.classLoggedTitle}${who}.`;
   }
@@ -233,8 +234,12 @@ export function composeAppliedReply(params: {
     const who = params.assignedTo ? ` for ${params.assignedTo}` : '';
     const total = params.classPackTotal;
     const verb = params.updatedClassPack ? 'Updated' : 'Added';
+    const countStr = total && total > 0 ? ` · ${total} classes.` : '.';
+    if (!params.updatedClassPack && params.classPackScheduleTimeInferred) {
+      return `${verb} ${params.classPackTitle}${who}${countStr} I've assumed 9:00 AM since you didn't specify a time.`;
+    }
     return total && total > 0
-      ? `${verb} ${params.classPackTitle}${who} — ${total} classes.`
+      ? `${verb} ${params.classPackTitle}${who} · ${total} classes.`
       : `${verb} ${params.classPackTitle}${who}.`;
   }
   if (actions.some((a) => a?.type === 'add_class_pack' || a?.type === 'update_class_pack')) {

@@ -23,6 +23,7 @@ import { useExpenses } from '@/lib/ExpensesContext';
 import { useHabits } from '@/lib/HabitsContext';
 import { useClasses } from '@/lib/ClassesContext';
 import { useSubscriptions } from '@/lib/SubscriptionsContext';
+import { localDayKey } from '@/lib/dates';
 import {
   HABIT_CATEGORIES,
   completionRate,
@@ -229,6 +230,7 @@ export default function ChatScreen() {
 
     try {
       const newestId = items[0]?.id ?? null;
+      const turnLocalDate = localDayKey();
       // Ask keeps close/exit for the model; Talk overlay handles dismiss locally.
       const local = resolveLocalIntent(question, {
         focusItemId: focusItemIdRef.current,
@@ -255,6 +257,7 @@ export default function ChatScreen() {
               },
               household: householdPeople,
               defaultCurrency,
+              localDate: turnLocalDate,
             });
       const applied = await applyChatActions(
         result.actions,
@@ -321,6 +324,7 @@ export default function ChatScreen() {
           inventoryList: items.map((i) => ({ id: i.id, name: i.name })),
           lastFocusExpenseId: focusExpenseIdRef.current,
           lastTalkFocus: talkFocusRef.current,
+          localDate: turnLocalDate,
         }
       );
       if (applied.talkFocus) setTalkFocus(applied.talkFocus);
@@ -354,6 +358,7 @@ export default function ChatScreen() {
         classPackTitle: applied.classPackTitle,
         classPackRemaining: applied.classPackRemaining,
         classPackTotal: applied.classPackTotal,
+        classPackScheduleTimeInferred: applied.classPackScheduleTimeInferred,
         classLoggedTitle: applied.classLoggedTitle,
         classLogAttemptFor: applied.classLogAttemptFor,
         reminderLabel: applied.reminderLabel,

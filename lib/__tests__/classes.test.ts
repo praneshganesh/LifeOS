@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  classCompletedCountFromUtterance,
   classDeadlineFromUtterance,
   classPackFromUtterance,
+  classScheduleDaysFromUtterance,
+  classScheduleTimeFromUtterance,
   classTitleFromUtterance,
   createClassPack,
   findClassPack,
@@ -10,6 +13,8 @@ import {
   looksLikeClassAttendance,
   looksLikeClassEnrollment,
   mergeClassPackUpdate,
+  nextScheduledClassOccurrence,
+  normalizeScheduleDays,
   pickAttendancePack,
   remainingCount,
   toggleLogForDay,
@@ -139,6 +144,106 @@ describe('class packs', () => {
       pickAttendancePack([hers], { title: 'swimming', personId: 'you' }),
       undefined
     );
+  });
+
+  it('parses schedule days from utterance', () => {
+    assert.deepEqual(
+      classScheduleDaysFromUtterance('Ishaan has skating class every saturday from today'),
+      ['saturday']
+    );
+    assert.deepEqual(
+      classScheduleDaysFromUtterance('swimming on mondays and wednesdays'),
+      ['monday', 'wednesday']
+    );
+    assert.deepEqual(
+      classScheduleDaysFromUtterance('tennis class on weekends'),
+      ['saturday', 'sunday']
+    );
+  });
+
+  it('parses schedule time from utterance', () => {
+    assert.equal(
+      classScheduleTimeFromUtterance('Ishaan has skating class at 10 AM on saturdays'),
+      '10:00 AM'
+    );
+    assert.equal(
+      classScheduleTimeFromUtterance('piano class at 4:30 pm'),
+      '4:30 PM'
+    );
+  });
+
+  it('parses completed count from utterance', () => {
+    assert.equal(
+      classCompletedCountFromUtterance('out of the 12 classes, 6 are already done'),
+      6
+    );
+    assert.equal(
+      classCompletedCountFromUtterance('already completed 4 sessions'),
+      4
+    );
+  });
+
+  it('creates a pack with pre-filled completed sessions and schedule', () => {
+    const pack = createClassPack({
+      title: 'Skating',
+      total: 12,
+      completed: 6,
+      scheduleDays: ['saturday'],
+      scheduleTime: '10:00 AM',
+      startsOn: '2026-08-01',
+      endsOn: '2026-11-01',
+    });
+    assert.equal(pack.total, 12);
+    assert.equal(usedCount(pack), 6);
+    assert.equal(remainingCount(pack), 6);
+    assert.deepEqual(pack.scheduleDays, ['saturday']);
+    assert.equal(pack.scheduleTime, '10:00 AM');
+  });
+
+  it('calculates next scheduled occurrence correctly', () => {
+    // Friday Aug 28 2026
+    const friday = new Date(2026, 7, 28, 9, 0, 0);
+    const pack = createClassPack({
+      title: 'Skating',
+      total: 12,
+      scheduleDays: ['saturday'],
+      scheduleTime: '10:00 AM',
+      startsOn: '2026-08-01',
+      endsOn: '2026-11-01',
+    });
+    const occ = nextScheduledClassOccurrence(pack, friday);
+    assert.ok(occ);
+    assert.equal(occ.daysAhead, 1); // Saturday is tomorrow (1 day ahead)
+    assert.equal(occ.date, '2026-08-29');
+    assert.equal(occ.dayName, 'Saturday');
+  });
+
+  it('tracks scheduleTimeInferred when time is omitted vs explicitly supplied', () => {
+    // Explicit time -> scheduleTimeInferred is false
+    const explicitPack = createClassPack({
+      title: 'Skating',
+      scheduleDays: ['saturday'],
+      scheduleTime: '11:00 AM',
+    });
+    assert.equal(explicitPack.scheduleTime, '11:00 AM');
+    assert.equal(explicitPack.scheduleTimeInferred, false);
+
+    // Missing time -> defaults to 9:00 AM with scheduleTimeInferred true
+    const inferredPack = createClassPack({
+      title: 'Skating',
+      scheduleDays: ['saturday'],
+    });
+    assert.equal(inferredPack.scheduleTime, '9:00 AM');
+    assert.equal(inferredPack.scheduleTimeInferred, true);
+
+    // Updating inferred pack with explicit time clears inference
+    const updated = mergeClassPackUpdate(inferredPack, {
+      title: 'Skating',
+      scheduleTime: '11:00 AM',
+    });
+    assert.ok(updated);
+    assert.equal(updated.scheduleTime, '11:00 AM');
+    assert.equal(updated.scheduleTimeInferred, false);
   });
 });
 

@@ -76,7 +76,8 @@ export function buildDashboard(input: {
     input.inventory,
     input.lastDone,
     input.subscriptions,
-    input.classPacks
+    input.classPacks,
+    now
   );
 
   const overdue = attention.filter((a) => (a.daysLeft ?? 0) < 0).length;

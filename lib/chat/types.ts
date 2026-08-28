@@ -185,9 +185,12 @@ export type ChatUpdateClassPackAction = {
   patch: {
     title?: string;
     total?: number | string;
+    completed?: number | string;
     months?: number | string;
     startsOn?: string;
     endsOn?: string;
+    scheduleDays?: string[];
+    scheduleTime?: string;
     assignedTo?: string;
     personId?: string;
   };
@@ -271,9 +274,12 @@ export type ChatAddClassPackAction = {
   type: 'add_class_pack';
   title: string;
   total?: number | string;
+  completed?: number | string;
   months?: number | string;
   startsOn?: string;
   endsOn?: string;
+  scheduleDays?: string[];
+  scheduleTime?: string;
   assignedTo?: string;
   personId?: string;
 };
