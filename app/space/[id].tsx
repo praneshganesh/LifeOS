@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Redirect, Stack, useFocusEffect, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Pencil, Plus } from 'lucide-react-native';
+import { ChevronLeft, Pencil, Plus } from 'lucide-react-native';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { Card } from '@/components/ui/Card';
@@ -14,9 +14,10 @@ import { useInventory } from '@/lib/InventoryContext';
 import { useSpaces } from '@/lib/SpacesContext';
 import { inventoryToAsset } from '@/lib/mergeAssets';
 import { confirmDelete } from '@/lib/confirmDelete';
-import { type ThemeColors,  colors, radius, spacing  } from '@/constants/theme';
+import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
 import { blurActiveElement } from '@/lib/a11y';
 import { captureHref, kindFromSpace, rememberCaptureContext } from '@/lib/captureContext';
+import { useModuleBack } from '@/lib/useModuleBack';
 
 export default function SpaceDetailScreen() {
   const { colors } = useTheme();
@@ -29,6 +30,7 @@ export default function SpaceDetailScreen() {
   const { showError } = useToast();
   const { getSpace, roomsForSpace } = useSpaces();
   const scrollRef = useRef<ScrollView>(null);
+  const { backLabel, onBack: handleBack } = useModuleBack({ defaultOrigin: 'things' });
 
   useFocusEffect(
     useCallback(() => {
@@ -68,11 +70,15 @@ export default function SpaceDetailScreen() {
   if (!space) {
     return (
       <Screen>
-        <Stack.Screen options={{ title: 'Not found' }} />
-        <View style={styles.missing}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <View style={[styles.missing, { paddingTop: insets.top + spacing.lg }]}>
           <Text variant="bodyMedium" style={{ color: colors.mute }}>
             This place couldn’t be found.
           </Text>
+          <Pressable onPress={handleBack} style={styles.backBtn}>
+            <ChevronLeft size={20} color={colors.ink} strokeWidth={2.4} />
+            <Text style={styles.backLabel}>{backLabel}</Text>
+          </Pressable>
         </View>
       </Screen>
     );
@@ -80,15 +86,34 @@ export default function SpaceDetailScreen() {
 
   return (
     <Screen>
-      <Stack.Screen options={{ title: space.name }} />
+      <Stack.Screen options={{ headerShown: false }} />
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={[
           styles.content,
-          { paddingBottom: insets.bottom + 40 },
+          {
+            paddingTop: Math.max(insets.top, 12) + spacing.xs,
+            paddingBottom: insets.bottom + 40,
+          },
         ]}
         showsVerticalScrollIndicator={false}
       >
+        <View style={styles.topNav}>
+          <Pressable
+            onPress={handleBack}
+            style={({ pressed }) => [
+              styles.backBtn,
+              pressed && styles.backBtnPressed,
+            ]}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel={`Go back to ${backLabel}`}
+          >
+            <ChevronLeft size={20} color={colors.ink} strokeWidth={2.4} />
+            <Text style={styles.backLabel}>{backLabel}</Text>
+          </Pressable>
+        </View>
+
         <View style={styles.headerRow}>
           <Icon3DBadge name={space.icon} size={64} />
           <View style={styles.headerActions}>
@@ -218,6 +243,29 @@ function makeStyles(colors: ThemeColors) {
   content: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
+  },
+  topNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+    marginLeft: -6,
+  },
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingVertical: 6,
+    paddingHorizontal: 6,
+    borderRadius: radius.sm,
+  },
+  backBtnPressed: {
+    opacity: 0.65,
+  },
+  backLabel: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 15,
+    color: colors.ink,
+    letterSpacing: -0.2,
   },
   missing: {
     flex: 1,

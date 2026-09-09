@@ -162,11 +162,6 @@ export default function NewFamilyMemberScreen() {
               {saving ? 'Saving…' : 'Save'}
             </Text>
           </Pressable>
-          {!name.trim() ? (
-            <Text style={[styles.saveHint, { color: colors.mute }]}>
-              Add a name to save.
-            </Text>
-          ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
     </Screen>
@@ -221,11 +216,5 @@ const styles = StyleSheet.create({
   saveText: {
     fontFamily: fonts.sansSemi,
     fontSize: 16,
-  },
-  saveHint: {
-    fontFamily: fonts.sans,
-    fontSize: 14,
-    textAlign: 'center',
-    marginTop: spacing.sm,
   },
 });

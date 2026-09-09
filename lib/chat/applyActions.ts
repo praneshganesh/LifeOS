@@ -53,6 +53,7 @@ import {
   looksLikeReminder,
   normalizeWarrantyExpiry,
   remindAtFromUtterance,
+  parseReminderFromUtterance,
   reminderLabelFromUtterance,
   warrantyExpiryFromUtterance,
 } from '@/lib/dates';
@@ -82,6 +83,7 @@ type LastDoneApi = {
   setReminder?: (input: {
     label: string;
     remindAt: string;
+    notes?: string;
     inventoryItemId?: string | null;
     personId?: string | null;
     assignedTo?: string | null;
@@ -1150,7 +1152,9 @@ export async function applyChatActions(
         continue;
       }
       const spokenLabel = reminderLabelFromUtterance(lastUserText);
-      const label = (spokenLabel || action.label).trim();
+      const parsedReminder = parseReminderFromUtterance(lastUserText);
+      const label = (parsedReminder?.label || spokenLabel || action.label).trim();
+      const notes = parsedReminder?.notes?.trim() || action.note?.trim();
       const inventoryItemId =
         action.inventoryItemId?.trim() ||
         inventoryIdFromUtterance(lastUserText, options.inventoryList);
@@ -1164,6 +1168,7 @@ export async function applyChatActions(
       const saved = await options.lastDone.setReminder({
         label,
         remindAt,
+        notes,
         inventoryItemId: inventoryItemId ?? null,
         personId: person?.personId ?? null,
         assignedTo: person?.assignedTo ?? null,

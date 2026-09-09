@@ -20,8 +20,12 @@ export default function PurchaseDetailScreen() {
   }, [ready, id, item, router]);
 
   return (
-    <ModuleScreen title="Purchase">
-      <Stack.Screen options={{ title: 'Purchase' }} />
+    <ModuleScreen
+      title="Purchase"
+      backLabel="Purchases"
+      backFallbackHref="/purchases"
+    >
+      <Stack.Screen options={{ headerShown: false }} />
       <Text variant="body" style={{ color: colors.mute }}>
         {ready && !item
           ? 'That purchase isn’t in inventory anymore.'

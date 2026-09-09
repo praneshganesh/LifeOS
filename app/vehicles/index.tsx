@@ -80,6 +80,7 @@ export default function VehiclesScreen() {
     <ModuleScreen
       title="Vehicles"
       subtitle="Fleet, service, and linked gear — from your inventory."
+      defaultOrigin="things"
       right={
         <CaptureContextButton
           kind="vehicle"

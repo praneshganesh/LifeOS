@@ -7,10 +7,12 @@ import {
   displayWarrantyExpiry,
   localDayKey,
   normalizeWarrantyExpiry,
+  parseReminderFromUtterance,
   remindAtFromUtterance,
   reminderLabelFromUtterance,
   warrantyExpiryFromUtterance,
 } from '../dates';
+import { defaultActivityYear, yearsWithLogs } from '../lastDone';
 
 const APP_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -96,6 +98,23 @@ describe('localDayKey', () => {
   });
 });
 
+describe('last done year helpers', () => {
+  it('lists years with logs newest first and picks default', () => {
+    const item = {
+      id: 'ld-1',
+      label: 'Filter',
+      createdAt: '2026-01-01',
+      logs: [
+        { id: 'l1', doneAt: '2024-06-01' },
+        { id: 'l2', doneAt: '2026-03-15' },
+        { id: 'l3', doneAt: '2025-12-01' },
+      ],
+    };
+    assert.deepEqual(yearsWithLogs(item), [2026, 2025, 2024]);
+    assert.equal(defaultActivityYear(item), 2026);
+  });
+});
+
 describe('reminder speech', () => {
   it('maps next Tuesday from Saturday 15 Aug 2026 to 18 Aug', () => {
     const sat = new Date(2026, 7, 15);
@@ -112,5 +131,15 @@ describe('reminder speech', () => {
       ),
       'Apply for renewed passport'
     );
+  });
+
+  it('parses 10th November and splits label from notes', () => {
+    const sep = new Date(2026, 8, 1);
+    const utterance =
+      "Remind me about Mira's payment on 10th November it's for a off plan property purchase";
+    assert.equal(remindAtFromUtterance(utterance, sep), '2026-11-10');
+    const parsed = parseReminderFromUtterance(utterance);
+    assert.equal(parsed?.label, "Mira's payment");
+    assert.match(parsed?.notes ?? '', /off plan property/i);
   });
 });

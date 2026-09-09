@@ -7,8 +7,9 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { Animated, Platform, StyleSheet } from 'react-native';
+import { Animated, Platform, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AlertCircle, CheckCircle2 } from 'lucide-react-native';
 import { fonts, radius, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
 
@@ -80,15 +81,21 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             {
               opacity,
               bottom: insets.bottom + 84,
-              backgroundColor: tone === 'error' ? colors.coral : colors.ink,
+              backgroundColor: colors.bgElevated,
+              borderColor: tone === 'error' ? colors.coral : colors.line,
             },
           ]}
         >
-          <Animated.Text
-            style={[styles.text, { color: tone === 'error' ? '#FFFFFF' : colors.onInk }]}
-          >
-            {message}
-          </Animated.Text>
+          {tone === 'error' ? (
+            <AlertCircle size={18} color={colors.coral} strokeWidth={2.2} />
+          ) : (
+            <CheckCircle2 size={18} color={colors.accent} strokeWidth={2.2} />
+          )}
+          <View style={{ flexShrink: 1 }}>
+            <Animated.Text style={[styles.text, { color: colors.ink }]}>
+              {message}
+            </Animated.Text>
+          </View>
         </Animated.View>
       ) : null}
     </ToastContext.Provider>
@@ -106,19 +113,22 @@ const styles = StyleSheet.create({
     position: 'absolute',
     alignSelf: 'center',
     maxWidth: '86%',
-    paddingHorizontal: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: spacing.md,
     paddingVertical: 12,
-    borderRadius: radius.full,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
     shadowColor: '#000',
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
+    shadowOpacity: 0.16,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
     zIndex: 200,
   },
   text: {
     fontFamily: fonts.sansMedium,
     fontSize: 15,
-    textAlign: 'center',
   },
 });

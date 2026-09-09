@@ -45,7 +45,11 @@ export default function ExpenseDetailScreen() {
 
   if (!expense) {
     return (
-      <ModuleScreen title="Not found">
+      <ModuleScreen
+        title="Not found"
+        backLabel="Expenses"
+        backFallbackHref="/expenses"
+      >
         <Text variant="body">Expense not found.</Text>
       </ModuleScreen>
     );
@@ -55,8 +59,10 @@ export default function ExpenseDetailScreen() {
     <ModuleScreen
       title={expense.title}
       subtitle={formatAmount(expense.amount, expense.currency)}
+      backLabel="Expenses"
+      backFallbackHref="/expenses"
     >
-      <Stack.Screen options={{ title: '' }} />
+      <Stack.Screen options={{ headerShown: false }} />
       <ListCard>
         <ListRow title="Amount" meta={formatAmount(expense.amount, expense.currency)} />
         <ListRow title="Date" meta={expense.date} />

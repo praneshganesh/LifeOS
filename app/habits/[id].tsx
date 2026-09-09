@@ -102,7 +102,11 @@ export default function HabitDetailScreen() {
 
   if (!habit) {
     return (
-      <ModuleScreen title="Not found">
+      <ModuleScreen
+        title="Not found"
+        backLabel="Habits"
+        backFallbackHref="/habits"
+      >
         <Text variant="body">Habit not found.</Text>
       </ModuleScreen>
     );
@@ -113,8 +117,13 @@ export default function HabitDetailScreen() {
   const rate = completionRate(habit, 30);
 
   return (
-    <ModuleScreen title={habit.title} subtitle={habit.why || cat.name}>
-      <Stack.Screen options={{ title: '' }} />
+    <ModuleScreen
+      title={habit.title}
+      subtitle={habit.why || cat.name}
+      backLabel="Habits"
+      backFallbackHref="/habits"
+    >
+      <Stack.Screen options={{ headerShown: false }} />
       <HabitCard
         habit={habit}
         interactive

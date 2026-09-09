@@ -32,6 +32,8 @@ export default function AppearanceSettingsScreen() {
     <ModuleScreen
       title="Appearance"
       subtitle={`${FAMILY_LABEL[family]} · ${resolved} · Figtree.`}
+      backLabel="Settings"
+      backFallbackHref="/settings"
     >
       <ModuleSection label="Palette">
         <View style={styles.grid}>

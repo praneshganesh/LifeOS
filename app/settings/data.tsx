@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Alert, Platform, StyleSheet, TextInput, View } from 'react-native';
-import { useRouter, type Href } from 'expo-router';
+import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import Constants from 'expo-constants';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { ListCard, ListRow } from '@/components/ui/ListKit';
@@ -62,10 +62,20 @@ export default function DataSettingsScreen() {
     [items, expenses, habits, subscriptions, lastDone, members]
   );
 
-  useEffect(() => {
-    void loadCloudMeta().then(setMeta);
-    void loadRecoveryCode().then(setRecovery);
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      let live = true;
+      void loadCloudMeta().then((m) => {
+        if (live) setMeta(m);
+      });
+      void loadRecoveryCode().then((code) => {
+        if (live) setRecovery(code);
+      });
+      return () => {
+        live = false;
+      };
+    }, [])
+  );
 
   async function onExport() {
     if (busy) return;
@@ -198,6 +208,8 @@ export default function DataSettingsScreen() {
     <ModuleScreen
       title="Export & backup"
       subtitle="On this phone, plus a cloud copy when Supabase is configured."
+      backLabel="Settings"
+      backFallbackHref="/settings"
     >
       {loadFailures.length ? (
         <View

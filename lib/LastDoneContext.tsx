@@ -19,6 +19,7 @@ import {
   parseDateInput,
   resolveRemindAt,
   sortByMostRecent,
+  startOfDayISO,
   type LastDoneItem,
   type LogDoneInput,
   type RemindInterval,
@@ -50,6 +51,7 @@ type LastDoneContextValue = {
   setReminder: (input: {
     label: string;
     remindAt: string;
+    notes?: string;
     inventoryItemId?: string | null;
     personId?: string | null;
     assignedTo?: string | null;
@@ -61,7 +63,12 @@ type LastDoneContextValue = {
    */
   updateActivity: (
     id: string,
-    patch: { label?: string; remindInterval?: RemindInterval | null }
+    patch: {
+      label?: string;
+      notes?: string | null;
+      remindAt?: string | null;
+      remindInterval?: RemindInterval | null;
+    }
   ) => Promise<LastDoneItem>;
   /** Delete the whole activity (all logs). */
   remove: (id: string) => Promise<void>;
@@ -281,6 +288,7 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
     async (input: {
       label: string;
       remindAt: string;
+      notes?: string;
       inventoryItemId?: string | null;
       personId?: string | null;
       assignedTo?: string | null;
@@ -318,6 +326,7 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
         const updated: LastDoneItem = {
           ...match,
           ...remindFields,
+          ...(input.notes?.trim() ? { notes: input.notes.trim() } : {}),
           ...(linkId ? { inventoryItemId: linkId } : {}),
           ...(personId ? { personId, assignedTo: assignedTo || match.assignedTo } : {}),
         };
@@ -329,6 +338,7 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
       const created = createLastDoneItem(label, {
         doneAt: null,
         remindAt: remindFields.remindAt,
+        notes: input.notes?.trim(),
         inventoryItemId: linkId,
         personId,
         assignedTo,
@@ -343,7 +353,12 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
   const updateActivity = useCallback(
     async (
       id: string,
-      patch: { label?: string; remindInterval?: RemindInterval | null }
+      patch: {
+        label?: string;
+        notes?: string | null;
+        remindAt?: string | null;
+        remindInterval?: RemindInterval | null;
+      }
     ) => {
       const list = itemsRef.current;
       const existing = list.find((i) => i.id === id);
@@ -353,6 +368,25 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
         const label = normalizeLabel(patch.label);
         if (!label) throw new Error('Label required');
         updated = { ...updated, label };
+      }
+      if (patch.notes !== undefined) {
+        const notes = patch.notes?.trim();
+        updated = notes
+          ? { ...updated, notes }
+          : { ...updated, notes: undefined };
+      }
+      if (patch.remindAt !== undefined) {
+        if (patch.remindAt === null) {
+          updated = { ...updated, remindAt: undefined, remindInterval: undefined };
+        } else {
+          const parsed = parseDateInput(patch.remindAt);
+          if (!parsed) throw new Error('Invalid reminder date');
+          updated = {
+            ...updated,
+            remindAt: startOfDayISO(parsed),
+            remindInterval: undefined,
+          };
+        }
       }
       if (patch.remindInterval !== undefined) {
         if (patch.remindInterval === null) {

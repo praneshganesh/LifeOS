@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   ensureReminderActions,
+  parseReminderFromUtterance,
   remindAtFromUtterance,
   reminderLabelFromUtterance,
 } from '../reminders.mjs';
@@ -31,5 +32,20 @@ describe('chat-api reminder repair', () => {
       ),
       'Apply for renewed passport'
     );
+  });
+
+  it('parses calendar day and splits label from notes', () => {
+    const sep = new Date(2026, 8, 1);
+    const utterance =
+      "Remind me about Mira's payment on 10th November it's for a off plan property purchase";
+    assert.equal(remindAtFromUtterance(utterance, sep), '2026-11-10');
+    const parsed = parseReminderFromUtterance(utterance);
+    assert.equal(parsed?.label, "Mira's payment");
+    assert.match(parsed?.notes ?? '', /off plan property/i);
+    const next = ensureReminderActions([], utterance, []);
+    assert.equal(next[0]?.type, 'set_reminder');
+    assert.equal(next[0]?.label, "Mira's payment");
+    assert.equal(next[0]?.remindAt, '2026-11-10');
+    assert.match(next[0]?.note ?? '', /off plan property/i);
   });
 });

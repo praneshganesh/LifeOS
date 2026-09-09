@@ -45,6 +45,7 @@ export default function SubscriptionsScreen() {
     <ModuleScreen
       title="Subscriptions"
       subtitle="Your recurring spend."
+      defaultOrigin="things"
       right={
         <Pressable
           onPress={() => router.push('/subscriptions/create' as Href)}

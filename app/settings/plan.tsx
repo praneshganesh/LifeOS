@@ -17,7 +17,8 @@ import {
   type PlanId,
   type PlanPrefs,
 } from '@/lib/planLimits';
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { fonts, radius, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
 
@@ -28,9 +29,17 @@ export default function PlanSettingsScreen() {
   const { members } = useHousehold();
   const [prefs, setPrefs] = useState<PlanPrefs>({ planId: 'trial' });
 
-  useEffect(() => {
-    void loadPlanPrefs().then(setPrefs);
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      let live = true;
+      void loadPlanPrefs().then((p) => {
+        if (live) setPrefs(p);
+      });
+      return () => {
+        live = false;
+      };
+    }, [])
+  );
 
   const usage = useMemo(
     () => ({
@@ -67,7 +76,12 @@ export default function PlanSettingsScreen() {
   }
 
   return (
-    <ModuleScreen title="Plan & billing" subtitle={subtitle}>
+    <ModuleScreen
+      title="Plan & billing"
+      subtitle={subtitle}
+      backLabel="Settings"
+      backFallbackHref="/settings"
+    >
       <ModuleSection label="Your usage">
         <ListCard>
           <MeterRow title="Things" meter={meters.assets} colors={colors} />

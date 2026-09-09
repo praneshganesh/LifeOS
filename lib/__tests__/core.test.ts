@@ -28,6 +28,20 @@ import {
 import { hrefFromNotificationData } from '../notificationHref';
 import { dayOnly } from '../chat/prompt';
 import { classifyDocumentFromText, parseMrzFromOcr } from '../ocr/mrz';
+import { moduleHref, moduleHrefPreserveFrom, parseModuleOrigin } from '../moduleNav';
+
+describe('module navigation', () => {
+  it('builds hrefs with from param and parses origins', () => {
+    assert.equal(moduleHref('/expenses', 'things'), '/expenses?from=things');
+    assert.equal(
+      moduleHrefPreserveFrom('/expenses/exp-1', 'things'),
+      '/expenses/exp-1?from=things'
+    );
+    assert.equal(parseModuleOrigin('today'), 'today');
+    assert.equal(parseModuleOrigin('things'), 'things');
+    assert.equal(parseModuleOrigin('nope'), undefined);
+  });
+});
 
 describe('document classification', () => {
   it('does not classify UAE grocery receipts as passport (PB No false positive)', () => {

@@ -105,6 +105,8 @@ export default function SecuritySettingsScreen() {
     <ModuleScreen
       title="Security"
       subtitle="Biometrics stay on this device — Saavi never sees your Face ID data."
+      backLabel="Settings"
+      backFallbackHref="/settings"
     >
       <ModuleSection label="Device">
         <ListCard>

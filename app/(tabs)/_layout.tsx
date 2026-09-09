@@ -32,7 +32,7 @@ export default function TabLayout() {
           },
         }}
       />
-      <Tabs.Screen name="spaces" options={{ href: null, title: 'Things' }} />
+      <Tabs.Screen name="spaces" options={{ href: null, title: 'Life' }} />
       <Tabs.Screen name="done" options={{ href: null }} />
       <Tabs.Screen name="search" options={{ href: null }} />
       <Tabs.Screen name="ai" options={{ href: null }} />

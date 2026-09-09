@@ -1,11 +1,15 @@
 import { useMemo, useState } from 'react';
 import {
+  Platform,
   Pressable,
   StyleSheet,
   View,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
+import DateTimePicker, {
+  type DateTimePickerEvent,
+} from '@react-native-community/datetimepicker';
 import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { parseDateInput, toDateInputValue } from '@/lib/lastDone';
@@ -13,6 +17,7 @@ import { fonts, radius, shadows, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
 
 const WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'] as const;
+const IS_NATIVE = Platform.OS === 'ios' || Platform.OS === 'android';
 
 function toDate(value: string): Date {
   return parseDateInput(value) ?? new Date();
@@ -20,6 +25,19 @@ function toDate(value: string): Date {
 
 function startOfDay(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function endOfDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+}
+
+/** Bound dates to calendar-day edges so time-of-day doesn't grey out today / tomorrow. */
+function boundMinimum(d?: Date) {
+  return d ? startOfDay(d) : undefined;
+}
+
+function boundMaximum(d?: Date) {
+  return d ? endOfDay(d) : undefined;
 }
 
 function sameDay(a: Date, b: Date) {
@@ -49,7 +67,6 @@ function buildMonthGrid(view: Date): (Date | null)[] {
   const year = view.getFullYear();
   const month = view.getMonth();
   const first = new Date(year, month, 1);
-  // JS: 0=Sun … convert to Mon=0 … Sun=6
   const startPad = (first.getDay() + 6) % 7;
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const cells: (Date | null)[] = [];
@@ -76,66 +93,84 @@ type Props = {
   style?: StyleProp<ViewStyle>;
   /** Start with the calendar open (e.g. inside an already-expanded sheet). */
   defaultOpen?: boolean;
+  /**
+   * Calendar-only mode for sheets that already have a date chip.
+   * Hides the summary row and stays open after picking a day.
+   */
+  embedded?: boolean;
 };
 
-/** App-styled date field + calendar — no browser native picker. */
-export function DateField({
+function NativeDatePicker({
   value,
   onChange,
   maximumDate,
   minimumDate,
-  style,
-  defaultOpen = false,
-}: Props) {
+  embedded,
+}: {
+  value: string;
+  onChange: (yyyyMmDd: string) => void;
+  maximumDate?: Date;
+  minimumDate?: Date;
+  embedded: boolean;
+}) {
   const { colors } = useTheme();
   const resolved = value || toDateInputValue(new Date());
   const selected = toDate(resolved);
-  const today = startOfDay(new Date());
+  const [androidOpen, setAndroidOpen] = useState(embedded);
+  const [iosExpanded, setIosExpanded] = useState(embedded);
 
-  const [open, setOpen] = useState(defaultOpen);
-  const [view, setView] = useState(
-    () => new Date(selected.getFullYear(), selected.getMonth(), 1)
-  );
+  const minBound = boundMinimum(minimumDate);
+  const maxBound = boundMaximum(maximumDate);
 
-  const cells = useMemo(() => buildMonthGrid(view), [view]);
-
-  function selectDay(day: Date) {
-    if (isDisabled(day, minimumDate, maximumDate)) return;
-    onChange(toDateInputValue(day));
-    setOpen(false);
+  function onNativeChange(event: DateTimePickerEvent, date?: Date) {
+    if (Platform.OS === 'android') {
+      setAndroidOpen(false);
+      if (event.type !== 'set' || !date) return;
+    }
+    if (!date) return;
+    onChange(toDateInputValue(date));
   }
 
-  function goMonth(delta: number) {
-    setView((v) => new Date(v.getFullYear(), v.getMonth() + delta, 1));
-  }
+  if (Platform.OS === 'ios') {
+    // Embedded sheet: full inline calendar. Form fields: compact chip + expand.
+    if (embedded || iosExpanded) {
+      return (
+        <View
+          style={[
+            styles.nativeWrap,
+            { backgroundColor: colors.surface, borderColor: colors.line },
+          ]}
+        >
+          {!embedded ? (
+            <Pressable
+              onPress={() => setIosExpanded(false)}
+              hitSlop={8}
+              style={styles.nativeCloseRow}
+            >
+              <Text style={[styles.changeHint, { color: colors.accent }]}>Done</Text>
+            </Pressable>
+          ) : null}
+          <DateTimePicker
+            value={selected}
+            mode="date"
+            display="inline"
+            onChange={onNativeChange}
+            maximumDate={maxBound}
+            minimumDate={minBound}
+            style={styles.iosInline}
+          />
+        </View>
+      );
+    }
 
-  function jumpToday() {
-    if (isDisabled(today, minimumDate, maximumDate)) return;
-    setView(new Date(today.getFullYear(), today.getMonth(), 1));
-    onChange(toDateInputValue(today));
-    setOpen(false);
-  }
-
-  return (
-    <View style={style}>
+    return (
       <Pressable
-        onPress={() => {
-          setOpen((o) => {
-            if (!o) {
-              setView(new Date(selected.getFullYear(), selected.getMonth(), 1));
-            }
-            return !o;
-          });
-        }}
+        onPress={() => setIosExpanded(true)}
         style={({ pressed }) => [
           styles.field,
           {
             backgroundColor: colors.surface,
             borderColor: colors.lineStrong,
-          },
-          open && {
-            borderColor: colors.accentStrong,
-            backgroundColor: colors.accentWash,
           },
           pressed && { opacity: 0.92 },
         ]}
@@ -146,15 +181,130 @@ export function DateField({
         <Text style={[styles.fieldText, { color: colors.ink }]} numberOfLines={1}>
           {formatDisplay(resolved)}
         </Text>
-        <Text style={[styles.changeHint, { color: colors.accent }]}>
-          {open ? 'Close' : 'Change'}
-        </Text>
+        <Text style={[styles.changeHint, { color: colors.accent }]}>Change</Text>
       </Pressable>
+    );
+  }
+
+  // Android: system dialog
+  return (
+    <View>
+      <Pressable
+        onPress={() => setAndroidOpen(true)}
+        style={({ pressed }) => [
+          styles.field,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.lineStrong,
+          },
+          pressed && { opacity: 0.92 },
+        ]}
+      >
+        <View style={[styles.iconWrap, { backgroundColor: colors.accentSoft }]}>
+          <Calendar size={16} color={colors.accent} strokeWidth={2.2} />
+        </View>
+        <Text style={[styles.fieldText, { color: colors.ink }]} numberOfLines={1}>
+          {formatDisplay(resolved)}
+        </Text>
+        <Text style={[styles.changeHint, { color: colors.accent }]}>Change</Text>
+      </Pressable>
+      {androidOpen ? (
+        <DateTimePicker
+          value={selected}
+          mode="date"
+          display="default"
+          onChange={onNativeChange}
+          maximumDate={maxBound}
+          minimumDate={minBound}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+/** Custom grid — web only. Native uses the system picker above. */
+function WebDatePicker({
+  value,
+  onChange,
+  maximumDate,
+  minimumDate,
+  defaultOpen,
+  embedded,
+  style,
+}: Props) {
+  const { colors } = useTheme();
+  const resolved = value || toDateInputValue(new Date());
+  const selected = toDate(resolved);
+  const today = startOfDay(new Date());
+
+  const [open, setOpen] = useState(defaultOpen || embedded);
+  const [view, setView] = useState(
+    () => new Date(selected.getFullYear(), selected.getMonth(), 1)
+  );
+  const [gridW, setGridW] = useState(0);
+
+  const cells = useMemo(() => buildMonthGrid(view), [view]);
+  const cellSize = gridW > 0 ? Math.floor(gridW / 7) : 0;
+
+  function selectDay(day: Date) {
+    if (isDisabled(day, minimumDate, maximumDate)) return;
+    onChange(toDateInputValue(day));
+    if (!embedded) setOpen(false);
+  }
+
+  function goMonth(delta: number) {
+    setView((v) => new Date(v.getFullYear(), v.getMonth() + delta, 1));
+  }
+
+  function jumpToday() {
+    if (isDisabled(today, minimumDate, maximumDate)) return;
+    setView(new Date(today.getFullYear(), today.getMonth(), 1));
+    onChange(toDateInputValue(today));
+    if (!embedded) setOpen(false);
+  }
+
+  return (
+    <View style={style}>
+      {embedded ? null : (
+        <Pressable
+          onPress={() => {
+            setOpen((o) => {
+              if (!o) {
+                setView(new Date(selected.getFullYear(), selected.getMonth(), 1));
+              }
+              return !o;
+            });
+          }}
+          style={({ pressed }) => [
+            styles.field,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.lineStrong,
+            },
+            open && {
+              borderColor: colors.accentStrong,
+              backgroundColor: colors.accentWash,
+            },
+            pressed && { opacity: 0.92 },
+          ]}
+        >
+          <View style={[styles.iconWrap, { backgroundColor: colors.accentSoft }]}>
+            <Calendar size={16} color={colors.accent} strokeWidth={2.2} />
+          </View>
+          <Text style={[styles.fieldText, { color: colors.ink }]} numberOfLines={1}>
+            {formatDisplay(resolved)}
+          </Text>
+          <Text style={[styles.changeHint, { color: colors.accent }]}>
+            {open ? 'Close' : 'Change'}
+          </Text>
+        </Pressable>
+      )}
 
       {open ? (
         <View
           style={[
             styles.panel,
+            embedded && styles.panelEmbedded,
             { backgroundColor: colors.surface, borderColor: colors.line },
           ]}
         >
@@ -162,6 +312,8 @@ export function DateField({
             <Pressable
               onPress={() => goMonth(-1)}
               hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Previous month"
               style={({ pressed }) => [
                 styles.navBtn,
                 { backgroundColor: colors.surfaceSoft },
@@ -174,6 +326,8 @@ export function DateField({
             <Pressable
               onPress={() => goMonth(1)}
               hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Next month"
               style={({ pressed }) => [
                 styles.navBtn,
                 { backgroundColor: colors.surfaceSoft },
@@ -192,10 +346,21 @@ export function DateField({
             ))}
           </View>
 
-          <View style={styles.grid}>
+          <View
+            style={styles.grid}
+            onLayout={(e) => {
+              const w = Math.floor(e.nativeEvent.layout.width);
+              if (w > 0 && w !== gridW) setGridW(w);
+            }}
+          >
             {cells.map((day, i) => {
               if (!day) {
-                return <View key={`e-${i}`} style={styles.dayCell} />;
+                return (
+                  <View
+                    key={`e-${i}`}
+                    style={cellSize > 0 ? { width: cellSize, height: cellSize } : styles.dayCellFallback}
+                  />
+                );
               }
               const disabled = isDisabled(day, minimumDate, maximumDate);
               const isSelected = sameDay(day, selected);
@@ -205,14 +370,21 @@ export function DateField({
                   key={toDateInputValue(day)}
                   disabled={disabled}
                   onPress={() => selectDay(day)}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled, selected: isSelected }}
+                  accessibilityLabel={toDateInputValue(day)}
                   style={({ pressed }) => [
-                    styles.dayCell,
+                    cellSize > 0
+                      ? { width: cellSize, height: cellSize }
+                      : styles.dayCellFallback,
+                    styles.dayCellInner,
                     isSelected && { backgroundColor: colors.accent },
                     !isSelected && isToday && { borderWidth: 1, borderColor: colors.accentSoft },
                     pressed && !disabled && !isSelected && { backgroundColor: colors.accentWash },
                   ]}
                 >
                   <Text
+                    pointerEvents="none"
                     style={[
                       styles.dayText,
                       { color: colors.ink },
@@ -237,6 +409,24 @@ export function DateField({
       ) : null}
     </View>
   );
+}
+
+/** App-styled date field — native system picker on iOS/Android, custom grid on web. */
+export function DateField(props: Props) {
+  if (IS_NATIVE) {
+    return (
+      <View style={props.style}>
+        <NativeDatePicker
+          value={props.value}
+          onChange={props.onChange}
+          maximumDate={props.maximumDate}
+          minimumDate={props.minimumDate}
+          embedded={Boolean(props.embedded || props.defaultOpen)}
+        />
+      </View>
+    );
+  }
+  return <WebDatePicker {...props} />;
 }
 
 type OptionalProps = Props & {
@@ -315,12 +505,32 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sansMedium,
     fontSize: 16,
   },
+  nativeWrap: {
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+    alignItems: 'center',
+  },
+  nativeCloseRow: {
+    alignSelf: 'flex-end',
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+  },
+  iosInline: {
+    // Inline calendar needs explicit size on iOS or hit targets collapse.
+    alignSelf: 'stretch',
+    width: '100%',
+    minHeight: 320,
+  },
   panel: {
     marginTop: 8,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
     padding: spacing.md,
     ...shadows.soft,
+  },
+  panelEmbedded: {
+    marginTop: 0,
   },
   monthBar: {
     flexDirection: 'row',
@@ -353,10 +563,13 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    width: '100%',
   },
-  dayCell: {
+  dayCellFallback: {
     width: '14.2857%',
     aspectRatio: 1,
+  },
+  dayCellInner: {
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 10,

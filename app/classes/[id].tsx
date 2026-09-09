@@ -88,7 +88,11 @@ export default function ClassPackDetailScreen() {
 
   if (!pack) {
     return (
-      <ModuleScreen title="Not found">
+      <ModuleScreen
+        title="Not found"
+        backLabel="Classes"
+        backFallbackHref="/classes"
+      >
         <Text variant="body">Class pack not found.</Text>
       </ModuleScreen>
     );
@@ -127,8 +131,10 @@ export default function ClassPackDetailScreen() {
     <ModuleScreen
       title={pack.title}
       subtitle={ownerName ? `For ${ownerName}` : 'Class pack'}
+      backLabel="Classes"
+      backFallbackHref="/classes"
     >
-      <Stack.Screen options={{ title: '' }} />
+      <Stack.Screen options={{ headerShown: false }} />
 
       <View style={styles.hero}>
         <Text style={styles.big}>

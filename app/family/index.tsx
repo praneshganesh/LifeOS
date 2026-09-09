@@ -63,6 +63,7 @@ export default function FamilyScreen() {
     <ModuleScreen
       title="Household"
       subtitle="People and pets who own things in Saavi — assign habits, classes, and documents to them."
+      defaultOrigin="things"
       right={
         <CaptureContextButton
           kind="family"

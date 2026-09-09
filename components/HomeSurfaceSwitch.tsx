@@ -16,7 +16,13 @@ export function HomeSurfaceSwitch({ value }: { value: HomeSurface }) {
     if (next === value) return;
     blurActiveElement();
     void saveHomeSurface(next);
-    router.replace((next === 'ask' ? '/(tabs)/ask' : '/(tabs)') as Href);
+    const href =
+      next === 'ask'
+        ? '/(tabs)/ask'
+        : next === 'things'
+          ? '/(tabs)/spaces'
+          : '/(tabs)';
+    router.replace(href as Href);
   }
 
   return (
@@ -26,7 +32,11 @@ export function HomeSurfaceSwitch({ value }: { value: HomeSurface }) {
         active={value === 'today'}
         onPress={() => go('today')}
       />
-      <Tab label="Ask" active={value === 'ask'} onPress={() => go('ask')} />
+      <Tab
+        label="Life"
+        active={value === 'things'}
+        onPress={() => go('things')}
+      />
     </View>
   );
 }

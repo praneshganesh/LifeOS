@@ -26,6 +26,8 @@ export type LastDoneItem = {
   assignedTo?: string;
   /** Absolute next-reminder date, if set */
   remindAt?: string;
+  /** Extra context the user spoke — not shown in lists. */
+  notes?: string;
   /**
    * Optional recurring interval. When set, each mark-done
    * rolls remindAt forward from the new done date.
@@ -104,6 +106,38 @@ export function formatRemindStatus(iso: string, now = new Date()): string {
   if (days < 30) return `Remind in ${days}d`;
   const months = Math.round(days / 30);
   return months === 1 ? 'Remind in 1 mo' : `Remind in ${months} mo`;
+}
+
+/** Full calendar date for reminder detail screens. */
+export function formatRemindDate(iso: string): string {
+  const d = parseDateInput(iso);
+  if (!d) return iso;
+  return d.toLocaleDateString(undefined, {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+/** Heatmap only makes sense once the user has logged completions. */
+export function hasActivityHistory(item: LastDoneItem): boolean {
+  return (item.logs?.length ?? 0) > 0;
+}
+
+/** Calendar years that have at least one log, newest first. */
+export function yearsWithLogs(item: LastDoneItem): number[] {
+  const years = new Set<number>();
+  for (const log of item.logs ?? []) {
+    const d = parseDateInput(log.doneAt);
+    if (d) years.add(d.getFullYear());
+  }
+  return [...years].sort((a, b) => b - a);
+}
+
+/** Default year grid — most recent year with activity, else this year. */
+export function defaultActivityYear(item: LastDoneItem, now = new Date()): number {
+  return yearsWithLogs(item)[0] ?? now.getFullYear();
 }
 
 export function formatInterval(interval: RemindInterval): string {
@@ -190,6 +224,9 @@ export function normalizeItem(raw: unknown): LastDoneItem | null {
     item.assignedTo = r.assignedTo.trim();
   }
   if (typeof r.remindAt === 'string') item.remindAt = r.remindAt;
+  if (typeof r.notes === 'string' && r.notes.trim()) {
+    item.notes = r.notes.trim();
+  }
   if (
     r.remindInterval &&
     typeof r.remindInterval === 'object' &&
@@ -330,6 +367,7 @@ export function createLastDoneItem(
     inventoryItemId?: string;
     personId?: string;
     assignedTo?: string;
+    notes?: string;
   } = {}
 ): LastDoneItem {
   const createdAt = new Date().toISOString();
@@ -341,6 +379,7 @@ export function createLastDoneItem(
   };
   if (opts.remindAt) item.remindAt = opts.remindAt;
   if (opts.remindInterval) item.remindInterval = opts.remindInterval;
+  if (opts.notes?.trim()) item.notes = opts.notes.trim();
   if (opts.inventoryItemId) item.inventoryItemId = opts.inventoryItemId;
   if (opts.personId) item.personId = opts.personId;
   if (opts.assignedTo) item.assignedTo = opts.assignedTo;

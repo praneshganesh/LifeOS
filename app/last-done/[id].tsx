@@ -9,9 +9,9 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Trash2 } from 'lucide-react-native';
+import { ChevronLeft, Trash2 } from 'lucide-react-native';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import {
@@ -20,10 +20,16 @@ import {
 } from '@/components/LastDoneActivityCard';
 import { useLastDone } from '@/lib/LastDoneContext';
 import { useToast } from '@/lib/ToastContext';
+import { DateField } from '@/components/ui/DateField';
 import {
+  defaultActivityYear,
   formatRelativeDone,
+  formatRemindDate,
   formatRemindStatus,
+  hasActivityHistory,
   sortLogsNewestFirst,
+  toDateInputValue,
+  yearsWithLogs,
   type RemindInterval,
 } from '@/lib/lastDone';
 import { categorizeLastDone, paintLastDoneCategory } from '@/lib/lastDoneCategories';
@@ -66,9 +72,16 @@ export default function LastDoneDetailScreen() {
   );
 
   const [labelDraft, setLabelDraft] = useState('');
+  const [notesDraft, setNotesDraft] = useState('');
+  const [calendarYear, setCalendarYear] = useState(() => new Date().getFullYear());
+  const [pickingSpecificDate, setPickingSpecificDate] = useState(false);
   useEffect(() => {
-    if (item) setLabelDraft(item.label);
-  }, [item]);
+    if (!item) return;
+    setLabelDraft(item.label);
+    setNotesDraft(item.notes || '');
+    setCalendarYear(defaultActivityYear(item));
+    setPickingSpecificDate(Boolean(item.remindAt && !item.remindInterval));
+  }, [item?.id, item?.label, item?.notes, item?.logs, item?.remindAt, item?.remindInterval]);
 
   const activeRemindKey = item?.remindInterval
     ? REMIND_CHOICES.find(
@@ -77,9 +90,11 @@ export default function LastDoneDetailScreen() {
           c.interval.value === item.remindInterval?.value &&
           c.interval.unit === item.remindInterval?.unit
       )?.key
-    : item?.remindAt
-      ? undefined // one-off date reminder — no chip matches
-      : 'off';
+    : item?.remindAt && !item?.remindInterval
+      ? 'on'
+      : pickingSpecificDate
+        ? 'on'
+        : 'off';
 
   async function commitRename() {
     if (!item) return;
@@ -97,8 +112,48 @@ export default function LastDoneDetailScreen() {
     }
   }
 
-  async function onPickReminder(choice: (typeof REMIND_CHOICES)[number]) {
+  async function commitNotes() {
     if (!item) return;
+    const next = notesDraft.trim();
+    if (next === (item.notes || '')) return;
+    try {
+      await updateActivity(item.id, { notes: next || null });
+      showToast('Notes saved');
+    } catch {
+      setNotesDraft(item.notes || '');
+      showError('Couldn’t save notes — try again.');
+    }
+  }
+
+  async function onRemindDateChange(next: string) {
+    if (!item || !next.trim()) return;
+    try {
+      await updateActivity(item.id, { remindAt: next.trim() });
+      showToast('Reminder date updated');
+    } catch {
+      showError('Couldn’t update the date — try again.');
+    }
+  }
+
+  async function onPickReminder(choice: (typeof REMIND_CHOICES)[number] | { key: 'on' }) {
+    if (!item) return;
+    if (choice.key === 'on') {
+      setPickingSpecificDate(true);
+      const fallback = toDateInputValue(
+        new Date(Date.now() + 24 * 60 * 60 * 1000)
+      );
+      const next = item.remindAt && !item.remindInterval
+        ? toDateInputValue(item.remindAt)
+        : fallback;
+      try {
+        await updateActivity(item.id, { remindAt: next });
+        showToast('Pick a reminder date');
+      } catch {
+        showError('Couldn’t update the reminder — try again.');
+      }
+      return;
+    }
+    setPickingSpecificDate(false);
     try {
       await updateActivity(item.id, { remindInterval: choice.interval });
       showToast(
@@ -117,6 +172,8 @@ export default function LastDoneDetailScreen() {
   const category = item
     ? paintLastDoneCategory(categorizeLastDone(item.label).id, colors)
     : null;
+  const showHistory = item ? hasActivityHistory(item) : false;
+  const reminderOnly = item ? !showHistory && Boolean(item.remindAt) : false;
 
   async function onDeleteLog(logId: string) {
     if (!item) return;
@@ -141,15 +198,21 @@ export default function LastDoneDetailScreen() {
     if (router.canGoBack()) router.back();
   }
 
+  function handleBack() {
+    blurActiveElement();
+    if (router.canGoBack()) router.back();
+    else router.replace('/(tabs)/done' as Href);
+  }
+
   if (!item || !category) {
     return (
       <Screen>
-        <Stack.Screen options={{ title: 'Not found' }} />
-        <View style={styles.missing}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <View style={[styles.missing, { paddingTop: insets.top + spacing.lg }]}>
           <Text variant="bodyMedium" style={{ color: colors.mute }}>
             This activity is gone.
           </Text>
-          <Pressable onPress={() => router.back()} style={styles.backLink}>
+          <Pressable onPress={handleBack} style={styles.backLink}>
             <Text style={styles.backLinkText}>Go back</Text>
           </Pressable>
         </View>
@@ -159,24 +222,54 @@ export default function LastDoneDetailScreen() {
 
   return (
     <Screen>
-      <Stack.Screen options={{ title: item.label, headerBackTitle: 'Back' }} />
+      <Stack.Screen options={{ headerShown: false }} />
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          { paddingBottom: insets.bottom + 32 },
+          {
+            paddingTop: Math.max(insets.top, 12) + spacing.xs,
+            paddingBottom: insets.bottom + 32,
+          },
         ]}
         showsVerticalScrollIndicator={false}
       >
+        <View style={styles.topNav}>
+          <Pressable
+            onPress={handleBack}
+            style={({ pressed }) => [
+              styles.backBtn,
+              pressed && styles.backBtnPressed,
+            ]}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Go back to Activities"
+          >
+            <ChevronLeft size={20} color={colors.ink} strokeWidth={2.4} />
+            <Text style={styles.backLabel}>Activities</Text>
+          </Pressable>
+        </View>
         <LastDoneCategoryHeader category={category} />
-        <LastDoneActivityCard item={item} />
+        <LastDoneActivityCard
+          item={item}
+          year={calendarYear}
+          onYearChange={yearsWithLogs(item).length > 1 ? setCalendarYear : undefined}
+        />
 
         {item.remindAt ? (
-          <Text variant="caption" style={styles.remindLine}>
-            {formatRemindStatus(item.remindAt)}
-            {item.remindInterval
-              ? ` · every ${item.remindInterval.value} ${item.remindInterval.unit}`
-              : ''}
-          </Text>
+          <View style={[styles.remindHero, { backgroundColor: colors.surfaceSoft, borderColor: colors.line }]}>
+            <Text variant="caption" style={{ color: colors.mute }}>
+              Reminds on
+            </Text>
+            <Text variant="headline" style={styles.remindHeroDate}>
+              {formatRemindDate(item.remindAt)}
+            </Text>
+            <Text variant="caption" style={{ color: colors.forest }}>
+              {formatRemindStatus(item.remindAt)}
+              {item.remindInterval
+                ? ` · every ${item.remindInterval.value} ${item.remindInterval.unit}`
+                : ''}
+            </Text>
+          </View>
         ) : null}
 
         <Text variant="label" style={[styles.sectionLabel, { marginTop: spacing.sm }]}>
@@ -193,9 +286,54 @@ export default function LastDoneDetailScreen() {
         />
 
         <Text variant="label" style={[styles.sectionLabel, { marginTop: spacing.md }]}>
-          Remind me
+          Reminder notes
+        </Text>
+        <TextInput
+          value={notesDraft}
+          onChangeText={setNotesDraft}
+          multiline
+          style={[styles.nameInput, styles.notesInput]}
+          placeholder="Extra context — e.g. off-plan property purchase"
+          placeholderTextColor={colors.faint}
+          onBlur={() => void commitNotes()}
+        />
+
+        {item.remindAt && !item.remindInterval ? (
+          <>
+            <Text variant="label" style={[styles.sectionLabel, { marginTop: spacing.md }]}>
+              Remind on
+            </Text>
+            <Text variant="caption" style={{ color: colors.mute, marginBottom: 6 }}>
+              Future dates are allowed
+            </Text>
+            <DateField
+              value={toDateInputValue(item.remindAt)}
+              onChange={(v) => void onRemindDateChange(v)}
+              // No maximumDate — reminders must allow future days.
+              // Min = today so overdue items can still be moved forward.
+              minimumDate={new Date()}
+              defaultOpen
+            />
+          </>
+        ) : null}
+
+        <Text variant="label" style={[styles.sectionLabel, { marginTop: spacing.md }]}>
+          Repeat
         </Text>
         <View style={styles.remindChips}>
+          <Pressable
+            onPress={() => void onPickReminder({ key: 'on' })}
+            style={[styles.remindChip, activeRemindKey === 'on' && styles.remindChipOn]}
+          >
+            <Text
+              style={[
+                styles.remindChipText,
+                activeRemindKey === 'on' && styles.remindChipTextOn,
+              ]}
+            >
+              On a date
+            </Text>
+          </Pressable>
           {REMIND_CHOICES.map((choice) => {
             const on = activeRemindKey === choice.key;
             return (
@@ -212,6 +350,8 @@ export default function LastDoneDetailScreen() {
           })}
         </View>
 
+        {showHistory ? (
+          <>
         <View style={styles.sectionHead}>
           <Text variant="label" style={styles.sectionLabel}>
             All logs
@@ -257,12 +397,16 @@ export default function LastDoneDetailScreen() {
             );
           })}
         </View>
+          </>
+        ) : null}
 
         <Pressable
           onPress={() => void logDone({ id: item.id })}
           style={({ pressed }) => [styles.markBtn, pressed && { opacity: 0.92 }]}
         >
-          <Text style={styles.markBtnText}>Mark done again</Text>
+          <Text style={styles.markBtnText}>
+            {reminderOnly ? 'Mark as done' : 'Mark done again'}
+          </Text>
         </Pressable>
 
         <Pressable
@@ -283,6 +427,29 @@ function makeStyles(colors: ThemeColors) {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
   },
+  topNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+    marginLeft: -6,
+  },
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingVertical: 6,
+    paddingHorizontal: 6,
+    borderRadius: radius.sm,
+  },
+  backBtnPressed: {
+    opacity: 0.65,
+  },
+  backLabel: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 15,
+    color: colors.ink,
+    letterSpacing: -0.2,
+  },
   missing: {
     flex: 1,
     alignItems: 'center',
@@ -297,6 +464,18 @@ function makeStyles(colors: ThemeColors) {
     fontFamily: fonts.sansMedium,
     fontSize: 16,
     color: colors.forest,
+  },
+  remindHero: {
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    gap: 2,
+  },
+  remindHeroDate: {
+    fontSize: 18,
+    lineHeight: 24,
+    marginTop: 2,
   },
   remindLine: {
     marginTop: -4,
@@ -325,6 +504,10 @@ function makeStyles(colors: ThemeColors) {
     fontSize: 16,
     color: colors.ink,
     marginTop: 6,
+  },
+  notesInput: {
+    minHeight: 88,
+    textAlignVertical: 'top',
   },
   remindChips: {
     flexDirection: 'row',

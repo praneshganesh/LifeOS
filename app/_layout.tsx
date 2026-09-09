@@ -77,48 +77,42 @@ function RootNavigation({
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="onboarding" options={{ headerShown: false }} />
         <Stack.Screen name="asset/[id]" options={{ headerShown: false }} />
-        <Stack.Screen name="asset/edit/[id]" options={{ title: 'Edit', headerBackTitle: 'Back' }} />
+        <Stack.Screen name="asset/edit/[id]" options={{ title: 'Edit', headerBackTitle: 'Cancel' }} />
         <Stack.Screen name="space" options={{ headerShown: false }} />
-        <Stack.Screen name="room/[id]" options={{ title: '', headerBackTitle: 'Back' }} />
+        <Stack.Screen name="room/[id]" options={{ headerShown: false }} />
         <Stack.Screen
           name="capture"
           options={{ presentation: 'fullScreenModal', headerShown: false }}
         />
-        <Stack.Screen
-          name="last-done/index"
-          options={{ presentation: 'modal', title: 'Last done', headerShown: true }}
-        />
-        <Stack.Screen
-          name="last-done/[id]"
-          options={{ title: 'History', headerBackTitle: 'Back' }}
-        />
-        <Stack.Screen name="profile/index" options={{ title: '', headerBackTitle: 'Back' }} />
-        <Stack.Screen name="settings/index" options={{ title: '', headerBackTitle: 'Back' }} />
-        <Stack.Screen name="settings/privacy" options={{ title: '', headerBackTitle: 'Back' }} />
-        <Stack.Screen name="settings/security" options={{ title: '', headerBackTitle: 'Back' }} />
-        <Stack.Screen name="settings/notifications" options={{ title: '', headerBackTitle: 'Back' }} />
-        <Stack.Screen name="settings/plan" options={{ title: '', headerBackTitle: 'Back' }} />
-        <Stack.Screen name="settings/appearance" options={{ title: '', headerBackTitle: 'Back' }} />
-        <Stack.Screen name="settings/sharing" options={{ title: '', headerBackTitle: 'Back' }} />
-        <Stack.Screen name="settings/homes" options={{ title: '', headerBackTitle: 'Back' }} />
-        <Stack.Screen name="settings/data" options={{ title: '', headerBackTitle: 'Back' }} />
-        <Stack.Screen name="settings/about" options={{ title: '', headerBackTitle: 'Back' }} />
-        <Stack.Screen name="warranties/index" options={{ title: '', headerBackTitle: 'Back' }} />
+        <Stack.Screen name="last-done/index" options={{ headerShown: false }} />
+        <Stack.Screen name="last-done/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="profile/index" options={{ headerShown: false }} />
+        <Stack.Screen name="settings/index" options={{ headerShown: false }} />
+        <Stack.Screen name="settings/privacy" options={{ headerShown: false }} />
+        <Stack.Screen name="settings/security" options={{ headerShown: false }} />
+        <Stack.Screen name="settings/notifications" options={{ headerShown: false }} />
+        <Stack.Screen name="settings/plan" options={{ headerShown: false }} />
+        <Stack.Screen name="settings/appearance" options={{ headerShown: false }} />
+        <Stack.Screen name="settings/sharing" options={{ headerShown: false }} />
+        <Stack.Screen name="settings/homes" options={{ headerShown: false }} />
+        <Stack.Screen name="settings/data" options={{ headerShown: false }} />
+        <Stack.Screen name="settings/about" options={{ headerShown: false }} />
+        <Stack.Screen name="warranties/index" options={{ headerShown: false }} />
         <Stack.Screen name="subscriptions" options={{ headerShown: false }} />
-        <Stack.Screen name="insurance/index" options={{ title: '', headerBackTitle: 'Back' }} />
-        <Stack.Screen name="insurance/[id]" options={{ title: '', headerBackTitle: 'Back' }} />
+        <Stack.Screen name="insurance/index" options={{ headerShown: false }} />
+        <Stack.Screen name="insurance/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="family" options={{ headerShown: false }} />
         <Stack.Screen name="expenses" options={{ headerShown: false }} />
         <Stack.Screen name="habits" options={{ headerShown: false }} />
         <Stack.Screen name="classes" options={{ headerShown: false }} />
-        <Stack.Screen name="purchases/index" options={{ title: '', headerBackTitle: 'Back' }} />
-        <Stack.Screen name="purchases/[id]" options={{ title: '', headerBackTitle: 'Back' }} />
-        <Stack.Screen name="documents/index" options={{ title: '', headerBackTitle: 'Back' }} />
-        <Stack.Screen name="vehicles/index" options={{ title: '', headerBackTitle: 'Back' }} />
-        <Stack.Screen name="maintenance/index" options={{ title: '', headerBackTitle: 'Back' }} />
-        <Stack.Screen name="tasks/index" options={{ title: '', headerBackTitle: 'Back' }} />
-        <Stack.Screen name="notifications/index" options={{ title: '', headerBackTitle: 'Back' }} />
-        <Stack.Screen name="reports/index" options={{ title: '', headerBackTitle: 'Back' }} />
+        <Stack.Screen name="purchases/index" options={{ headerShown: false }} />
+        <Stack.Screen name="purchases/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="documents/index" options={{ headerShown: false }} />
+        <Stack.Screen name="vehicles/index" options={{ headerShown: false }} />
+        <Stack.Screen name="maintenance/index" options={{ headerShown: false }} />
+        <Stack.Screen name="tasks/index" options={{ headerShown: false }} />
+        <Stack.Screen name="notifications/index" options={{ headerShown: false }} />
+        <Stack.Screen name="reports/index" options={{ headerShown: false }} />
       </Stack>
       {!showBrandSplash ? <TalkOverlayHost /> : null}
       {showBrandSplash ? <BrandSplash onFinished={onBrandSplashFinished} /> : null}

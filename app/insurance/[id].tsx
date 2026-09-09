@@ -18,8 +18,12 @@ export default function InsuranceDetailScreen() {
   }, [ready, id, item, router]);
 
   return (
-    <ModuleScreen title="Policy">
-      <Stack.Screen options={{ title: 'Policy' }} />
+    <ModuleScreen
+      title="Policy"
+      backLabel="Insurance"
+      backFallbackHref="/insurance"
+    >
+      <Stack.Screen options={{ headerShown: false }} />
       <Text variant="body" style={{ color: colors.mute }}>
         {ready && !item
           ? 'That policy isn’t in inventory anymore.'

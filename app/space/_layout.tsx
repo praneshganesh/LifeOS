@@ -8,7 +8,7 @@ export default function SpaceLayout() {
   return (
     <Stack
       screenOptions={{
-        headerBackTitle: 'Back',
+        headerBackTitle: 'Cancel',
         headerStyle: { backgroundColor: colors.bg },
         headerTintColor: colors.ink,
         headerTitleStyle: { fontFamily: fonts.sansMedium, color: colors.ink },
@@ -16,10 +16,9 @@ export default function SpaceLayout() {
         contentStyle: { backgroundColor: colors.bg },
       }}
     >
-      <Stack.Screen name="create" options={{ title: 'New space' }} />
-      {/* Detail sets its own title — no ModuleScreen hero */}
-      <Stack.Screen name="[id]" options={{ title: '' }} />
-      <Stack.Screen name="edit/[id]" options={{ title: 'Edit space' }} />
+      <Stack.Screen name="create" options={{ title: 'New space', headerBackTitle: 'Cancel' }} />
+      <Stack.Screen name="[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="edit/[id]" options={{ title: 'Edit space', headerBackTitle: 'Cancel' }} />
     </Stack>
   );
 }

@@ -148,9 +148,6 @@ export default function NewSpaceScreen() {
           >
             <Text style={styles.saveText}>{saving ? 'Creating…' : 'Create space'}</Text>
           </Pressable>
-          {!name.trim() ? (
-            <Text style={styles.saveHint}>Add a name to create the space.</Text>
-          ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
     </Screen>
@@ -243,13 +240,6 @@ function makeStyles(colors: ThemeColors) {
     fontFamily: fonts.sansSemi,
     fontSize: 16,
     color: colors.forestOn,
-  },
-  saveHint: {
-    fontFamily: fonts.sans,
-    fontSize: 14,
-    color: colors.mute,
-    textAlign: 'center',
-    marginTop: spacing.sm,
   },
 });
 }

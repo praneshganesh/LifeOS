@@ -205,13 +205,6 @@ export default function ExpenseFormScreen() {
               {saving ? 'Saving…' : editing ? 'Save changes' : 'Save expense'}
             </Text>
           </Pressable>
-          {!canSave ? (
-            <Text style={styles.saveHint}>
-              {!title.trim()
-                ? 'Add what this was for to save.'
-                : 'Enter an amount above 0 to save.'}
-            </Text>
-          ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
     </Screen>
@@ -281,13 +274,6 @@ function makeStyles(colors: ThemeColors) {
     fontFamily: fonts.sansSemi,
     fontSize: 16,
     color: colors.forestOn,
-  },
-  saveHint: {
-    fontFamily: fonts.sans,
-    fontSize: 14,
-    color: colors.mute,
-    textAlign: 'center',
-    marginTop: spacing.sm,
   },
 });
 }

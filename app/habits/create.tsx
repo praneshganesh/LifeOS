@@ -183,9 +183,6 @@ export default function CreateHabitScreen() {
               {saving ? 'Saving…' : doneToday ? 'Save & log today' : 'Save habit'}
             </Text>
           </Pressable>
-          {!title.trim() ? (
-            <Text style={styles.saveHint}>Add a habit name to save.</Text>
-          ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
     </Screen>
@@ -300,13 +297,6 @@ function makeStyles(colors: ThemeColors) {
     fontFamily: fonts.sansSemi,
     fontSize: 16,
     color: colors.forestOn,
-  },
-  saveHint: {
-    fontFamily: fonts.sans,
-    fontSize: 14,
-    color: colors.mute,
-    textAlign: 'center',
-    marginTop: spacing.sm,
   },
 });
 }

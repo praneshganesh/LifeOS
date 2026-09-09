@@ -17,6 +17,7 @@ import {
   remainingCount,
   usedCount,
 } from '../../lib/classes.ts';
+import { localDayKey } from '../../lib/dates.ts';
 
 describe('chat-api ISO date helper', () => {
   it('accepts valid real calendar dates', () => {
@@ -327,7 +328,7 @@ describe('class-pack full lifecycle & schedule regression', () => {
     // Step 5: Attendance logging (Ishaan went skating today)
     const updatedPack = {
       ...createdPack,
-      logs: [...createdPack.logs, { id: 'clog-today', doneAt: '2026-08-28' }],
+      logs: [...createdPack.logs, { id: 'clog-today', doneAt: localDayKey() }],
     };
     assert.equal(usedCount(updatedPack), 7);
     assert.equal(remainingCount(updatedPack), 5);

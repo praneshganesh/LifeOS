@@ -1,12 +1,22 @@
 import { useMemo, useState } from 'react';
-import { View, StyleSheet, Pressable, type LayoutChangeEvent } from 'react-native';
-import { Check } from 'lucide-react-native';
+import {
+  View,
+  StyleSheet,
+  Pressable,
+  Text as RNText,
+  type LayoutChangeEvent,
+} from 'react-native';
+import { Check, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import {
+  defaultActivityYear,
   formatRelativeDone,
+  formatRemindDate,
   formatRemindStatus,
   getLastDoneAt,
+  hasActivityHistory,
   toDateInputValue,
+  yearsWithLogs,
   type LastDoneItem,
 } from '@/lib/lastDone';
 import {
@@ -14,101 +24,275 @@ import {
   paintLastDoneCategory,
   type LastDoneCategory,
 } from '@/lib/lastDoneCategories';
+import {
+  buildHabitYearCalendar,
+  cellSizeForWidth,
+  CALENDAR_DAYS,
+  type CalendarCell,
+} from '@/lib/habitHeatmap';
 import { fonts, radius, shadows, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
 
-const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'] as const;
-/** Mid-size cells — weeks fit exactly to measured width (no clip). */
-const CELL = 9;
-const GAP = 3;
-const LABEL_W = 12;
-/** Approx width of a short month label like "Aug". */
-const MONTH_LABEL_W = 22;
+const MONTH_LABEL_W = 36;
+const GAP = 2;
+const DAY_TICKS = [1, 5, 10, 15, 20, 25, 31] as const;
+const DAY_TICK_BOX = 18;
 
-function startOfDay(d: Date) {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+function daysTrackWidth(cell: number, gap: number) {
+  return CALENDAR_DAYS * cell + (CALENDAR_DAYS - 1) * gap;
 }
 
-function addDays(d: Date, n: number) {
-  const x = new Date(d);
-  x.setDate(x.getDate() + n);
-  return x;
+function dayTickLeft(day: number, cell: number, gap: number, trackW: number) {
+  const colLeft = (day - 1) * (cell + gap);
+  const centered = colLeft + (cell - DAY_TICK_BOX) / 2;
+  return Math.max(0, Math.min(trackW - DAY_TICK_BOX, centered));
 }
 
-/** How many week columns fit — never more than the width can hold. */
-function weeksForWidth(width: number) {
-  if (width <= 0) return 0;
-  return Math.max(1, Math.floor((width + GAP) / (CELL + GAP)));
-}
-
-function useContribution(logs: LastDoneItem['logs'], weeks: number) {
-  return useMemo(() => {
-    if (weeks <= 0) {
-      return { columns: [] as { key: string; filled: boolean }[][], monthMarks: [] };
-    }
-
-    const done = new Set(
-      logs.map((l) => toDateInputValue(l.doneAt)).filter(Boolean)
+function DoneCell({
+  cell,
+  size,
+  fillColor,
+  emptyColor,
+}: {
+  cell: CalendarCell;
+  size: number;
+  fillColor: string;
+  emptyColor: string;
+}) {
+  if (cell.state === 'invalid') {
+    return (
+      <View
+        style={{ width: size, height: size }}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+      />
     );
+  }
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: 1.5,
+        backgroundColor: cell.state === 'done' ? fillColor : emptyColor,
+      }}
+    />
+  );
+}
 
-    const today = startOfDay(new Date());
-    const end = addDays(today, 6 - today.getDay());
-    const start = addDays(end, -(weeks * 7 - 1));
+function ActivityYearCalendar({
+  logs,
+  year,
+  fillColor,
+  emptyColor,
+  yearNav,
+}: {
+  logs: LastDoneItem['logs'];
+  year: number;
+  fillColor: string;
+  emptyColor: string;
+  yearNav?: {
+    canPrev: boolean;
+    canNext: boolean;
+    onPrev: () => void;
+    onNext: () => void;
+  };
+}) {
+  const { colors } = useTheme();
+  const [innerW, setInnerW] = useState(0);
+  const habitLogs = useMemo(
+    () => (logs ?? []).map((l) => ({ doneAt: toDateInputValue(l.doneAt) })),
+    [logs]
+  );
+  const model = useMemo(
+    () => buildHabitYearCalendar(habitLogs, year),
+    [habitLogs, year]
+  );
 
-    const columns: { key: string; filled: boolean }[][] = [];
-    const monthMarks: { index: number; label: string }[] = [];
-    let cursor = start;
-    let lastMonth = -1;
+  const trackBudget = Math.max(0, innerW - MONTH_LABEL_W);
+  const cell = cellSizeForWidth(trackBudget, GAP, { min: 4, max: 14 });
+  const trackW = daysTrackWidth(cell, GAP);
+  const ready = trackBudget > 0;
+  const labelFs = Math.max(10, Math.min(13, cell + 3));
+  const rowH = Math.max(cell, labelFs + 4);
+  const doneCount = model.months.reduce(
+    (n, row) => n + row.cells.filter((c) => c.state === 'done').length,
+    0
+  );
 
-    for (let w = 0; w < weeks; w++) {
-      const col: { key: string; filled: boolean }[] = [];
-      for (let d = 0; d < 7; d++) {
-        const key = toDateInputValue(cursor);
-        col.push({ key, filled: done.has(key) });
-        // Label on first day of each month in range (not only date≤7 — that skips Jan if the grid starts mid-month)
-        if (cursor.getMonth() !== lastMonth) {
-          lastMonth = cursor.getMonth();
-          monthMarks.push({
-            index: w,
-            label: cursor.toLocaleString(undefined, { month: 'short' }),
-          });
-        }
-        cursor = addDays(cursor, 1);
-      }
-      columns.push(col);
-    }
+  function onLayout(e: LayoutChangeEvent) {
+    const w = Math.floor(e.nativeEvent.layout.width);
+    if (w !== innerW) setInnerW(w);
+  }
 
-    return { columns, monthMarks };
-  }, [logs, weeks]);
+  return (
+    <View style={styles.cal} onLayout={onLayout}>
+      {yearNav ? (
+        <View style={styles.yearNav}>
+          <Pressable
+            onPress={yearNav.onPrev}
+            disabled={!yearNav.canPrev}
+            hitSlop={8}
+            style={({ pressed }) => [
+              styles.yearNavBtn,
+              !yearNav.canPrev && styles.yearNavBtnOff,
+              pressed && yearNav.canPrev && { opacity: 0.7 },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Previous year"
+          >
+            <ChevronLeft
+              size={16}
+              color={yearNav.canPrev ? colors.ink : colors.faint}
+              strokeWidth={2.2}
+            />
+          </Pressable>
+          <RNText
+            allowFontScaling={false}
+            style={[styles.yearNavLabel, { color: colors.ink, fontSize: labelFs }]}
+          >
+            {year}
+          </RNText>
+          <Pressable
+            onPress={yearNav.onNext}
+            disabled={!yearNav.canNext}
+            hitSlop={8}
+            style={({ pressed }) => [
+              styles.yearNavBtn,
+              !yearNav.canNext && styles.yearNavBtnOff,
+              pressed && yearNav.canNext && { opacity: 0.7 },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Next year"
+          >
+            <ChevronRight
+              size={16}
+              color={yearNav.canNext ? colors.ink : colors.faint}
+              strokeWidth={2.2}
+            />
+          </Pressable>
+        </View>
+      ) : null}
+
+      {!ready ? <View style={{ height: 12 * 6 }} /> : null}
+      {ready ? (
+        <>
+          <View style={styles.calRow}>
+            <View style={{ width: MONTH_LABEL_W }} />
+            <View
+              style={[
+                styles.dayHeaderTrack,
+                { width: trackW, height: labelFs + 3 },
+              ]}
+            >
+              {DAY_TICKS.map((d) => (
+                <RNText
+                  key={d}
+                  allowFontScaling={false}
+                  style={[
+                    styles.dayHeaderAbs,
+                    {
+                      left: dayTickLeft(d, cell, GAP, trackW),
+                      width: DAY_TICK_BOX,
+                      fontSize: labelFs,
+                      lineHeight: labelFs + 2,
+                      color: colors.mute,
+                    },
+                  ]}
+                >
+                  {d}
+                </RNText>
+              ))}
+            </View>
+          </View>
+
+          {model.months.map((row) => (
+            <View
+              key={row.monthIndex}
+              style={[styles.calRow, { marginTop: GAP, height: rowH }]}
+            >
+              <RNText
+                numberOfLines={1}
+                allowFontScaling={false}
+                style={[
+                  styles.monthLabel,
+                  { height: rowH, lineHeight: rowH, fontSize: labelFs, color: colors.mute },
+                ]}
+              >
+                {row.label}
+              </RNText>
+              <View style={[styles.daysTrack, { width: trackW, gap: GAP }]}>
+                {row.cells.map((c) => (
+                  <DoneCell
+                    key={`${row.monthIndex}-${c.day}`}
+                    cell={c}
+                    size={cell}
+                    fillColor={fillColor}
+                    emptyColor={emptyColor}
+                  />
+                ))}
+              </View>
+            </View>
+          ))}
+
+          <RNText
+            allowFontScaling={false}
+            style={[
+              styles.yearCaption,
+              { fontSize: labelFs, lineHeight: labelFs + 4, color: colors.faint },
+            ]}
+          >
+            {doneCount > 0
+              ? `${year} · ${doneCount} ${doneCount === 1 ? 'time' : 'times'} marked done`
+              : `${year} · no logs this year`}
+          </RNText>
+        </>
+      ) : null}
+    </View>
+  );
 }
 
 export function LastDoneActivityCard({
   item,
   onLog,
   onOpen,
+  year: yearProp,
+  onYearChange,
 }: {
   item: LastDoneItem;
   onLog?: () => void;
   onOpen?: () => void;
   compact?: boolean;
+  /** Detail screen — browse years that have logs. */
+  year?: number;
+  onYearChange?: (year: number) => void;
 }) {
   const { colors } = useTheme();
   const category = paintLastDoneCategory(categorizeLastDone(item.label).id, colors);
-  const [gridWidth, setGridWidth] = useState(0);
-  const weeks = weeksForWidth(gridWidth);
-  const { columns, monthMarks } = useContribution(item.logs, weeks);
+  const showHeatmap = hasActivityHistory(item);
   const last = item.logs?.length
     ? formatRelativeDone(getLastDoneAt(item))
     : item.remindAt
       ? formatRemindStatus(item.remindAt)
       : 'Not yet';
-  const gridH = 7 * CELL + 6 * GAP;
-  const gridPixelW = weeks > 0 ? weeks * CELL + (weeks - 1) * GAP : 0;
 
-  function onGridLayout(e: LayoutChangeEvent) {
-    const w = Math.round(e.nativeEvent.layout.width);
-    if (w !== gridWidth) setGridWidth(w);
-  }
+  const logYears = useMemo(() => yearsWithLogs(item), [item]);
+  const viewYear = yearProp ?? defaultActivityYear(item);
+  const yearNav =
+    onYearChange && logYears.length
+      ? {
+          canPrev: viewYear > logYears[logYears.length - 1]!,
+          canNext: viewYear < logYears[0]!,
+          onPrev: () => {
+            const next = logYears.find((y) => y < viewYear);
+            if (next != null) onYearChange(next);
+          },
+          onNext: () => {
+            const next = [...logYears].reverse().find((y) => y > viewYear);
+            if (next != null) onYearChange(next);
+          },
+        }
+      : undefined;
 
   return (
     <Pressable
@@ -116,8 +300,9 @@ export function LastDoneActivityCard({
       style={({ pressed }) => [
         styles.card,
         { backgroundColor: colors.surface, borderColor: colors.line },
-        pressed && { opacity: 0.96 },
+        pressed && onOpen && { opacity: 0.96 },
       ]}
+      disabled={!onOpen}
     >
       <View style={styles.header}>
         <View style={[styles.dot, { backgroundColor: category.color }]} />
@@ -142,57 +327,27 @@ export function LastDoneActivityCard({
         ) : null}
       </View>
 
-      <View style={styles.gridWrap}>
-        <View style={[styles.weekdayCol, { height: gridH }]}>
-          {WEEKDAYS.map((d, i) => (
-            <Text key={`${d}-${i}`} style={[styles.weekday, { color: colors.faint }]}>
-              {d}
-            </Text>
-          ))}
+      {showHeatmap ? (
+        <ActivityYearCalendar
+          logs={item.logs}
+          year={viewYear}
+          fillColor={category.color}
+          emptyColor={colors.lineStrong}
+          yearNav={yearNav}
+        />
+      ) : item.remindAt ? (
+        <View style={[styles.reminderPanel, { backgroundColor: colors.surfaceSoft }]}>
+          <Text variant="caption" style={{ color: colors.mute }}>
+            Reminder
+          </Text>
+          <Text variant="headline" style={[styles.reminderDate, { color: colors.ink }]}>
+            {formatRemindDate(item.remindAt)}
+          </Text>
+          <Text variant="caption" style={{ color: category.color }}>
+            {formatRemindStatus(item.remindAt)}
+          </Text>
         </View>
-
-        <View style={styles.gridBody} onLayout={onGridLayout}>
-          {weeks > 0 ? (
-            <>
-              <View style={[styles.grid, { width: gridPixelW }]}>
-                {columns.map((col, wi) => (
-                  <View key={wi} style={styles.weekCol}>
-                    {col.map((dayCell) => (
-                      <View
-                        key={dayCell.key}
-                        style={[
-                          styles.cell,
-                          {
-                            backgroundColor: dayCell.filled
-                              ? category.color
-                              : colors.surfaceSoft,
-                          },
-                        ]}
-                      />
-                    ))}
-                  </View>
-                ))}
-              </View>
-              <View style={[styles.monthRow, { width: gridPixelW }]}>
-                {monthMarks.map((m) => {
-                  const raw = m.index * (CELL + GAP);
-                  const left = Math.min(raw, Math.max(0, gridPixelW - MONTH_LABEL_W));
-                  return (
-                    <Text
-                      key={`${m.label}-${m.index}`}
-                      style={[styles.monthLabel, { left, color: colors.faint }]}
-                    >
-                      {m.label}
-                    </Text>
-                  );
-                })}
-              </View>
-            </>
-          ) : (
-            <View style={{ height: gridH + 16 }} />
-          )}
-        </View>
-      </View>
+      ) : null}
     </Pressable>
   );
 }
@@ -215,6 +370,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     borderWidth: StyleSheet.hairlineWidth,
     alignSelf: 'stretch',
+    overflow: 'hidden',
     ...shadows.soft,
   },
   header: {
@@ -244,50 +400,73 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  gridWrap: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 4,
+  reminderPanel: {
+    borderRadius: radius.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    gap: 2,
+  },
+  reminderDate: {
+    fontSize: 16,
+    lineHeight: 22,
+    marginTop: 2,
+  },
+  cal: {
     width: '100%',
   },
-  weekdayCol: {
-    width: LABEL_W,
-    justifyContent: 'space-between',
-  },
-  weekday: {
-    fontFamily: fonts.sans,
-    fontSize: 16,
-    lineHeight: CELL,
-    height: CELL,
-    textAlign: 'center',
-  },
-  gridBody: {
-    flex: 1,
-    minWidth: 0,
-  },
-  grid: {
+  yearNav: {
     flexDirection: 'row',
-    gap: GAP,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    marginBottom: 6,
   },
-  weekCol: {
-    width: CELL,
-    gap: GAP,
+  yearNavBtn: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.full,
   },
-  cell: {
-    width: CELL,
-    height: CELL,
-    borderRadius: 2,
+  yearNavBtnOff: {
+    opacity: 0.35,
   },
-  monthRow: {
-    height: 14,
-    marginTop: 4,
+  yearNavLabel: {
+    fontFamily: fonts.sansMedium,
+    minWidth: 44,
+    textAlign: 'center',
+    includeFontPadding: false,
+  },
+  calRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+  },
+  daysTrack: {
+    flexDirection: 'row',
+    flexShrink: 0,
+  },
+  dayHeaderTrack: {
     position: 'relative',
+    overflow: 'visible',
+    marginBottom: 2,
+  },
+  dayHeaderAbs: {
+    position: 'absolute',
+    top: 0,
+    fontFamily: fonts.sans,
+    textAlign: 'center',
+    includeFontPadding: false,
   },
   monthLabel: {
-    position: 'absolute',
+    width: MONTH_LABEL_W,
     fontFamily: fonts.sans,
-    fontSize: 16,
-    lineHeight: 14,
+    includeFontPadding: false,
+  },
+  yearCaption: {
+    marginTop: 6,
+    fontFamily: fonts.sans,
+    includeFontPadding: false,
   },
   catHead: {
     flexDirection: 'row',

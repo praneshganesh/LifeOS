@@ -9,7 +9,7 @@ export default function ExpensesLayout() {
   return (
     <Stack
       screenOptions={{
-        headerBackTitle: 'Back',
+        headerBackTitle: 'Cancel',
         headerStyle: { backgroundColor: colors.bg },
         headerTintColor: colors.ink,
         headerTitleStyle: { fontFamily: fonts.sansMedium, color: colors.ink },
@@ -17,10 +17,9 @@ export default function ExpensesLayout() {
         contentStyle: { backgroundColor: colors.bg },
       }}
     >
-      {/* Empty native title — ModuleScreen owns the page title */}
-      <Stack.Screen name="index" options={{ title: '' }} />
-      <Stack.Screen name="create" options={{ title: 'Add expense' }} />
-      <Stack.Screen name="[id]" options={{ title: '' }} />
+      <Stack.Screen name="index" options={{ headerShown: false }} />
+      <Stack.Screen name="create" options={{ title: 'Add expense', headerBackTitle: 'Cancel' }} />
+      <Stack.Screen name="[id]" options={{ headerShown: false }} />
     </Stack>
   );
 }

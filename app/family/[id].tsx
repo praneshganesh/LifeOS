@@ -136,15 +136,24 @@ export default function FamilyMemberScreen() {
 
   if (!member) {
     return (
-      <ModuleScreen title="Not found">
+      <ModuleScreen
+        title="Not found"
+        backLabel="Household"
+        backFallbackHref="/family"
+      >
         <Text variant="body">Member not found.</Text>
       </ModuleScreen>
     );
   }
 
   return (
-    <ModuleScreen title={member.name} subtitle={member.relation}>
-      <Stack.Screen options={{ title: '' }} />
+    <ModuleScreen
+      title={member.name}
+      subtitle={member.relation}
+      backLabel="Household"
+      backFallbackHref="/family"
+    >
+      <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.hero}>
         <View style={[styles.avatar, { backgroundColor: colors.surfaceSoft }]}>
           <Text style={[styles.letter, { color: colors.ink }]}>{member.avatarLetter}</Text>

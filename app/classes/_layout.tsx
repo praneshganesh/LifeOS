@@ -8,7 +8,7 @@ export default function ClassesLayout() {
   return (
     <Stack
       screenOptions={{
-        headerBackTitle: 'Back',
+        headerBackTitle: 'Cancel',
         headerStyle: { backgroundColor: colors.bg },
         headerTintColor: colors.ink,
         headerTitleStyle: { fontFamily: fonts.sansMedium, color: colors.ink },
@@ -16,9 +16,9 @@ export default function ClassesLayout() {
         contentStyle: { backgroundColor: colors.bg },
       }}
     >
-      <Stack.Screen name="index" options={{ title: '' }} />
-      <Stack.Screen name="create" options={{ title: 'New class pack' }} />
-      <Stack.Screen name="[id]" options={{ title: '' }} />
+      <Stack.Screen name="index" options={{ headerShown: false }} />
+      <Stack.Screen name="create" options={{ title: 'New class pack', headerBackTitle: 'Cancel' }} />
+      <Stack.Screen name="[id]" options={{ headerShown: false }} />
     </Stack>
   );
 }

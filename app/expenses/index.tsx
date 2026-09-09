@@ -1,12 +1,13 @@
 import { useTheme } from '@/lib/ThemeContext';
 import { useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { useRouter, type Href } from 'expo-router';
+import { useRouter, useLocalSearchParams, type Href } from 'expo-router';
 import { Plus } from 'lucide-react-native';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { ListCard, ListRow, StatStrip } from '@/components/ui/ListKit';
 import { Text } from '@/components/ui/Text';
 import { useExpenses } from '@/lib/ExpensesContext';
+import { moduleHrefPreserveFrom } from '@/lib/moduleNav';
 import { getRuntimeDefaultCurrency } from '@/lib/currency';
 import {
   currentMonthKey,
@@ -23,6 +24,7 @@ export default function ExpensesScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
+  const { from } = useLocalSearchParams<{ from?: string }>();
   const { expenses } = useExpenses();
   const month = currentMonthKey();
   const thisMonth = useMemo(() => expensesInMonth(expenses, month), [expenses, month]);
@@ -34,6 +36,7 @@ export default function ExpensesScreen() {
     <ModuleScreen
       title="Expenses"
       subtitle="Your spending, logged from receipts and Talk."
+      defaultOrigin="things"
       right={
         <Pressable
           onPress={() => router.push('/expenses/create' as Href)}
@@ -95,7 +98,9 @@ export default function ExpensesScreen() {
                   .filter(Boolean)
                   .join(' · ')}
                 meta={formatAmount(e.amount, e.currency)}
-                onPress={() => router.push(`/expenses/${e.id}` as Href)}
+                onPress={() =>
+                  router.push(moduleHrefPreserveFrom(`/expenses/${e.id}`, from))
+                }
                 last={i === Math.min(expenses.length, 40) - 1}
               />
             ))}

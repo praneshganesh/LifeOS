@@ -48,7 +48,11 @@ export default function SubscriptionDetailScreen() {
 
   if (!sub) {
     return (
-      <ModuleScreen title="Not found">
+      <ModuleScreen
+        title="Not found"
+        backLabel="Subscriptions"
+        backFallbackHref="/subscriptions"
+      >
         <Text variant="body">Subscription not found.</Text>
       </ModuleScreen>
     );
@@ -60,8 +64,10 @@ export default function SubscriptionDetailScreen() {
     <ModuleScreen
       title={sub.title}
       subtitle={formatAmount(sub.amount, sub.currency) + ` / ${sub.cycle}`}
+      backLabel="Subscriptions"
+      backFallbackHref="/subscriptions"
     >
-      <Stack.Screen options={{ title: '' }} />
+      <Stack.Screen options={{ headerShown: false }} />
       <ListCard>
         <ListRow
           title="Amount"

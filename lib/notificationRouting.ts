@@ -2,6 +2,11 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Href } from 'expo-router';
 import { hrefFromNotificationData } from '@/lib/notificationHref';
+import {
+  entryFromOsNotification,
+  recordDeliveredNotifications,
+  syncDeliveredFromOS,
+} from '@/lib/notificationLog';
 
 export { hrefFromNotificationData };
 
@@ -35,6 +40,9 @@ export async function attachNotificationDeepLinks(
   try {
     const Notifications = await import('expo-notifications');
 
+    // Backfill history with anything still in the OS notification center.
+    void syncDeliveredFromOS();
+
     const go = (data: Record<string, unknown> | undefined) => {
       const href = hrefFromNotificationData(data);
       if (!href) return;
@@ -56,6 +64,11 @@ export async function attachNotificationDeepLinks(
     };
 
     const last = await Notifications.getLastNotificationResponseAsync();
+    if (last?.notification) {
+      void recordDeliveredNotifications([
+        entryFromOsNotification(last.notification),
+      ]);
+    }
     if (last?.notification?.request?.content?.data) {
       const key = responseKey(last);
       let prev: string | null = null;
@@ -70,14 +83,30 @@ export async function attachNotificationDeepLinks(
       }
     }
 
+    // Log foreground deliveries as they happen.
+    const receivedSub = Notifications.addNotificationReceivedListener(
+      (notification) => {
+        void recordDeliveredNotifications([
+          entryFromOsNotification(notification),
+        ]);
+      }
+    );
+
     const sub = Notifications.addNotificationResponseReceivedListener(
       (response) => {
         void markHandled(responseKey(response));
+        // Tapped from the notification center — make sure it's in history too.
+        void recordDeliveredNotifications([
+          entryFromOsNotification(response.notification),
+        ]);
         go(response.notification.request.content.data as Record<string, unknown>);
       }
     );
 
-    return () => sub.remove();
+    return () => {
+      receivedSub.remove();
+      sub.remove();
+    };
   } catch {
     return () => undefined;
   }

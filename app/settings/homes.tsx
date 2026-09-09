@@ -34,6 +34,8 @@ export default function HomesSettingsScreen() {
     <ModuleScreen
       title="Homes & defaults"
       subtitle="Your places and household currency."
+      backLabel="Settings"
+      backFallbackHref="/settings"
     >
       <ModuleSection label="Homes" count={homes.length}>
         <ListCard>

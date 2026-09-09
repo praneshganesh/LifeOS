@@ -1,7 +1,8 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -12,7 +13,7 @@ import {
 } from 'react-native';
 import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Send } from 'lucide-react-native';
+import { ArrowUp, Camera, Mic } from 'lucide-react-native';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { dueSoonForHome } from '@/lib/attention';
@@ -45,6 +46,7 @@ import { useCurrency } from '@/lib/CurrencyContext';
 import { getHouseholdPeople, selfAvatarInitial } from '@/lib/people';
 import { loadLocalProfile } from '@/lib/profile';
 import { blurActiveElement } from '@/lib/a11y';
+import { rememberedCaptureHref } from '@/lib/captureContext';
 import { fonts, radius, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
 import { HomeHeader } from '@/components/HomeHeader';
@@ -58,7 +60,8 @@ type UiMessage = {
   itemId?: string;
 };
 
-const DOCK_CLEARANCE = 88;
+const INPUT_MIN_H = 26;
+const INPUT_MAX_H = 120;
 
 const STARTER_PROMPTS = [
   'I got a coffee machine',
@@ -72,7 +75,8 @@ export default function ChatScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const listRef = useRef<FlatList<UiMessage>>(null);
-  const { talkFocus, setTalkFocus, focusItemId, focusExpenseId } =
+  const inputRef = useRef<TextInput>(null);
+  const { talkFocus, setTalkFocus, focusItemId, focusExpenseId, openTalk } =
     useTalkOverlay();
   const focusItemIdRef = useRef<string | null>(focusItemId);
   focusItemIdRef.current = focusItemId;
@@ -97,6 +101,9 @@ export default function ChatScreen() {
     useCallback(() => {
       void saveHomeSurface('ask');
       void loadLocalProfile().then((p) => setProfileName(p.displayName));
+      // Land in the composer so tapping Ask from Today (or elsewhere) is ready to type.
+      const t = setTimeout(() => inputRef.current?.focus(), 120);
+      return () => clearTimeout(t);
     }, [])
   );
   const avatarLetter = selfAvatarInitial(profileName, householdMembers);
@@ -161,6 +168,8 @@ export default function ChatScreen() {
     [subscriptions]
   );
   const [input, setInput] = useState('');
+  const [inputHeight, setInputHeight] = useState(INPUT_MIN_H);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [messages, setMessages] = useState<UiMessage[]>([
     {
@@ -169,6 +178,21 @@ export default function ChatScreen() {
       text: 'Add a thing, check in a habit, log a class, or ask about a document.',
     },
   ]);
+
+  useEffect(() => {
+    const show = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => setKeyboardOpen(true)
+    );
+    const hide = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setKeyboardOpen(false)
+    );
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
 
   const inventory = useMemo(
     () =>
@@ -227,6 +251,7 @@ export default function ChatScreen() {
 
     setMessages((prev) => [...prev, userMsg]);
     setInput('');
+    setInputHeight(INPUT_MIN_H);
 
     try {
       const newestId = items[0]?.id ?? null;
@@ -419,7 +444,7 @@ export default function ChatScreen() {
       <KeyboardAvoidingView
         style={{ flex: 1, width: '100%' }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={8}
+        keyboardVerticalOffset={0}
       >
         <HomeHeader surface="ask" avatarLetter={avatarLetter} />
 
@@ -538,39 +563,86 @@ export default function ChatScreen() {
         <View
           style={[
             styles.composer,
-            { paddingBottom: Math.max(insets.bottom, 8) + DOCK_CLEARANCE },
+            {
+              // Flush on the keyboard when open; respect the home indicator when closed.
+              // No own background — sits on the Screen wash like everything else.
+              paddingBottom: keyboardOpen ? 8 : Math.max(insets.bottom, 12),
+            },
           ]}
         >
-          <TextInput
-            value={input}
-            onChangeText={setInput}
-            placeholder="What’s new, or what should I look up…"
-            placeholderTextColor={colors.faint}
+          <View
             style={[
-              styles.input,
-              {
-                color: colors.ink,
-                backgroundColor: colors.surface,
-                borderColor: colors.line,
-              },
+              styles.composerCard,
+              { backgroundColor: colors.surface, borderColor: colors.line },
             ]}
-            onSubmitEditing={() => void ask(input)}
-            returnKeyType="send"
-            editable={!busy}
-          />
-          <Pressable
-            onPress={() => void ask(input)}
-            disabled={busy || !input.trim()}
-            style={({ pressed }) => [
-              styles.send,
-              { backgroundColor: colors.accent },
-              (busy || !input.trim()) && { opacity: 0.45 },
-              pressed && { opacity: 0.9 },
-            ]}
-            accessibilityLabel="Send"
           >
-            <Send size={18} color={colors.accentOn} strokeWidth={2.2} />
-          </Pressable>
+            <TextInput
+              ref={inputRef}
+              value={input}
+              onChangeText={(text) => {
+                setInput(text);
+                if (!text.trim()) setInputHeight(INPUT_MIN_H);
+              }}
+              onContentSizeChange={(e) => {
+                const h = Math.ceil(e.nativeEvent.contentSize.height);
+                setInputHeight(Math.min(INPUT_MAX_H, Math.max(INPUT_MIN_H, h)));
+              }}
+              placeholder="What’s new, or what should I look up…"
+              placeholderTextColor={colors.faint}
+              style={[styles.input, { height: inputHeight, color: colors.ink }]}
+              multiline
+              scrollEnabled={inputHeight >= INPUT_MAX_H}
+              textAlignVertical="top"
+              blurOnSubmit={false}
+              editable={!busy}
+            />
+            <View style={styles.composerActions}>
+              <View style={styles.composerActionGroup}>
+                <Pressable
+                  onPress={() => {
+                    blurActiveElement();
+                    Keyboard.dismiss();
+                    router.push(rememberedCaptureHref());
+                  }}
+                  style={({ pressed }) => [
+                    styles.roundBtn,
+                    { borderColor: colors.line },
+                    pressed && { opacity: 0.7 },
+                  ]}
+                  accessibilityLabel="Capture with camera"
+                >
+                  <Camera size={18} color={colors.ink} strokeWidth={2} />
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    openTalk();
+                  }}
+                  style={({ pressed }) => [
+                    styles.roundBtn,
+                    { borderColor: colors.line },
+                    pressed && { opacity: 0.7 },
+                  ]}
+                  accessibilityLabel="Talk instead"
+                >
+                  <Mic size={18} color={colors.ink} strokeWidth={2} />
+                </Pressable>
+              </View>
+              <Pressable
+                onPress={() => void ask(input)}
+                disabled={busy || !input.trim()}
+                style={({ pressed }) => [
+                  styles.send,
+                  { backgroundColor: colors.accent },
+                  (busy || !input.trim()) && { opacity: 0.45 },
+                  pressed && { opacity: 0.9 },
+                ]}
+                accessibilityLabel="Send"
+              >
+                <ArrowUp size={19} color={colors.accentOn} strokeWidth={2.4} />
+              </Pressable>
+            </View>
+          </View>
         </View>
       </KeyboardAvoidingView>
     </Screen>
@@ -680,25 +752,46 @@ const styles = StyleSheet.create({
     lineHeight: 21,
   },
   composer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: spacing.lg,
-    paddingTop: 10,
+    paddingHorizontal: spacing.md,
+    paddingTop: 6,
+  },
+  composerCard: {
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: spacing.md,
+    paddingTop: Platform.OS === 'ios' ? 12 : 10,
+    paddingBottom: 8,
   },
   input: {
-    flex: 1,
     fontFamily: fonts.sans,
     fontSize: 16,
-    borderRadius: radius.full,
+    lineHeight: 22,
+    padding: 0,
+    maxHeight: INPUT_MAX_H,
+  },
+  composerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  composerActionGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  roundBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   send: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
   },

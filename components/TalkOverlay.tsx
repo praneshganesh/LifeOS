@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Keyboard,
   Modal,
   Platform,
   Pressable,
@@ -53,8 +54,8 @@ import { hrefForTalkFocus, type TalkFocus } from '@/lib/chat/focus';
 import type { ChatMessage } from '@/lib/chat/types';
 import { blurActiveElement } from '@/lib/a11y';
 import { localDayKey } from '@/lib/dates';
-import { saveHomeSurface } from '@/lib/homeSurface';
 import { rememberedCaptureHref } from '@/lib/captureContext';
+import { saveHomeSurface } from '@/lib/homeSurface';
 import { getHouseholdPeople } from '@/lib/people';
 import {
   loadTalkVoicePrefs,
@@ -1049,9 +1050,8 @@ export function TalkOrb() {
 }
 
 /**
- * Bottom-left dock:
- * - On Ask: Capture · Talk
- * - Elsewhere: Capture · Ask · Talk
+ * Bottom dock: Capture · Ask · Talk — reachable from anywhere.
+ * Hidden on Ask — the chat composer has its own capture/talk buttons.
  */
 export function FloatingNav() {
   const insets = useSafeAreaInsets();
@@ -1059,11 +1059,32 @@ export function FloatingNav() {
   const pathname = usePathname();
   const { open, openTalk } = useTalkOverlay();
   const { colors } = useTheme();
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
 
-  if (pathname.includes('capture') || pathname.includes('onboarding') || pathname.includes('/create') || open)
+  useEffect(() => {
+    const show = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => setKeyboardOpen(true)
+    );
+    const hide = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setKeyboardOpen(false)
+    );
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+
+  if (
+    pathname.includes('capture') ||
+    pathname.includes('onboarding') ||
+    pathname.includes('/create') ||
+    pathname.includes('/ask') ||
+    open ||
+    keyboardOpen
+  )
     return null;
-
-  const onAskScreen = pathname.includes('/ask');
 
   return (
     <View
@@ -1091,17 +1112,15 @@ export function FloatingNav() {
           Icon={Camera}
           primary
         />
-        {onAskScreen ? null : (
-          <DockBtn
-            label="Ask"
-            onPress={() => {
-              blurActiveElement();
-              void saveHomeSurface('ask');
-              router.navigate('/(tabs)/ask' as never);
-            }}
-            Icon={MessageCircle}
-          />
-        )}
+        <DockBtn
+          label="Ask"
+          onPress={() => {
+            blurActiveElement();
+            void saveHomeSurface('ask');
+            router.navigate('/(tabs)/ask' as never);
+          }}
+          Icon={MessageCircle}
+        />
         <DockBtn
           label="Talk"
           onPress={() => {

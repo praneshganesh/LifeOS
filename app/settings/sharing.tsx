@@ -14,6 +14,8 @@ export default function SharingSettingsScreen() {
     <ModuleScreen
       title="Sharing"
       subtitle="Your household — live invites coming soon."
+      backLabel="Settings"
+      backFallbackHref="/settings"
     >
       <ModuleSection label="Household" count={members.length}>
         {members.length === 0 ? (

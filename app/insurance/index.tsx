@@ -72,6 +72,7 @@ export default function InsuranceScreen() {
     <ModuleScreen
       title="Insurance"
       subtitle="Policies from captures and Things."
+      defaultOrigin="things"
       right={<CaptureContextButton kind="insurance" label="Capture insurance" />}
     >
       <StatStrip

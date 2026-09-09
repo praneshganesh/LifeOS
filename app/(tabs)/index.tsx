@@ -31,6 +31,7 @@ import { useClasses } from '@/lib/ClassesContext';
 import { useSubscriptions } from '@/lib/SubscriptionsContext';
 import { resolveSelfDisplayName, selfAvatarInitial } from '@/lib/people';
 import { loadLocalProfile } from '@/lib/profile';
+import { moduleHref } from '@/lib/moduleNav';
 import { blurActiveElement } from '@/lib/a11y';
 import { useTalkOverlay } from '@/lib/TalkOverlayContext';
 import { fonts, radius, shadowsFor, spacing } from '@/constants/theme';
@@ -65,6 +66,10 @@ export default function HomeDashboard() {
           setProfileName(profile.displayName);
           if (surface === 'ask') {
             router.replace('/(tabs)/ask' as Href);
+            return;
+          }
+          if (surface === 'things') {
+            router.replace('/(tabs)/spaces' as Href);
             return;
           }
           setReady(true);
@@ -310,7 +315,7 @@ export default function HomeDashboard() {
               fg={colors.accent}
               onPress={() => {
                 blurActiveElement();
-                router.push('/habits' as Href);
+                router.push(moduleHref('/habits', 'today'));
               }}
             />
             <Tile
@@ -322,7 +327,7 @@ export default function HomeDashboard() {
               fg={colors.amber}
               onPress={() => {
                 blurActiveElement();
-                router.push('/last-done' as Href);
+                router.push(moduleHref('/last-done?mode=remind', 'today'));
               }}
             />
             <Tile
@@ -334,14 +339,14 @@ export default function HomeDashboard() {
               fg={colors.sky}
               onPress={() => {
                 blurActiveElement();
-                router.push('/classes' as Href);
+                router.push(moduleHref('/classes', 'today'));
               }}
             />
             <Tile
               Icon={Package}
-              label="Things"
+              label="Life"
               value={items.length ? String(items.length) : '+'}
-              hint={items.length ? 'saved' : 'capture one'}
+              hint={items.length ? 'things saved' : 'capture one'}
               bg={colors.violetSoft}
               fg={colors.violet}
               onPress={() => {

@@ -8,7 +8,7 @@ export default function SubscriptionsLayout() {
   return (
     <Stack
       screenOptions={{
-        headerBackTitle: 'Back',
+        headerBackTitle: 'Cancel',
         headerStyle: { backgroundColor: colors.bg },
         headerTintColor: colors.ink,
         headerTitleStyle: { fontFamily: fonts.sansMedium, color: colors.ink },
@@ -16,9 +16,9 @@ export default function SubscriptionsLayout() {
         contentStyle: { backgroundColor: colors.bg },
       }}
     >
-      <Stack.Screen name="index" options={{ title: '' }} />
-      <Stack.Screen name="create" options={{ title: 'Add subscription' }} />
-      <Stack.Screen name="[id]" options={{ title: '' }} />
+      <Stack.Screen name="index" options={{ headerShown: false }} />
+      <Stack.Screen name="create" options={{ title: 'Add subscription', headerBackTitle: 'Cancel' }} />
+      <Stack.Screen name="[id]" options={{ headerShown: false }} />
     </Stack>
   );
 }

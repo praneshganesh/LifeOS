@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react';
-import { useRouter, type Href } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { ListCard, ListRow } from '@/components/ui/ListKit';
 import { useSpaces } from '@/lib/SpacesContext';
 import { useHousehold } from '@/lib/HouseholdContext';
+import { useCurrency } from '@/lib/CurrencyContext';
 import { loadLocalProfile } from '@/lib/profile';
+import { loadPlanPrefs, planById } from '@/lib/planLimits';
 import { resolveSelfDisplayName } from '@/lib/people';
-import { resolveDefaultCurrency } from '@/lib/currency';
+import { moduleHref } from '@/lib/moduleNav';
 import { useTheme } from '@/lib/ThemeContext';
 import { THEME_FAMILIES } from '@/constants/theme';
 
@@ -15,15 +17,29 @@ export default function SettingsScreen() {
   const { family, resolved } = useTheme();
   const { spaces } = useSpaces();
   const { members } = useHousehold();
+  const { currency } = useCurrency();
   const [displayName, setDisplayName] = useState('You');
-  const [currency, setCurrency] = useState('');
+  const [planTitle, setPlanTitle] = useState('Trial');
 
-  useEffect(() => {
-    void loadLocalProfile().then((p) => {
-      setDisplayName(resolveSelfDisplayName(p.displayName, members) || p.displayName);
-      setCurrency(resolveDefaultCurrency(p.currency));
-    });
-  }, [members]);
+  // Reload on focus (not just mount) so edits made on child screens
+  // show immediately when navigating back.
+  useFocusEffect(
+    useCallback(() => {
+      let live = true;
+      void loadLocalProfile().then((p) => {
+        if (!live) return;
+        setDisplayName(
+          resolveSelfDisplayName(p.displayName, members) || p.displayName
+        );
+      });
+      void loadPlanPrefs().then((prefs) => {
+        if (live) setPlanTitle(planById(prefs.planId).name);
+      });
+      return () => {
+        live = false;
+      };
+    }, [members])
+  );
 
   const homes = spaces.filter((s) => s.kind === 'home');
   const defaultHome = homes[0]?.name || 'No home yet';
@@ -33,6 +49,7 @@ export default function SettingsScreen() {
     <ModuleScreen
       title="Settings"
       subtitle="Privacy, security, notifications, and data."
+      defaultOrigin="profile"
     >
       <ModuleSection label="Account">
         <ListCard>
@@ -40,12 +57,12 @@ export default function SettingsScreen() {
             icon="family"
             title="Profile"
             subtitle={displayName}
-            onPress={() => router.push('/profile' as Href)}
+            onPress={() => router.push(moduleHref('/profile', 'settings'))}
           />
           <ListRow
             icon="credit"
             title="Plan & billing"
-            subtitle="Trial"
+            subtitle={planTitle}
             onPress={() => router.push('/settings/plan' as Href)}
             last
           />

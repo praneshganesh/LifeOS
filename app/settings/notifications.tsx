@@ -102,6 +102,8 @@ export default function NotificationPrefsScreen() {
     <ModuleScreen
       title="Notification preferences"
       subtitle="Reminders scheduled on this phone — push coming later."
+      backLabel="Settings"
+      backFallbackHref="/settings"
     >
       <ModuleSection label="Delivery">
         <ListCard>

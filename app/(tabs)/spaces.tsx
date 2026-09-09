@@ -9,8 +9,9 @@ import {
 import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { Plus, User } from 'lucide-react-native';
 import { Screen } from '@/components/ui/Screen';
+import { HomeHeader } from '@/components/HomeHeader';
+import { saveHomeSurface } from '@/lib/homeSurface';
 import { Text } from '@/components/ui/Text';
 import { Card } from '@/components/ui/Card';
 import { ListCard, ListRow } from '@/components/ui/ListKit';
@@ -36,6 +37,7 @@ import {
 } from '@/lib/moduleFilters';
 import { loadLocalProfile } from '@/lib/profile';
 import { selfAvatarInitial } from '@/lib/people';
+import { moduleHref } from '@/lib/moduleNav';
 import { blurActiveElement } from '@/lib/a11y';
 import { fonts, radius, shadows, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
@@ -160,6 +162,7 @@ export default function SpacesScreen() {
     useCallback(() => {
       scrollRef.current?.scrollTo({ y: 0, animated: false });
       setAddOpen(false);
+      void saveHomeSurface('things');
       void loadLocalProfile().then((p) => setProfileName(p.displayName));
     }, [])
   );
@@ -242,40 +245,22 @@ export default function SpacesScreen() {
 
   return (
     <Screen>
+      <HomeHeader
+        surface="things"
+        avatarLetter={profileLetter}
+        onAdd={openAdd}
+      />
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 100 },
+          { paddingBottom: insets.bottom + 100 },
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.top}>
-          <View style={{ flex: 1 }}>
-            <Text variant="title">Things</Text>
-            <Text variant="body" style={styles.lead}>
-              Homes and life modules — everything you track.
-            </Text>
-          </View>
-          <Pressable
-            onPress={openAdd}
-            style={[styles.addBtn, { backgroundColor: colors.accent }]}
-            accessibilityLabel="Add"
-          >
-            <Plus size={20} color={colors.accentOn} strokeWidth={2.2} />
-          </Pressable>
-          <Pressable
-            onPress={() => router.push('/profile' as Href)}
-            style={[styles.profileBtn, { backgroundColor: colors.ink }]}
-            accessibilityLabel="Profile"
-          >
-            {profileLetter ? (
-              <Text style={[styles.profileLetter, { color: colors.onInk }]}>{profileLetter}</Text>
-            ) : (
-              <User size={16} color={colors.onInk} strokeWidth={1.8} />
-            )}
-          </Pressable>
-        </View>
+        <Text variant="body" style={styles.lead}>
+          Spaces, money, routines, records — everything you track.
+        </Text>
 
         <Text style={[styles.sectionTitle, { marginTop: spacing.lg, color: colors.ink }]}>Spaces</Text>
         <View style={styles.grid}>
@@ -289,7 +274,7 @@ export default function SpacesScreen() {
               >
                 <Card
                   style={styles.card}
-                  onPress={() => router.push(`/space/${space.id}` as Href)}
+                  onPress={() => router.push(moduleHref(`/space/${space.id}`, 'things'))}
                 >
                   <View style={styles.cardTop}>
                     <Icon3DBadge name={space.icon} size={48} />
@@ -328,7 +313,7 @@ export default function SpacesScreen() {
                   subtitle={row.subtitle}
                   meta={row.count ? String(row.count) : undefined}
                   last={rowIndex === group.rows.length - 1}
-                  onPress={() => router.push(row.href as Href)}
+                  onPress={() => router.push(moduleHref(row.href, 'things'))}
                 />
               ))}
             </ListCard>
@@ -414,34 +399,9 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: spacing.lg,
   },
-  top: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.sm,
-  },
   lead: {
-    marginTop: spacing.sm,
-    marginBottom: spacing.lg,
-  },
-  addBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 4,
-  },
-  profileBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 4,
-  },
-  profileLetter: {
-    fontWeight: '600',
-    fontSize: 16,
+    marginTop: 2,
+    marginBottom: spacing.sm,
   },
   sectionTitle: {
     fontFamily: fonts.sansSemi,

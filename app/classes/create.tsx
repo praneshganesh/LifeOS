@@ -212,13 +212,6 @@ export default function CreateClassPackScreen() {
               {saving ? 'Saving…' : 'Save class pack'}
             </Text>
           </Pressable>
-          {!canSave ? (
-            <Text style={styles.saveHint}>
-              {!title.trim()
-                ? 'Add a name to save.'
-                : 'Enter how many classes (a number above 0).'}
-            </Text>
-          ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
     </Screen>
@@ -289,13 +282,6 @@ function makeStyles(colors: ThemeColors) {
   },
   saveDisabled: {
     opacity: 0.45,
-  },
-  saveHint: {
-    fontFamily: fonts.sans,
-    fontSize: 14,
-    color: colors.mute,
-    textAlign: 'center',
-    marginTop: spacing.sm,
   },
   saveText: {
     fontFamily: fonts.sansSemi,

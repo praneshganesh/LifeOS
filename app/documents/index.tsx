@@ -63,6 +63,7 @@ export default function DocumentsScreen() {
     <ModuleScreen
       title="Documents"
       subtitle="Identity, property, medical, legal — on your device."
+      defaultOrigin="things"
       right={
         <CaptureContextButton
           kind="documents"

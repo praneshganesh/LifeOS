@@ -14,7 +14,12 @@ export default function AboutSettingsScreen() {
     String(Constants.expoConfig?.runtimeVersion || '57');
 
   return (
-    <ModuleScreen title="About Saavi" subtitle="The key to your home life.">
+    <ModuleScreen
+      title="About Saavi"
+      subtitle="The key to your home life."
+      backLabel="Settings"
+      backFallbackHref="/settings"
+    >
       <Text variant="body" style={{ marginBottom: spacing.lg }}>
         Life administration — homes, assets, warranties, documents, and family —
         with automatic document reading and no required email or bank

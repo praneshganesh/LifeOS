@@ -8,6 +8,8 @@ export default function PrivacySettingsScreen() {
     <ModuleScreen
       title="Privacy"
       subtitle="Your data, your cloud. Never sold, never shared."
+      backLabel="Settings"
+      backFallbackHref="/settings"
     >
       <Text variant="body" style={{ marginBottom: spacing.lg }}>
         Saavi stores your inventory, family, spend, habits, and documents

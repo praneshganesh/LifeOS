@@ -2,9 +2,9 @@ import { useTheme } from '@/lib/ThemeContext';
 import { useToast } from '@/lib/ToastContext';
 import { useCallback, useMemo, useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Plus } from 'lucide-react-native';
+import { ChevronLeft, Plus } from 'lucide-react-native';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { Icon3DBadge } from '@/components/ui/Icon3D';
@@ -15,7 +15,7 @@ import { inventoryToAsset } from '@/lib/mergeAssets';
 import { confirmDelete } from '@/lib/confirmDelete';
 import { captureHref } from '@/lib/captureContext';
 import { blurActiveElement } from '@/lib/a11y';
-import { type ThemeColors,  colors, spacing  } from '@/constants/theme';
+import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
 import { useRememberCaptureContext } from '@/components/CaptureContextButton';
 
 export default function RoomDetailScreen() {
@@ -60,14 +60,25 @@ export default function RoomDetailScreen() {
     await removeItem(assetId).catch(() => showError('Couldn’t delete — try again.'));
   }
 
+  function handleBack() {
+    blurActiveElement();
+    if (router.canGoBack()) router.back();
+    else if (space) router.replace(`/space/${space.id}` as Href);
+    else router.replace('/(tabs)/spaces' as Href);
+  }
+
   if (!room) {
     return (
       <Screen>
-        <Stack.Screen options={{ title: 'Not found' }} />
-        <View style={styles.missing}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <View style={[styles.missing, { paddingTop: insets.top + spacing.lg }]}>
           <Text variant="bodyMedium" style={{ color: colors.mute }}>
             This room couldn’t be found.
           </Text>
+          <Pressable onPress={handleBack} style={styles.backBtn}>
+            <ChevronLeft size={20} color={colors.ink} strokeWidth={2.4} />
+            <Text style={styles.backLabel}>Go back</Text>
+          </Pressable>
         </View>
       </Screen>
     );
@@ -75,15 +86,34 @@ export default function RoomDetailScreen() {
 
   return (
     <Screen>
-      <Stack.Screen options={{ title: room.name, headerBackTitle: 'Back' }} />
+      <Stack.Screen options={{ headerShown: false }} />
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={[
           styles.content,
-          { paddingBottom: insets.bottom + 40 },
+          {
+            paddingTop: Math.max(insets.top, 12) + spacing.xs,
+            paddingBottom: insets.bottom + 40,
+          },
         ]}
         showsVerticalScrollIndicator={false}
       >
+        <View style={styles.topNav}>
+          <Pressable
+            onPress={handleBack}
+            style={({ pressed }) => [
+              styles.backBtn,
+              pressed && styles.backBtnPressed,
+            ]}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel={space ? `Go back to ${space.name}` : 'Go back'}
+          >
+            <ChevronLeft size={20} color={colors.ink} strokeWidth={2.4} />
+            <Text style={styles.backLabel}>{space?.name || 'Space'}</Text>
+          </Pressable>
+        </View>
+
         <View style={styles.headerRow}>
           <Icon3DBadge name={room.icon} size={64} />
           <Pressable
@@ -139,6 +169,29 @@ function makeStyles(colors: ThemeColors) {
   content: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
+  },
+  topNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+    marginLeft: -6,
+  },
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingVertical: 6,
+    paddingHorizontal: 6,
+    borderRadius: radius.sm,
+  },
+  backBtnPressed: {
+    opacity: 0.65,
+  },
+  backLabel: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 15,
+    color: colors.ink,
+    letterSpacing: -0.2,
   },
   headerRow: {
     flexDirection: 'row',

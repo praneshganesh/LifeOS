@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   View,
   StyleSheet,
   Pressable,
   TextInput,
 } from 'react-native';
-import { useRouter, type Href } from 'expo-router';
+import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { ChevronRight, User } from 'lucide-react-native';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { ListCard, ListRow, StatStrip } from '@/components/ui/ListKit';
@@ -26,6 +26,7 @@ import {
   trialDaysLeft,
   type PlanPrefs,
 } from '@/lib/planLimits';
+import { moduleHref } from '@/lib/moduleNav';
 import { fonts, radius, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
 import { useToast } from '@/lib/ToastContext';
@@ -51,14 +52,27 @@ export default function ProfileScreen() {
     [items, documentsSpaceId]
   );
 
-  useEffect(() => {
-    void loadLocalProfile().then((p) => {
-      setName(resolveSelfDisplayName(p.displayName, members) || p.displayName);
-      setLocale(p.locale || '');
-      setReady(true);
-    });
-    void loadPlanPrefs().then(setPlanPrefs);
-  }, [members]);
+  // Reload on focus so changes made elsewhere show when navigating back.
+  // Skipped while the inline name editor is open to not clobber typing.
+  useFocusEffect(
+    useCallback(() => {
+      let live = true;
+      if (!editing) {
+        void loadLocalProfile().then((p) => {
+          if (!live) return;
+          setName(resolveSelfDisplayName(p.displayName, members) || p.displayName);
+          setLocale(p.locale || '');
+          setReady(true);
+        });
+      }
+      void loadPlanPrefs().then((prefs) => {
+        if (live) setPlanPrefs(prefs);
+      });
+      return () => {
+        live = false;
+      };
+    }, [members, editing])
+  );
 
   async function save() {
     if (saving) return;
@@ -90,6 +104,7 @@ export default function ProfileScreen() {
     <ModuleScreen
       title="Profile"
       subtitle={locale || 'Your account'}
+      defaultOrigin="today"
     >
       <View
         style={[
@@ -195,7 +210,7 @@ export default function ProfileScreen() {
             icon="family"
             title="Household"
             subtitle={`${members.length} ${members.length === 1 ? 'person' : 'people'}`}
-            onPress={() => router.push('/family' as Href)}
+            onPress={() => router.push(moduleHref('/family', 'profile'))}
             last
           />
         </ListCard>
@@ -206,7 +221,7 @@ export default function ProfileScreen() {
           <ListRow
             icon="bell"
             title="Notifications"
-            onPress={() => router.push('/notifications' as Href)}
+            onPress={() => router.push(moduleHref('/notifications', 'profile'))}
           />
           <ListRow
             icon="package"
@@ -216,7 +231,7 @@ export default function ProfileScreen() {
           <ListRow
             icon="tools"
             title="Settings"
-            onPress={() => router.push('/settings' as Href)}
+            onPress={() => router.push(moduleHref('/settings', 'profile'))}
             last
           />
         </ListCard>

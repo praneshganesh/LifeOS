@@ -48,6 +48,7 @@ export default function HabitsScreen() {
     <ModuleScreen
       title="Habits"
       subtitle="Auto-categorized rhythms — optionally linked to Things."
+      defaultOrigin="things"
       right={
         <Pressable
           onPress={() => router.push('/habits/create' as Href)}
