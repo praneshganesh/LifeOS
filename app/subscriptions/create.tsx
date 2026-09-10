@@ -1,18 +1,15 @@
 import { useTheme } from '@/lib/ThemeContext';
 import { useMemo, useEffect, useState } from 'react';
 import {
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Switch,
   TextInput,
   View,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen } from '@/components/ui/Screen';
+import { KeyboardFormScroll } from '@/components/ui/KeyboardFormScroll';
 import { Text } from '@/components/ui/Text';
 import { DateField } from '@/components/ui/DateField';
 import { useSubscriptions } from '@/lib/SubscriptionsContext';
@@ -32,7 +29,6 @@ import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/
 export default function SubscriptionFormScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { editId: editParam } = useLocalSearchParams<{ editId?: string }>();
   const editId = Array.isArray(editParam) ? editParam[0] : editParam;
@@ -147,17 +143,7 @@ export default function SubscriptionFormScreen() {
       <Stack.Screen
         options={{ title: editing ? 'Edit subscription' : 'Add subscription' }}
       />
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView
-          contentContainerStyle={[
-            styles.content,
-            { paddingBottom: insets.bottom + 40 },
-          ]}
-          keyboardShouldPersistTaps="handled"
-        >
+      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={40}>
           <Text style={styles.label}>Name</Text>
           <TextInput
             value={title}
@@ -255,8 +241,7 @@ export default function SubscriptionFormScreen() {
               {saving ? 'Saving…' : editing ? 'Save changes' : 'Save subscription'}
             </Text>
           </Pressable>
-        </ScrollView>
-      </KeyboardAvoidingView>
+        </KeyboardFormScroll>
     </Screen>
   );
 }

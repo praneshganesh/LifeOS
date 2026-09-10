@@ -1,17 +1,14 @@
 import { useTheme } from '@/lib/ThemeContext';
 import { useMemo, useState } from 'react';
 import {
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   TextInput,
   View,
 } from 'react-native';
 import { Stack, useRouter, type Href } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen } from '@/components/ui/Screen';
+import { KeyboardFormScroll } from '@/components/ui/KeyboardFormScroll';
 import { Text } from '@/components/ui/Text';
 import { DateField } from '@/components/ui/DateField';
 import { PersonChips } from '@/components/PersonChips';
@@ -32,7 +29,6 @@ const MONTH_CHIPS = [1, 2, 3, 6] as const;
 export default function CreateClassPackScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { addPack } = useClasses();
   const { members } = useHousehold();
@@ -94,17 +90,7 @@ export default function CreateClassPackScreen() {
   return (
     <Screen>
       <Stack.Screen options={{ title: 'New class pack' }} />
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView
-          contentContainerStyle={[
-            styles.content,
-            { paddingBottom: insets.bottom + 40 },
-          ]}
-          keyboardShouldPersistTaps="handled"
-        >
+      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={40}>
           <Text variant="body" style={{ color: colors.mute, marginBottom: spacing.md }}>
             A finite pack — like 24 skating classes in 3 months — not a daily habit.
           </Text>
@@ -212,8 +198,7 @@ export default function CreateClassPackScreen() {
               {saving ? 'Saving…' : 'Save class pack'}
             </Text>
           </Pressable>
-        </ScrollView>
-      </KeyboardAvoidingView>
+        </KeyboardFormScroll>
     </Screen>
   );
 }

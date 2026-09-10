@@ -7,12 +7,13 @@ import {
   displayWarrantyExpiry,
   localDayKey,
   normalizeWarrantyExpiry,
+  parseRecurringWeekdayReminder,
   parseReminderFromUtterance,
   remindAtFromUtterance,
   reminderLabelFromUtterance,
   warrantyExpiryFromUtterance,
 } from '../dates';
-import { defaultActivityYear, yearsWithLogs } from '../lastDone';
+import { defaultActivityYear, formatInterval, yearsWithLogs } from '../lastDone';
 
 const APP_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -141,5 +142,47 @@ describe('reminder speech', () => {
     const parsed = parseReminderFromUtterance(utterance);
     assert.equal(parsed?.label, "Mira's payment");
     assert.match(parsed?.notes ?? '', /off plan property/i);
+  });
+
+  it('parses every Tuesday and Friday at 6:30 AM', () => {
+    const wed = new Date(2026, 8, 9, 12, 0, 0);
+    const utterance =
+      'Remind me every Tuesday and Friday at 6:30 AM to stretch';
+    const recurring = parseRecurringWeekdayReminder(utterance, wed);
+    assert.deepEqual(recurring?.remindInterval.weekdays, [2, 5]);
+    assert.equal(recurring?.remindInterval.hour, 6);
+    assert.equal(recurring?.remindInterval.minute, 30);
+    assert.equal(recurring?.remindAt, '2026-09-11');
+    assert.equal(recurring?.remindInterval.endsAt, undefined);
+    assert.equal(
+      formatInterval(recurring!.remindInterval),
+      'Every Tue & Fri at 6:30 AM'
+    );
+    assert.equal(parseReminderFromUtterance(utterance)?.label, 'Stretch');
+  });
+
+  it('parses end after N weeks, months, or until a month', () => {
+    const wed = new Date(2026, 8, 9, 12, 0, 0);
+    const weeks = parseRecurringWeekdayReminder(
+      'Remind me every Tuesday and Friday at 6:30 AM for 8 weeks to stretch',
+      wed
+    );
+    assert.equal(weeks?.remindInterval.endsAt, '2026-11-04');
+    assert.match(
+      formatInterval(weeks!.remindInterval),
+      /until/i
+    );
+
+    const months = parseRecurringWeekdayReminder(
+      'Remind me every Monday at 7am for 3 months to meditate',
+      wed
+    );
+    assert.equal(months?.remindInterval.endsAt, '2026-12-09');
+
+    const untilMonth = parseRecurringWeekdayReminder(
+      'Remind me every weekday at 8am until December to walk',
+      wed
+    );
+    assert.equal(untilMonth?.remindInterval.endsAt, '2026-12-31');
   });
 });

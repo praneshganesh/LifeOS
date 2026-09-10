@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import {
   ensureReminderActions,
   parseReminderFromUtterance,
+  parseRecurringWeekdayReminder,
   remindAtFromUtterance,
   reminderLabelFromUtterance,
 } from '../reminders.mjs';
@@ -47,5 +48,35 @@ describe('chat-api reminder repair', () => {
     assert.equal(next[0]?.label, "Mira's payment");
     assert.equal(next[0]?.remindAt, '2026-11-10');
     assert.match(next[0]?.note ?? '', /off plan property/i);
+  });
+
+  it('parses every Tuesday and Friday at 6:30 AM', () => {
+    // Wednesday 9 Sep 2026 12:00 — next fire is Friday 11 Sep
+    const wed = new Date(2026, 8, 9, 12, 0, 0);
+    const utterance =
+      'Remind me every Tuesday and Friday at 6:30 AM to stretch';
+    const recurring = parseRecurringWeekdayReminder(utterance, wed);
+    assert.ok(recurring);
+    assert.deepEqual(recurring?.remindInterval.weekdays, [2, 5]);
+    assert.equal(recurring?.remindInterval.hour, 6);
+    assert.equal(recurring?.remindInterval.minute, 30);
+    assert.equal(recurring?.remindAt, '2026-09-11');
+    assert.equal(remindAtFromUtterance(utterance, wed), '2026-09-11');
+    assert.equal(parseReminderFromUtterance(utterance)?.label, 'Stretch');
+    const next = ensureReminderActions([], utterance, []);
+    assert.equal(next[0]?.type, 'set_reminder');
+    assert.equal(next[0]?.remindAt, '2026-09-11');
+    assert.equal(next[0]?.remindInterval?.unit, 'weekdays');
+    assert.deepEqual(next[0]?.remindInterval?.weekdays, [2, 5]);
+  });
+
+  it('parses for 8 weeks end date', () => {
+    const wed = new Date(2026, 8, 9, 12, 0, 0);
+    const next = ensureReminderActions(
+      [],
+      'Remind me every Tuesday and Friday at 6:30 AM for 8 weeks to stretch',
+      []
+    );
+    assert.equal(next[0]?.remindInterval?.endsAt, '2026-11-04');
   });
 });

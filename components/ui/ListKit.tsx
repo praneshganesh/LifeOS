@@ -2,7 +2,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { ChevronRight, X } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { AppIcon, type Icon3DName } from '@/components/ui/Icon3D';
-import { fonts, radius, shadowsFor, spacing } from '@/constants/theme';
+import { fonts, radius, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
 
 export function ListCard({
@@ -12,7 +12,7 @@ export function ListCard({
   children: React.ReactNode;
   style?: object;
 }) {
-  const { colors, resolved } = useTheme();
+  const { colors } = useTheme();
   return (
     <View
       style={[
@@ -21,7 +21,6 @@ export function ListCard({
           backgroundColor: colors.surface,
           borderColor: colors.line,
         },
-        shadowsFor(resolved).soft,
         style,
       ]}
     >
@@ -103,13 +102,12 @@ export function StatStrip({
 }: {
   items: { label: string; value: string }[];
 }) {
-  const { colors, resolved } = useTheme();
+  const { colors } = useTheme();
   return (
     <View
       style={[
         styles.stats,
         { backgroundColor: colors.surface, borderColor: colors.line },
-        shadowsFor(resolved).soft,
       ]}
     >
       {items.map((item, i) => (
@@ -184,8 +182,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 10,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 14,
   },
   dot: {
     width: 4,

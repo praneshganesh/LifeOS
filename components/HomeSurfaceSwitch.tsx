@@ -88,14 +88,14 @@ const styles = StyleSheet.create({
   },
   label: {
     fontFamily: fonts.sansSemi,
-    fontSize: 21,
-    lineHeight: 26,
-    letterSpacing: -0.5,
+    fontSize: 22,
+    lineHeight: 28,
+    letterSpacing: -0.45,
   },
   marker: {
-    width: 16,
-    height: 3,
+    width: 18,
+    height: 2.5,
     borderRadius: 2,
-    marginTop: 3,
+    marginTop: 4,
   },
 });

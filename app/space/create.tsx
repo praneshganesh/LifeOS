@@ -2,17 +2,14 @@ import { useTheme } from '@/lib/ThemeContext';
 import { useMemo, useState } from 'react';
 import {
   Alert,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   TextInput,
   View,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen } from '@/components/ui/Screen';
+import { KeyboardFormScroll } from '@/components/ui/KeyboardFormScroll';
 import { Text } from '@/components/ui/Text';
 import { Icon3DBadge, type Icon3DName } from '@/components/ui/Icon3D';
 import { useSpaces, type SpaceKind } from '@/lib/SpacesContext';
@@ -32,7 +29,6 @@ const HOME_ICONS: Icon3DName[] = ['house', 'holiday', 'building'];
 export default function NewSpaceScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { addSpace } = useSpaces();
   const { showToast } = useToast();
@@ -66,17 +62,7 @@ export default function NewSpaceScreen() {
   return (
     <Screen>
       <Stack.Screen options={{ title: 'New space' }} />
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView
-          contentContainerStyle={[
-            styles.content,
-            { paddingBottom: insets.bottom + 40 },
-          ]}
-          keyboardShouldPersistTaps="handled"
-        >
+      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={40}>
           <Text style={styles.label}>Name</Text>
           <TextInput
             value={name}
@@ -148,8 +134,7 @@ export default function NewSpaceScreen() {
           >
             <Text style={styles.saveText}>{saving ? 'Creating…' : 'Create space'}</Text>
           </Pressable>
-        </ScrollView>
-      </KeyboardAvoidingView>
+        </KeyboardFormScroll>
     </Screen>
   );
 }

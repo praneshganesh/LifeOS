@@ -130,6 +130,8 @@ function startOfLocalDay(d: Date) {
 /** Absolute YYYY-MM-DD from speech: next Tuesday, tomorrow, in 3 days, ISO. */
 export function remindAtFromUtterance(text?: string, from = new Date()): string | undefined {
   if (!text?.trim()) return undefined;
+  const recurring = parseRecurringWeekdayReminder(text, from);
+  if (recurring?.remindAt) return recurring.remindAt;
   const iso = text.match(/\b(\d{4}-\d{2}-\d{2})\b/);
   if (iso) return iso[1];
   const cal = calendarDayFromUtterance(text, from);
@@ -159,6 +161,224 @@ export function remindAtFromUtterance(text?: string, from = new Date()): string 
   return undefined;
 }
 
+const WEEKDAY_PATTERNS: { day: number; re: RegExp }[] = [
+  { day: 0, re: /\bsun(?:day)?s?\b/i },
+  { day: 1, re: /\bmon(?:day)?s?\b/i },
+  { day: 2, re: /\btue(?:s(?:day)?)?s?\b/i },
+  { day: 3, re: /\bwed(?:nesday)?s?\b/i },
+  { day: 4, re: /\bthu(?:rs(?:day)?)?s?\b/i },
+  { day: 5, re: /\bfri(?:day)?s?\b/i },
+  { day: 6, re: /\bsat(?:urday)?s?\b/i },
+];
+
+/** "6:30am", "at 6:30 AM", "6 am" → local hour/minute. */
+export function parseTimeOfDayFromUtterance(
+  text?: string
+): { hour: number; minute: number } | undefined {
+  if (!text?.trim()) return undefined;
+  const withMeridiem = text.match(
+    /\b(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)\b/i
+  );
+  if (withMeridiem) {
+    let hour = Number(withMeridiem[1]);
+    const minute = withMeridiem[2] ? Number(withMeridiem[2]) : 0;
+    if (!Number.isFinite(hour) || hour < 1 || hour > 12 || minute > 59) return undefined;
+    const pm = /^p/i.test(withMeridiem[3]);
+    if (pm && hour < 12) hour += 12;
+    if (!pm && hour === 12) hour = 0;
+    return { hour, minute };
+  }
+  const twentyFour = text.match(/\b(?:at\s+)(\d{1,2}):(\d{2})\b/);
+  if (twentyFour) {
+    const hour = Number(twentyFour[1]);
+    const minute = Number(twentyFour[2]);
+    if (hour > 23 || minute > 59) return undefined;
+    return { hour, minute };
+  }
+  return undefined;
+}
+
+/**
+ * "every Tuesday and Friday at 6:30 AM for 8 weeks"
+ * "until December" / "until 15 December" / "through March"
+ * → weekday schedule + optional endsAt + next fire date.
+ */
+export function parseRecurringWeekdayReminder(
+  text?: string,
+  from = new Date()
+):
+  | {
+      remindAt: string;
+      remindInterval: {
+        value: number;
+        unit: 'weekdays';
+        weekdays: number[];
+        hour: number;
+        minute: number;
+        endsAt?: string;
+      };
+    }
+  | undefined {
+  if (!text?.trim()) return undefined;
+  if (!/\b(?:every|each)\b/i.test(text)) return undefined;
+
+  let weekdays: number[] = [];
+  if (/\bweekdays?\b/i.test(text)) {
+    weekdays = [1, 2, 3, 4, 5];
+  } else if (/\bweekends?\b/i.test(text)) {
+    weekdays = [0, 6];
+  } else {
+    for (const { day, re } of WEEKDAY_PATTERNS) {
+      if (re.test(text)) weekdays.push(day);
+    }
+  }
+  weekdays = [...new Set(weekdays)].sort((a, b) => a - b);
+  if (!weekdays.length) return undefined;
+
+  const clock = parseTimeOfDayFromUtterance(text);
+  const hour = clock?.hour ?? 9;
+  const minute = clock?.minute ?? 0;
+  const endsAt = parseReminderEndsAtFromUtterance(text, from);
+
+  const set = new Set(weekdays);
+  let remindAt: string | undefined;
+  const endBound = endsAt
+    ? new Date(
+        Number(endsAt.slice(0, 4)),
+        Number(endsAt.slice(5, 7)) - 1,
+        Number(endsAt.slice(8, 10)),
+        23,
+        59,
+        59
+      ).getTime()
+    : null;
+  for (let add = 0; add < 400; add++) {
+    const d = new Date(
+      from.getFullYear(),
+      from.getMonth(),
+      from.getDate() + add,
+      hour,
+      minute,
+      0,
+      0
+    );
+    if (endBound != null && d.getTime() > endBound) break;
+    if (!set.has(d.getDay())) continue;
+    if (d.getTime() <= from.getTime()) continue;
+    remindAt = localDayKey(d);
+    break;
+  }
+  if (!remindAt) return undefined;
+
+  return {
+    remindAt,
+    remindInterval: {
+      value: 1,
+      unit: 'weekdays',
+      weekdays,
+      hour,
+      minute,
+      ...(endsAt ? { endsAt } : {}),
+    },
+  };
+}
+
+/**
+ * Optional series end from speech:
+ * - "for 8 weeks" / "for 3 months"
+ * - "until December" / "through March 2027" (end of that month)
+ * - "until 15 December" / "until December 15"
+ * - "until 2026-12-31"
+ */
+export function parseReminderEndsAtFromUtterance(
+  text?: string,
+  from = new Date()
+): string | undefined {
+  if (!text?.trim()) return undefined;
+
+  const forWeeks = text.match(/\bfor\s+(\d{1,3})\s+weeks?\b/i);
+  if (forWeeks) {
+    const n = Number(forWeeks[1]);
+    if (n > 0) {
+      const d = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+      d.setDate(d.getDate() + n * 7);
+      return localDayKey(d);
+    }
+  }
+
+  const forMonths = text.match(/\bfor\s+(\d{1,3})\s+months?\b/i);
+  if (forMonths) {
+    const n = Number(forMonths[1]);
+    if (n > 0) {
+      const d = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+      d.setMonth(d.getMonth() + n);
+      return localDayKey(d);
+    }
+  }
+
+  const untilIso = text.match(/\b(?:until|till|through|to)\s+(\d{4}-\d{2}-\d{2})\b/i);
+  if (untilIso) return untilIso[1];
+
+  const untilDayMonth = text.match(
+    new RegExp(
+      `\\b(?:until|till|through)\\s+(?:the\\s+)?(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?(${MONTHS})(?:\\s+(\\d{4}))?\\b`,
+      'i'
+    )
+  );
+  if (untilDayMonth) {
+    const day = Number(untilDayMonth[1]);
+    const month = monthIndex(untilDayMonth[2]);
+    if (month != null && day >= 1 && day <= 31) {
+      let year = untilDayMonth[3] ? Number(untilDayMonth[3]) : from.getFullYear();
+      let candidate = new Date(year, month, day);
+      if (!untilDayMonth[3] && candidate < startOfLocalDay(from)) year += 1;
+      candidate = new Date(year, month, day);
+      if (candidate.getMonth() === month && candidate.getDate() === day) {
+        return localDayKey(candidate);
+      }
+    }
+  }
+
+  const untilMonthDay = text.match(
+    new RegExp(
+      `\\b(?:until|till|through)\\s+(${MONTHS})\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:\\s+(\\d{4}))?\\b`,
+      'i'
+    )
+  );
+  if (untilMonthDay) {
+    const month = monthIndex(untilMonthDay[1]);
+    const day = Number(untilMonthDay[2]);
+    if (month != null && day >= 1 && day <= 31) {
+      let year = untilMonthDay[3] ? Number(untilMonthDay[3]) : from.getFullYear();
+      let candidate = new Date(year, month, day);
+      if (!untilMonthDay[3] && candidate < startOfLocalDay(from)) year += 1;
+      candidate = new Date(year, month, day);
+      if (candidate.getMonth() === month && candidate.getDate() === day) {
+        return localDayKey(candidate);
+      }
+    }
+  }
+
+  // "until December" / "through March" → last day of that month
+  const untilMonth = text.match(
+    new RegExp(`\\b(?:until|till|through)\\s+(${MONTHS})(?:\\s+(\\d{4}))?\\b`, 'i')
+  );
+  if (untilMonth) {
+    const month = monthIndex(untilMonth[1]);
+    if (month != null) {
+      let year = untilMonth[2] ? Number(untilMonth[2]) : from.getFullYear();
+      // If that month is already over this year, use next year
+      const endOfMonth = new Date(year, month + 1, 0);
+      if (!untilMonth[2] && endOfMonth < startOfLocalDay(from)) {
+        year += 1;
+      }
+      return localDayKey(new Date(year, month + 1, 0));
+    }
+  }
+
+  return undefined;
+}
+
 export function looksLikeReminder(text?: string): boolean {
   if (!text?.trim()) return false;
   return /\bremind(?:er|ers|ing)?\b|\bremind me\b/i.test(text);
@@ -181,6 +401,21 @@ function stripReminderDatePhrases(s: string): string {
       /\b(next|this|on)\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/gi,
       ''
     )
+    .replace(
+      /\b(?:every|each)\s+(?:other\s+)?(?:weekdays?|weekends?|(?:sun(?:day)?|mon(?:day)?|tue(?:s(?:day)?)?|wed(?:nesday)?|thu(?:rs(?:day)?)?|fri(?:day)?|sat(?:urday)?)s?(?:\s*(?:,|and|&|\/)\s*(?:sun(?:day)?|mon(?:day)?|tue(?:s(?:day)?)?|wed(?:nesday)?|thu(?:rs(?:day)?)?|fri(?:day)?|sat(?:urday)?)s?)*)\b/gi,
+      ''
+    )
+    .replace(/\b(?:at\s+)?\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)\b/gi, '')
+    .replace(/\bat\s+\d{1,2}:\d{2}\b/gi, '')
+    .replace(/\bfor\s+\d{1,3}\s+(?:weeks?|months?)\b/gi, '')
+    .replace(
+      new RegExp(
+        `\\b(?:until|till|through)\\s+(?:the\\s+)?(?:\\d{1,2}(?:st|nd|rd|th)?\\s+(?:of\\s+)?)?(?:${MONTHS})(?:\\s+\\d{1,2}(?:st|nd|rd|th)?)?(?:\\s+\\d{4})?\\b`,
+        'gi'
+      ),
+      ''
+    )
+    .replace(/\b(?:until|till|through|to)\s+\d{4}-\d{2}-\d{2}\b/gi, '')
     .replace(/\b(tomorrow|today)\b/gi, '')
     .replace(/\bin\s+\d+\s+days?\b/gi, '')
     .replace(/\b\d{4}-\d{2}-\d{2}\b/g, '')
@@ -201,6 +436,7 @@ export function parseReminderFromUtterance(
   );
   s = s.replace(/^remind\s+me\s+(to\s+|about\s+|that\s+)?/i, '');
   s = stripReminderDatePhrases(s);
+  s = s.replace(/^to\s+/i, '').trim();
   if (s.length < 3) return { label: 'Reminder' };
 
   const splitOn = [

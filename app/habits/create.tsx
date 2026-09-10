@@ -1,18 +1,15 @@
 import { useTheme } from '@/lib/ThemeContext';
 import { useMemo, useState } from 'react';
 import {
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   TextInput,
   View,
 } from 'react-native';
 import { Stack, useRouter, type Href } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Check } from 'lucide-react-native';
 import { Screen } from '@/components/ui/Screen';
+import { KeyboardFormScroll } from '@/components/ui/KeyboardFormScroll';
 import { Text } from '@/components/ui/Text';
 import { useHabits } from '@/lib/HabitsContext';
 import { useToast } from '@/lib/ToastContext';
@@ -25,7 +22,6 @@ import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/
 export default function CreateHabitScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { addHabit, checkIn } = useHabits();
   const { items } = useInventory();
@@ -78,17 +74,7 @@ export default function CreateHabitScreen() {
   return (
     <Screen>
       <Stack.Screen options={{ title: 'New habit' }} />
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView
-          contentContainerStyle={[
-            styles.content,
-            { paddingBottom: insets.bottom + 40 },
-          ]}
-          keyboardShouldPersistTaps="handled"
-        >
+      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={40}>
           <Text style={styles.label}>Habit</Text>
           <TextInput
             value={title}
@@ -183,8 +169,7 @@ export default function CreateHabitScreen() {
               {saving ? 'Saving…' : doneToday ? 'Save & log today' : 'Save habit'}
             </Text>
           </Pressable>
-        </ScrollView>
-      </KeyboardAvoidingView>
+        </KeyboardFormScroll>
     </Screen>
   );
 }

@@ -1,17 +1,14 @@
 import { useState } from 'react';
 import {
   Alert,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   TextInput,
   View,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen } from '@/components/ui/Screen';
+import { KeyboardFormScroll } from '@/components/ui/KeyboardFormScroll';
 import { Text } from '@/components/ui/Text';
 import { useHousehold } from '@/lib/HouseholdContext';
 import type { HouseholdRole } from '@/lib/household';
@@ -37,7 +34,6 @@ const NAME_FIELD = {
 
 export default function NewFamilyMemberScreen() {
   const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { addMember } = useHousehold();
   const { showToast } = useToast();
@@ -76,17 +72,7 @@ export default function NewFamilyMemberScreen() {
   return (
     <Screen>
       <Stack.Screen options={{ title: 'Add person' }} />
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView
-          contentContainerStyle={[
-            styles.content,
-            { paddingBottom: insets.bottom + 108 },
-          ]}
-          keyboardShouldPersistTaps="handled"
-        >
+      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={108}>
           <Text style={[styles.label, { color: colors.mute }]}>Name</Text>
           <TextInput
             value={name}
@@ -162,8 +148,7 @@ export default function NewFamilyMemberScreen() {
               {saving ? 'Saving…' : 'Save'}
             </Text>
           </Pressable>
-        </ScrollView>
-      </KeyboardAvoidingView>
+        </KeyboardFormScroll>
     </Screen>
   );
 }

@@ -2,17 +2,15 @@ import { useTheme } from '@/lib/ThemeContext';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   TextInput,
   View,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen } from '@/components/ui/Screen';
+import { KeyboardFormScroll } from '@/components/ui/KeyboardFormScroll';
 import { Text } from '@/components/ui/Text';
 import { OptionalDateField } from '@/components/ui/DateField';
 import { PersonChips } from '@/components/PersonChips';
@@ -28,7 +26,6 @@ export default function EditAssetScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { id } = useLocalSearchParams<{ id: string }>();
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { getById, updateItem, removeItem } = useInventory();
   const { spaces, roomsForSpace } = useSpaces();
@@ -177,17 +174,7 @@ export default function EditAssetScreen() {
   return (
     <Screen>
       <Stack.Screen options={{ title: 'Edit item' }} />
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView
-          contentContainerStyle={[
-            styles.content,
-            { paddingBottom: insets.bottom + 40 },
-          ]}
-          keyboardShouldPersistTaps="handled"
-        >
+      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={40}>
           <Field label="Name" value={name} onChangeText={setName} />
           <Field label="Brand" value={brand} onChangeText={setBrand} />
           <Field label="Category" value={category} onChangeText={setCategory} />
@@ -333,8 +320,7 @@ export default function EditAssetScreen() {
           <Pressable onPress={confirmDelete} style={styles.deleteBtn}>
             <Text style={styles.deleteText}>Delete item</Text>
           </Pressable>
-        </ScrollView>
-      </KeyboardAvoidingView>
+        </KeyboardFormScroll>
     </Screen>
   );
 }

@@ -10,6 +10,7 @@ import { Check, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import {
   defaultActivityYear,
+  formatInterval,
   formatRelativeDone,
   formatRemindDate,
   formatRemindStatus,
@@ -101,7 +102,11 @@ function ActivityYearCalendar({
   const { colors } = useTheme();
   const [innerW, setInnerW] = useState(0);
   const habitLogs = useMemo(
-    () => (logs ?? []).map((l) => ({ doneAt: toDateInputValue(l.doneAt) })),
+    () =>
+      (logs ?? []).map((l, i) => ({
+        id: `ld-${i}-${toDateInputValue(l.doneAt)}`,
+        doneAt: toDateInputValue(l.doneAt),
+      })),
     [logs]
   );
   const model = useMemo(
@@ -335,17 +340,23 @@ export function LastDoneActivityCard({
           emptyColor={colors.lineStrong}
           yearNav={yearNav}
         />
-      ) : item.remindAt ? (
+      ) : item.remindAt || item.remindInterval?.unit === 'weekdays' ? (
         <View style={[styles.reminderPanel, { backgroundColor: colors.surfaceSoft }]}>
           <Text variant="caption" style={{ color: colors.mute }}>
             Reminder
           </Text>
           <Text variant="headline" style={[styles.reminderDate, { color: colors.ink }]}>
-            {formatRemindDate(item.remindAt)}
+            {item.remindInterval
+              ? formatInterval(item.remindInterval)
+              : formatRemindDate(item.remindAt!)}
           </Text>
-          <Text variant="caption" style={{ color: category.color }}>
-            {formatRemindStatus(item.remindAt)}
-          </Text>
+          {item.remindAt ? (
+            <Text variant="caption" style={{ color: category.color }}>
+              {item.remindInterval?.unit === 'weekdays'
+                ? `Next · ${formatRemindDate(item.remindAt)}`
+                : formatRemindStatus(item.remindAt)}
+            </Text>
+          ) : null}
         </View>
       ) : null}
     </Pressable>

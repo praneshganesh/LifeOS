@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { useRouter, type Href } from 'expo-router';
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { Plus } from 'lucide-react-native';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { FilterChips, ListCard, ListRow, StatStrip } from '@/components/ui/ListKit';
@@ -11,11 +11,10 @@ import { useSubscriptions } from '@/lib/SubscriptionsContext';
 import { useClasses } from '@/lib/ClassesContext';
 import { buildAttentionItems } from '@/lib/attention';
 import { useAttentionDismissals } from '@/lib/attentionDismiss';
-import { moduleHref } from '@/lib/moduleNav';
+import { moduleHrefPreserveFrom } from '@/lib/moduleNav';
 import { blurActiveElement } from '@/lib/a11y';
-import { type ThemeColors, colors, fonts, radius, spacing } from '@/constants/theme';
+import { type ThemeColors, fonts, radius, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
-
 const FILTERS = [
   { key: 'open', label: 'Open' },
   { key: 'urgent', label: 'Urgent' },
@@ -30,6 +29,7 @@ export default function TasksScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
+  const { from } = useLocalSearchParams<{ from?: string }>();
   const { items } = useInventory();
   const { items: lastDone } = useLastDone();
   const { subscriptions } = useSubscriptions();
@@ -57,14 +57,14 @@ export default function TasksScreen() {
 
   function openAddReminder() {
     blurActiveElement();
-    router.push(moduleHref('/last-done?mode=remind', 'things'));
+    router.push(moduleHrefPreserveFrom('/last-done?mode=remind', from));
   }
 
   return (
     <ModuleScreen
       title="Tasks & reminders"
       subtitle="Due soon from warranties, docs, renewals, and reminders."
-      defaultOrigin="things"
+      defaultOrigin="today"
       right={
         <Pressable
           onPress={openAddReminder}

@@ -94,7 +94,7 @@ Facts (critical):
 - passport / document expiry → expiryDate, else warrantyExpiry. Never invent.
 - "when did I last service/maintain X" → LastDone rows with matching itemId/itemName, or recentEvents on the item; if neither matches, say you don’t have a service log.
 - User says they serviced/maintained/descaled something → log_done { label, inventoryItemId?, doneAt? } (prefer inventory id from Inventory JSON).
-- reminder / "remind me" / "log a reminder" → set_reminder { label, remindAt, inventoryItemId? }. remindAt YYYY-MM-DD ("next Tuesday" → that date). Not log_done. Link Inventory id when they name a Thing (passport).
+- reminder / "remind me" / "log a reminder" → set_reminder { label, remindAt, inventoryItemId?, remindInterval? }. remindAt YYYY-MM-DD ("next Tuesday" → that date). For "every Tuesday and Friday at 6:30am for 8 weeks" / "until December" set remindInterval { unit:"weekdays", weekdays:[2,5], hour:6, minute:30, value:1, endsAt? } (JS weekdays 0=Sun…6=Sat; endsAt YYYY-MM-DD optional — omit for indefinite). Not log_done.
 
 Actions:
 - durable goods (laptop, machine, headphones, passport) → add_item (name, brand?, room?, category?, price?, purchasedFrom?, warrantyExpiry?, manualUrl?, assignedTo?, personId?). warrantyExpiry YYYY-MM-DD; year-only "until 2028" → 2028-12-31. Omit condition unless they said used/refurbished/etc — never invent Good. "I got a new X" is not a condition.
@@ -109,7 +109,7 @@ Actions:
 - attended a class ("I attended", "went to skating") → log_class { title?, id?, date?, assignedTo?, personId? } only if Classes JSON has a pack for that person (or one unassigned pack). If Classes JSON is empty, do not log_class. Never invent a pack from attendance. Never log another adult’s pack.
 - refine Thing (store/price/warranty/date/serial/name) → update_item { id, patch } (patch may include purchaseDate, warrantyExpiry, serial, purchasedFrom, price). If user gives price with a currency word → include that ISO code in the price string; bare numbers use Default currency. Sharafdg→Sharaf DG.
 - service/maintain/descale/filter change → log_done { label, inventoryItemId?, doneAt? }
-- reminder ("remind me next Tuesday", "log a reminder to renew passport") → set_reminder { label, remindAt, inventoryItemId?, assignedTo?, personId? }. remindAt YYYY-MM-DD. Do not refuse — Saavi stores this on Last Done.
+- reminder ("remind me next Tuesday", "every Tuesday and Friday at 6:30 AM", "log a reminder to renew passport") → set_reminder { label, remindAt, remindInterval?, inventoryItemId?, assignedTo?, personId? }. remindAt YYYY-MM-DD. Recurring weekdays use remindInterval.unit "weekdays". Do not refuse — Saavi stores this on Last Done.
 - delete a Last Done activity / reminder → remove_last_done { id } from LastDone JSON.
 - delete/sold a Thing → remove_item { id } (reply with count). "Did you delete?" → none only, do not remove again.
 - show/open a Thing → open_item { id } (use focus item id; never omit id)

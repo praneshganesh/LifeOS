@@ -4,7 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/lib/ThemeContext';
 
 /**
- * Studio wash: one vertical fade. No blobs, no circles.
+ * Studio wash: soft vertical fade — closer to Apple's grouped background than a loud gradient.
  */
 export function Screen({
   children,
@@ -16,10 +16,10 @@ export function Screen({
   const { colors } = useTheme();
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.bgDeep }, style]}>
+    <View style={[styles.root, { backgroundColor: colors.bg }, style]}>
       <LinearGradient
-        colors={[colors.bgElevated, colors.bg, colors.bgDeep]}
-        locations={[0, 0.42, 1]}
+        colors={[colors.bgElevated, colors.bg, colors.bg]}
+        locations={[0, 0.28, 1]}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
         style={StyleSheet.absoluteFill}

@@ -54,6 +54,7 @@ import {
   normalizeWarrantyExpiry,
   remindAtFromUtterance,
   parseReminderFromUtterance,
+  parseRecurringWeekdayReminder,
   reminderLabelFromUtterance,
   warrantyExpiryFromUtterance,
 } from '@/lib/dates';
@@ -84,6 +85,14 @@ type LastDoneApi = {
     label: string;
     remindAt: string;
     notes?: string;
+    remindInterval?: {
+      value: number;
+      unit: 'days' | 'months' | 'weekdays';
+      weekdays?: number[];
+      hour?: number;
+      minute?: number;
+      endsAt?: string;
+    };
     inventoryItemId?: string | null;
     personId?: string | null;
     assignedTo?: string | null;
@@ -1144,9 +1153,24 @@ export async function applyChatActions(
       continue;
     }
     if (action.type === 'set_reminder' && action.label?.trim() && options?.lastDone?.setReminder) {
+      const recurring =
+        action.remindInterval?.unit === 'weekdays'
+          ? {
+              remindAt: action.remindAt,
+              remindInterval: action.remindInterval,
+            }
+          : parseRecurringWeekdayReminder(lastUserText);
       const spokenAt = remindAtFromUtterance(lastUserText);
       const remindAt =
-        (action.remindAt ? normalizeDateField(action.remindAt) : undefined) || spokenAt;
+        (recurring?.remindAt
+          ? normalizeDateField(recurring.remindAt)
+          : undefined) ||
+        (action.remindAt ? normalizeDateField(action.remindAt) : undefined) ||
+        spokenAt;
+      if (!remindAt && !recurring?.remindInterval) {
+        console.log('[LifeOS chat] skip set_reminder — no date', action.label);
+        continue;
+      }
       if (!remindAt) {
         console.log('[LifeOS chat] skip set_reminder — no date', action.label);
         continue;
@@ -1155,6 +1179,11 @@ export async function applyChatActions(
       const parsedReminder = parseReminderFromUtterance(lastUserText);
       const label = (parsedReminder?.label || spokenLabel || action.label).trim();
       const notes = parsedReminder?.notes?.trim() || action.note?.trim();
+      const remindInterval =
+        recurring?.remindInterval ||
+        (action.remindInterval?.unit === 'weekdays'
+          ? action.remindInterval
+          : undefined);
       const inventoryItemId =
         action.inventoryItemId?.trim() ||
         inventoryIdFromUtterance(lastUserText, options.inventoryList);
@@ -1169,6 +1198,7 @@ export async function applyChatActions(
         label,
         remindAt,
         notes,
+        remindInterval,
         inventoryItemId: inventoryItemId ?? null,
         personId: person?.personId ?? null,
         assignedTo: person?.assignedTo ?? null,
@@ -2001,10 +2031,16 @@ function ensureTalkActions(
     });
   }
   if (looksLikeReminder(lastUserText) && !types.has('set_reminder')) {
+    const recurring = parseRecurringWeekdayReminder(lastUserText);
     const remindAt = remindAtFromUtterance(lastUserText);
     const label = reminderLabelFromUtterance(lastUserText) || 'Reminder';
-    if (remindAt) {
-      list.push({ type: 'set_reminder', label, remindAt });
+    if (remindAt || recurring) {
+      list.push({
+        type: 'set_reminder',
+        label,
+        remindAt: recurring?.remindAt || remindAt!,
+        remindInterval: recurring?.remindInterval,
+      });
     }
   }
   return list.length ? list : actions;

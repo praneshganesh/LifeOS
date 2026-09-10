@@ -1,11 +1,23 @@
 import { Platform } from 'react-native';
 import type { LastDoneItem } from '@/lib/lastDone';
-import { daysUntil, formatInterval } from '@/lib/lastDone';
+import {
+  daysUntil,
+  formatInterval,
+  listWeekdayOccurrences,
+  reminderSeriesEnded,
+} from '@/lib/lastDone';
 
 const ID_PREFIX = 'lifeos-ld-';
 
 function reminderId(itemId: string) {
   return `${ID_PREFIX}${itemId}`;
+}
+
+function localStamp(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}${m}${day}`;
 }
 
 function isNative() {
@@ -64,16 +76,21 @@ export async function ensureNotificationPermissions(): Promise<boolean> {
   }
 }
 
-/** Fire at 9:00 local on remind day; if past, nudge in ~60s. */
-function triggerDate(remindAt: string, now = new Date()): Date | null {
+/** Fire at hour:minute local on remind day; if past, nudge in ~60s. */
+function triggerDate(
+  remindAt: string,
+  hour = 9,
+  minute = 0,
+  now = new Date()
+): Date | null {
   const m = remindAt.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!m) return null;
   const target = new Date(
     Number(m[1]),
     Number(m[2]) - 1,
     Number(m[3]),
-    9,
-    0,
+    hour,
+    minute,
     0,
     0
   );
@@ -88,7 +105,13 @@ export async function cancelLastDoneReminder(itemId: string): Promise<void> {
   if (!isNative()) return;
   try {
     const Notifications = await notifications();
-    await Notifications.cancelScheduledNotificationAsync(reminderId(itemId));
+    const prefix = reminderId(itemId);
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    for (const n of scheduled) {
+      if (n.identifier === prefix || n.identifier.startsWith(`${prefix}-`)) {
+        await Notifications.cancelScheduledNotificationAsync(n.identifier);
+      }
+    }
   } catch {
     /* ignore */
   }
@@ -98,7 +121,7 @@ export async function scheduleLastDoneReminder(
   item: LastDoneItem
 ): Promise<void> {
   if (!isNative()) return;
-  if (!item.remindAt) {
+  if (!item.remindAt && item.remindInterval?.unit !== 'weekdays') {
     await cancelLastDoneReminder(item.id);
     return;
   }
@@ -114,24 +137,8 @@ export async function scheduleLastDoneReminder(
     /* continue with schedule if prefs fail */
   }
 
-  const when = triggerDate(item.remindAt);
-  if (!when) {
-    await cancelLastDoneReminder(item.id);
-    return;
-  }
-
   const granted = await ensureNotificationPermissions();
   if (!granted) return;
-
-  const days = daysUntil(item.remindAt);
-  const body =
-    days < 0
-      ? 'This is overdue — mark it done when you can.'
-      : days === 0
-        ? 'Due today.'
-        : item.remindInterval
-          ? `Due in ${days} days · every ${formatInterval(item.remindInterval)}`
-          : `Due in ${days} days.`;
 
   try {
     const Notifications = await notifications();
@@ -143,7 +150,105 @@ export async function scheduleLastDoneReminder(
         lightColor: '#5F7350',
       });
     }
-    await Notifications.cancelScheduledNotificationAsync(reminderId(item.id));
+
+    await cancelLastDoneReminder(item.id);
+
+    const channel =
+      Platform.OS === 'android' ? { channelId: 'lifeos-reminders' } : null;
+
+    if (
+      item.remindInterval?.unit === 'weekdays' &&
+      item.remindInterval.weekdays?.length
+    ) {
+      if (reminderSeriesEnded(item.remindInterval)) {
+        return;
+      }
+
+      const hour = item.remindInterval.hour ?? 9;
+      const minute = item.remindInterval.minute ?? 0;
+      const body = formatInterval(item.remindInterval);
+
+      // Finite series: schedule each remaining occurrence as a DATE trigger.
+      if (item.remindInterval.endsAt) {
+        const dates = listWeekdayOccurrences(
+          item.remindInterval.weekdays,
+          hour,
+          minute,
+          new Date(),
+          item.remindInterval.endsAt,
+          48
+        );
+        for (const when of dates) {
+          await Notifications.scheduleNotificationAsync({
+            identifier: `${reminderId(item.id)}-d-${localStamp(when)}`,
+            content: {
+              title: item.label,
+              body,
+              data: {
+                type: 'last_done',
+                itemId: item.id,
+                href: `/last-done/${item.id}`,
+              },
+              sound: true,
+              ...channel,
+            },
+            trigger: {
+              type: Notifications.SchedulableTriggerInputTypes.DATE,
+              date: when,
+              ...channel,
+            },
+          });
+        }
+        return;
+      }
+
+      // Indefinite: one weekly OS trigger per weekday.
+      for (const jsDay of item.remindInterval.weekdays) {
+        await Notifications.scheduleNotificationAsync({
+          identifier: `${reminderId(item.id)}-wd-${jsDay}`,
+          content: {
+            title: item.label,
+            body,
+            data: {
+              type: 'last_done',
+              itemId: item.id,
+              href: `/last-done/${item.id}`,
+            },
+            sound: true,
+            ...channel,
+          },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
+            weekday: jsDay + 1,
+            hour,
+            minute,
+            ...channel,
+          },
+        });
+      }
+      return;
+    }
+
+    if (!item.remindAt) return;
+
+    const hour = item.remindInterval?.hour ?? 9;
+    const minute = item.remindInterval?.minute ?? 0;
+    const when = triggerDate(item.remindAt, hour, minute);
+    if (!when) {
+      await cancelLastDoneReminder(item.id);
+      return;
+    }
+
+    const days = daysUntil(item.remindAt);
+    const body =
+      days < 0
+        ? 'This is overdue — mark it done when you can.'
+        : days === 0
+          ? 'Due today.'
+          : item.remindInterval
+            ? `Due in ${days} days · every ${formatInterval(item.remindInterval)}`
+            : `Due in ${days} days.`;
+
     await Notifications.scheduleNotificationAsync({
       identifier: reminderId(item.id),
       content: {
@@ -155,16 +260,12 @@ export async function scheduleLastDoneReminder(
           href: `/last-done/${item.id}`,
         },
         sound: true,
-        ...(Platform.OS === 'android'
-          ? { channelId: 'lifeos-reminders' }
-          : null),
+        ...channel,
       },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.DATE,
         date: when,
-        ...(Platform.OS === 'android'
-          ? { channelId: 'lifeos-reminders' }
-          : null),
+        ...channel,
       },
     });
   } catch {
@@ -181,16 +282,6 @@ export async function syncLastDoneReminders(
     await ensureNotificationHandler();
     const { loadNotificationPrefs } = await import('@/lib/notificationPrefs');
     const prefs = await loadNotificationPrefs();
-    if (!prefs.push || !prefs.maintenance) {
-      const Notifications = await notifications();
-      const scheduled = await Notifications.getAllScheduledNotificationsAsync();
-      for (const n of scheduled) {
-        if (n.identifier.startsWith(ID_PREFIX)) {
-          await Notifications.cancelScheduledNotificationAsync(n.identifier);
-        }
-      }
-      return;
-    }
     const Notifications = await notifications();
     const scheduled = await Notifications.getAllScheduledNotificationsAsync();
     for (const n of scheduled) {
@@ -198,8 +289,9 @@ export async function syncLastDoneReminders(
         await Notifications.cancelScheduledNotificationAsync(n.identifier);
       }
     }
+    if (!prefs.push || !prefs.maintenance) return;
     for (const item of items) {
-      if (item.remindAt) {
+      if (item.remindAt || item.remindInterval?.unit === 'weekdays') {
         await scheduleLastDoneReminder(item);
       }
     }

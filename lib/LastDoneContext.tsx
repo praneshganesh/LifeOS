@@ -52,6 +52,7 @@ type LastDoneContextValue = {
     label: string;
     remindAt: string;
     notes?: string;
+    remindInterval?: RemindInterval;
     inventoryItemId?: string | null;
     personId?: string | null;
     assignedTo?: string | null;
@@ -289,6 +290,7 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
       label: string;
       remindAt: string;
       notes?: string;
+      remindInterval?: RemindInterval;
       inventoryItemId?: string | null;
       personId?: string | null;
       assignedTo?: string | null;
@@ -296,7 +298,10 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
       const list = itemsRef.current;
       const label = normalizeLabel(input.label ?? '');
       if (!label) throw new Error('Label required');
-      const remindFields = resolveRemindAt(new Date(), { remindAt: input.remindAt });
+      const remindFields = resolveRemindAt(new Date(), {
+        remindAt: input.remindInterval ? undefined : input.remindAt,
+        remindInterval: input.remindInterval,
+      });
       if (!remindFields.remindAt) throw new Error('Invalid reminder date');
       const linkId =
         typeof input.inventoryItemId === 'string' && input.inventoryItemId
@@ -338,6 +343,7 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
       const created = createLastDoneItem(label, {
         doneAt: null,
         remindAt: remindFields.remindAt,
+        remindInterval: remindFields.remindInterval,
         notes: input.notes?.trim(),
         inventoryItemId: linkId,
         personId,

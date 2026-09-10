@@ -398,19 +398,19 @@ export const clayDark: ThemeColors = paint({
 
 /** Ink light — paper and graphite. */
 export const inkLight: ThemeColors = paint({
-  bg: '#F3F3F4',
-  bgDeep: '#E8E8EA',
-  bgElevated: '#FAFAFA',
+  bg: '#F2F2F7',
+  bgDeep: '#E5E5EA',
+  bgElevated: '#F9F9FB',
   surface: '#FFFFFF',
-  surfaceSoft: '#ECECEE',
-  surfaceHover: '#E2E2E5',
-  surfaceTint: '#EFEFF1',
-  ink: '#111113',
-  slate: '#3F3F46',
-  mute: '#52525B',
-  faint: '#71717A',
-  line: 'rgba(17, 17, 19, 0.10)',
-  lineStrong: 'rgba(17, 17, 19, 0.18)',
+  surfaceSoft: '#EFEFF4',
+  surfaceHover: '#E5E5EA',
+  surfaceTint: '#F2F2F7',
+  ink: '#000000',
+  slate: '#3A3A3C',
+  mute: '#636366',
+  faint: '#8E8E93',
+  line: 'rgba(60, 60, 67, 0.12)',
+  lineStrong: 'rgba(60, 60, 67, 0.29)',
   accent: '#111113',
   accentStrong: '#000000',
   accentSoft: 'rgba(17, 17, 19, 0.10)',
@@ -418,14 +418,14 @@ export const inkLight: ThemeColors = paint({
   accentOn: '#FAFAFA',
   amber: '#A16207',
   amberSoft: 'rgba(161, 98, 7, 0.14)',
-  coral: '#B42318',
-  coralSoft: 'rgba(180, 35, 24, 0.14)',
+  coral: '#FF3B30',
+  coralSoft: 'rgba(255, 59, 48, 0.14)',
   sky: '#3F3F46',
   skySoft: 'rgba(63, 63, 70, 0.12)',
   violet: '#3F3F46',
   violetSoft: 'rgba(63, 63, 70, 0.12)',
-  overlay: 'rgba(17, 17, 19, 0.48)',
-  gradient: ['#FAFAFA', '#F3F3F4', '#E8E8EA'],
+  overlay: 'rgba(0, 0, 0, 0.36)',
+  gradient: ['#F9F9FB', '#F2F2F7', '#F2F2F7'],
   bloomAmber: 'rgba(17, 17, 19, 0.06)',
   bloomForest: 'rgba(17, 17, 19, 0.04)',
   statusBar: 'dark',
@@ -605,10 +605,10 @@ export const spacing = {
 } as const;
 
 export const radius = {
-  sm: 14,
-  md: 18,
-  lg: 24,
-  xl: 32,
+  sm: 10,
+  md: 14,
+  lg: 18,
+  xl: 24,
   full: 999,
 } as const;
 
@@ -622,56 +622,41 @@ export const fonts = {
 } as const;
 
 /**
- * Soft-UI finish: each surface shadow pairs an outer drop with a faint inset
- * highlight along the top edge (and a whisper of a dark inner edge at the
- * bottom in light mode), so cards read as gently pillowed — tactile like
- * neumorphism, without giving up surface/background contrast.
- * `pressed` is the inset state for pressable cards and buttons.
+ * Soft elevation — closer to iOS: light drop, no heavy neumorphic inset glow.
  */
 export const shadows = {
   card: {
-    boxShadow:
-      '0 12px 40px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -1px 0 rgba(0, 0, 0, 0.04)',
+    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06)',
   },
   soft: {
-    boxShadow:
-      '0 8px 24px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.8), inset 0 -1px 0 rgba(0, 0, 0, 0.03)',
+    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.03), 0 4px 14px rgba(0, 0, 0, 0.04)',
   },
   float: {
-    boxShadow:
-      '0 18px 50px rgba(0, 0, 0, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -1px 0 rgba(0, 0, 0, 0.05)',
+    boxShadow: '0 4px 16px rgba(0, 0, 0, 0.08), 0 12px 32px rgba(0, 0, 0, 0.06)',
   },
   glow: {
-    boxShadow: '0 0 28px rgba(0, 0, 0, 0.12)',
+    boxShadow: '0 0 24px rgba(0, 0, 0, 0.08)',
   },
   pressed: {
-    boxShadow:
-      '0 2px 8px rgba(0, 0, 0, 0.05), inset 0 2px 6px rgba(0, 0, 0, 0.10)',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.06)',
   },
 } as const;
 
 export function shadowsFor(resolved: ThemeResolved) {
   if (resolved === 'dark') {
-    // Darker, tighter drops — surfaces are lighter than bg, so the shadow
-    // does the separating instead of relying on hairlines alone. The inset
-    // white edge is the "lit from above" highlight that sells the depth.
     return {
       card: {
-        boxShadow:
-          '0 14px 36px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.07)',
+        boxShadow: '0 1px 0 rgba(255, 255, 255, 0.04), 0 8px 28px rgba(0, 0, 0, 0.45)',
       },
       soft: {
-        boxShadow:
-          '0 6px 20px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
+        boxShadow: '0 1px 0 rgba(255, 255, 255, 0.03), 0 4px 16px rgba(0, 0, 0, 0.35)',
       },
       float: {
-        boxShadow:
-          '0 22px 56px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.09)',
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.55)',
       },
-      glow: { boxShadow: '0 0 28px rgba(255, 255, 255, 0.07)' },
+      glow: { boxShadow: '0 0 24px rgba(255, 255, 255, 0.05)' },
       pressed: {
-        boxShadow:
-          '0 2px 8px rgba(0, 0, 0, 0.35), inset 0 2px 8px rgba(0, 0, 0, 0.5)',
+        boxShadow: '0 1px 4px rgba(0, 0, 0, 0.4)',
       },
     } as const;
   }

@@ -16,6 +16,7 @@ import {
   Check,
   Package,
   Plus,
+  X,
 } from 'lucide-react-native';
 import { ModuleScreen } from '@/components/ui/ModuleScreen';
 import { Text } from '@/components/ui/Text';

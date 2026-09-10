@@ -2,17 +2,14 @@ import { useTheme } from '@/lib/ThemeContext';
 import { useMemo, useEffect, useState } from 'react';
 import {
   Alert,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   TextInput,
   View,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen } from '@/components/ui/Screen';
+import { KeyboardFormScroll } from '@/components/ui/KeyboardFormScroll';
 import { Text } from '@/components/ui/Text';
 import { Icon3DBadge, type Icon3DName } from '@/components/ui/Icon3D';
 import { useInventory } from '@/lib/InventoryContext';
@@ -33,7 +30,6 @@ export default function EditSpaceScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { id } = useLocalSearchParams<{ id: string }>();
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const {
     getSpace,
@@ -159,17 +155,7 @@ export default function EditSpaceScreen() {
   return (
     <Screen>
       <Stack.Screen options={{ title: 'Edit space' }} />
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView
-          contentContainerStyle={[
-            styles.content,
-            { paddingBottom: insets.bottom + 40 },
-          ]}
-          keyboardShouldPersistTaps="handled"
-        >
+      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={40}>
           <Text style={styles.label}>Name</Text>
           <TextInput
             value={name}
@@ -300,8 +286,7 @@ export default function EditSpaceScreen() {
           <Pressable onPress={confirmDelete} style={styles.deleteBtn}>
             <Text style={styles.deleteText}>Delete space</Text>
           </Pressable>
-        </ScrollView>
-      </KeyboardAvoidingView>
+        </KeyboardFormScroll>
     </Screen>
   );
 }

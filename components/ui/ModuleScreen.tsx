@@ -1,7 +1,5 @@
 import { type ReactNode, useCallback, useMemo, useRef } from 'react';
 import {
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,7 +12,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft } from 'lucide-react-native';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
-import { fonts, radius, spacing, type ThemeColors } from '@/constants/theme';
+import { KeyboardFormScroll } from '@/components/ui/KeyboardFormScroll';
+import { fonts, radius, spacing } from '@/constants/theme';
 import { type ModuleOrigin } from '@/lib/moduleNav';
 import { useModuleBack } from '@/lib/useModuleBack';
 import { useTheme } from '@/lib/ThemeContext';
@@ -55,7 +54,7 @@ export function ModuleScreen({
 }: ModuleScreenProps) {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const styles = useMemo(() => makeStyles(), []);
   const scrollRef = useRef<ScrollView>(null);
   const { backLabel, onBack: handleBack } = useModuleBack({
     defaultOrigin,
@@ -72,67 +71,54 @@ export function ModuleScreen({
 
   return (
     <Screen>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      <View
+        style={[
+          styles.chrome,
+          {
+            paddingTop: Math.max(insets.top, 12),
+            borderBottomColor: colors.line,
+          },
+        ]}
       >
-        <View
-          style={[
-            styles.chrome,
-            {
-              paddingTop: Math.max(insets.top, 12),
-              borderBottomColor: colors.line,
-              backgroundColor: colors.bgElevated,
-            },
-          ]}
-        >
-          {showBack ? (
-            <Pressable
-              onPress={handleBack}
-              style={({ pressed }) => [
-                styles.backBtn,
-                pressed && styles.backBtnPressed,
-              ]}
-              hitSlop={12}
-              accessibilityRole="button"
-              accessibilityLabel={backLabel ? `Go back to ${backLabel}` : 'Go back'}
-            >
-              <View style={[styles.backIcon, { backgroundColor: colors.surfaceSoft }]}>
-                <ChevronLeft size={18} color={colors.ink} strokeWidth={2.6} />
-              </View>
-              <Text style={[styles.backLabel, { color: colors.ink }]}>{backLabel}</Text>
-            </Pressable>
-          ) : (
-            <View style={styles.backSpacer} />
-          )}
+        {showBack ? (
+          <Pressable
+            onPress={handleBack}
+            style={({ pressed }) => [
+              styles.backBtn,
+              pressed && styles.backBtnPressed,
+            ]}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel={backLabel ? `Go back to ${backLabel}` : 'Go back'}
+          >
+            <ChevronLeft size={22} color={colors.ink} strokeWidth={2.2} />
+            <Text style={[styles.backLabel, { color: colors.ink }]}>{backLabel}</Text>
+          </Pressable>
+        ) : (
+          <View style={styles.backSpacer} />
+        )}
 
-          <View style={styles.header}>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text variant="title">{title}</Text>
-              {subtitle ? (
-                <Text variant="body" style={styles.lead}>
-                  {subtitle}
-                </Text>
-              ) : null}
-            </View>
-            {right}
+        <View style={styles.header}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text variant="title">{title}</Text>
+            {subtitle ? (
+              <Text variant="body" style={styles.lead}>
+                {subtitle}
+              </Text>
+            ) : null}
           </View>
+          {right}
         </View>
+      </View>
 
-        <ScrollView
-          ref={scrollRef}
-          contentContainerStyle={[
-            styles.content,
-            { paddingBottom: insets.bottom + 108 },
-            contentStyle,
-          ]}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="always"
-          keyboardDismissMode="on-drag"
-        >
-          {children}
-        </ScrollView>
-      </KeyboardAvoidingView>
+      <KeyboardFormScroll
+        ref={scrollRef}
+        contentContainerStyle={[styles.content, contentStyle]}
+        bottomExtra={108}
+        keyboardShouldPersistTaps="always"
+      >
+        {children}
+      </KeyboardFormScroll>
     </Screen>
   );
 }
@@ -173,7 +159,7 @@ const styles = StyleSheet.create({
   sectionLabel: {},
 });
 
-function makeStyles(colors: ThemeColors) {
+function makeStyles() {
   return StyleSheet.create({
     chrome: {
       paddingHorizontal: spacing.lg,
@@ -184,25 +170,18 @@ function makeStyles(colors: ThemeColors) {
       flexDirection: 'row',
       alignItems: 'center',
       alignSelf: 'flex-start',
-      gap: 8,
-      paddingVertical: 4,
+      gap: 2,
+      paddingVertical: 2,
       marginBottom: spacing.xs,
-      marginLeft: -2,
+      marginLeft: -8,
       borderRadius: radius.sm,
     },
     backBtnPressed: {
-      opacity: 0.7,
-    },
-    backIcon: {
-      width: 32,
-      height: 32,
-      borderRadius: radius.full,
-      alignItems: 'center',
-      justifyContent: 'center',
+      opacity: 0.55,
     },
     backLabel: {
-      fontFamily: fonts.sansMedium,
-      fontSize: 16,
+      fontFamily: fonts.sans,
+      fontSize: 17,
       letterSpacing: -0.2,
     },
     backSpacer: {

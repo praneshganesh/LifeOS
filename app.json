@@ -18,6 +18,7 @@
     },
     "android": {
       "package": "com.praneshganesh.lifeos",
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#E8ECF1",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

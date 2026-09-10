@@ -102,6 +102,17 @@ export type ChatSetReminderAction = {
   label: string;
   /** YYYY-MM-DD */
   remindAt: string;
+  /** Extra detail split from the spoken label */
+  note?: string;
+  /** Recurring schedule — weekdays / days / months */
+  remindInterval?: {
+    value: number;
+    unit: 'days' | 'months' | 'weekdays';
+    weekdays?: number[];
+    hour?: number;
+    minute?: number;
+    endsAt?: string;
+  };
   inventoryItemId?: string;
   assignedTo?: string;
   personId?: string;

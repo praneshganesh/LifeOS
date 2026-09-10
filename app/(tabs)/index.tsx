@@ -308,11 +308,11 @@ export default function HomeDashboard() {
               value={
                 habits.length
                   ? `${dash.habitsDone}/${habits.length}`
-                  : '+'
+                  : '—'
               }
               hint={habits.length ? 'done today' : 'start one'}
-              bg={colors.accentWash}
-              fg={colors.accent}
+              accent={colors.accent}
+              accentSoft={colors.accentWash}
               onPress={() => {
                 blurActiveElement();
                 router.push(moduleHref('/habits', 'today'));
@@ -321,22 +321,22 @@ export default function HomeDashboard() {
             <Tile
               Icon={Bell}
               label="Reminders"
-              value={lastDoneItems.length ? String(lastDoneItems.length) : '+'}
+              value={lastDoneItems.length ? String(lastDoneItems.length) : '—'}
               hint={lastDoneItems.length ? 'tracked' : 'add one'}
-              bg={colors.amberSoft}
-              fg={colors.amber}
+              accent={colors.amber}
+              accentSoft={colors.amberSoft}
               onPress={() => {
                 blurActiveElement();
-                router.push(moduleHref('/last-done?mode=remind', 'today'));
+                router.push(moduleHref('/tasks', 'today'));
               }}
             />
             <Tile
               Icon={CalendarDays}
               label="Classes"
-              value={classesLeft ? String(classesLeft) : '+'}
+              value={classesLeft ? String(classesLeft) : '—'}
               hint={classesLeft ? 'sessions left' : 'add a pack'}
-              bg={colors.skySoft}
-              fg={colors.sky}
+              accent={colors.sky}
+              accentSoft={colors.skySoft}
               onPress={() => {
                 blurActiveElement();
                 router.push(moduleHref('/classes', 'today'));
@@ -345,10 +345,10 @@ export default function HomeDashboard() {
             <Tile
               Icon={Package}
               label="Life"
-              value={items.length ? String(items.length) : '+'}
-              hint={items.length ? 'things saved' : 'capture one'}
-              bg={colors.violetSoft}
-              fg={colors.violet}
+              value={items.length ? String(items.length) : '—'}
+              hint={items.length ? 'things saved' : 'browse'}
+              accent={colors.violet}
+              accentSoft={colors.violetSoft}
               onPress={() => {
                 blurActiveElement();
                 router.push('/(tabs)/spaces' as Href);
@@ -527,39 +527,42 @@ function Tile({
   label,
   value,
   hint,
-  bg,
-  fg,
+  accent,
+  accentSoft,
   onPress,
 }: {
   Icon: typeof Sparkles;
   label: string;
   value: string;
   hint: string;
-  bg: string;
-  fg: string;
+  accent: string;
+  accentSoft: string;
   onPress: () => void;
 }) {
-  const { colors, resolved } = useTheme();
-  const shade = shadowsFor(resolved);
+  const { colors } = useTheme();
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [
         styles.tile,
-        { backgroundColor: bg },
-        pressed ? shade.pressed : shade.soft,
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.line,
+          opacity: pressed ? 0.88 : 1,
+        },
       ]}
       accessibilityLabel={`${label} — ${value} ${hint}`}
     >
-      <View style={styles.tileTop}>
-        <Icon size={20} color={fg} strokeWidth={2} />
-        <ArrowUpRight size={16} color={colors.faint} strokeWidth={2} />
+      <View style={[styles.tileIcon, { backgroundColor: accentSoft }]}>
+        <Icon size={18} color={accent} strokeWidth={2.1} />
       </View>
+      <Text style={[styles.tileLabel, { color: colors.mute }]}>{label}</Text>
       <Text style={[styles.tileValue, { color: colors.ink }]} numberOfLines={1}>
         {value}
-        <Text style={[styles.tileHint, { color: colors.mute }]}>  {hint}</Text>
       </Text>
-      <Text style={[styles.tileLabel, { color: colors.slate }]}>{label}</Text>
+      <Text style={[styles.tileHint, { color: colors.faint }]} numberOfLines={1}>
+        {hint}
+      </Text>
     </Pressable>
   );
 }
@@ -736,36 +739,43 @@ const styles = StyleSheet.create({
   tiles: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 12,
   },
   tile: {
     flexGrow: 1,
-    flexBasis: '44%',
+    flexBasis: '46%',
+    minHeight: 132,
     borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingTop: 14,
+    paddingBottom: 16,
   },
-  tileTop: {
-    flexDirection: 'row',
+  tileIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 10,
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  tileLabel: {
+    fontFamily: fonts.sans,
+    fontSize: 13,
+    lineHeight: 16,
+    letterSpacing: -0.08,
+    marginBottom: 4,
   },
   tileValue: {
     fontFamily: fonts.sansSemi,
-    fontSize: 22,
-    lineHeight: 26,
-    letterSpacing: -0.4,
+    fontSize: 26,
+    lineHeight: 30,
+    letterSpacing: -0.6,
   },
   tileHint: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    letterSpacing: 0,
-  },
-  tileLabel: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    lineHeight: 20,
-    marginTop: 1,
+    fontFamily: fonts.sans,
+    fontSize: 13,
+    lineHeight: 17,
+    marginTop: 2,
   },
 });

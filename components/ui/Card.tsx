@@ -43,7 +43,7 @@ export function Card({
 const styles = StyleSheet.create({
   card: {
     borderRadius: radius.lg,
-    padding: spacing.xl,
+    padding: spacing.lg,
     borderWidth: StyleSheet.hairlineWidth,
   },
 });

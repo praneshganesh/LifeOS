@@ -1,10 +1,25 @@
 import { localDayKey } from '@/lib/dates';
 
-export type RemindUnit = 'days' | 'months';
+export type RemindUnit = 'days' | 'months' | 'weekdays';
 
 export type RemindInterval = {
+  /**
+   * For `days` / `months`: how many units between reminders.
+   * For `weekdays`: unused (kept as 1 for storage compatibility).
+   */
   value: number;
   unit: RemindUnit;
+  /** JS getDay() numbers 0=Sun … 6=Sat when unit is `weekdays`. */
+  weekdays?: number[];
+  /** Local hour 0–23 (defaults to 9 when scheduling). */
+  hour?: number;
+  /** Local minute 0–59. */
+  minute?: number;
+  /**
+   * Optional series end (YYYY-MM-DD), inclusive.
+   * Omit for indefinite weekly / interval reminders.
+   */
+  endsAt?: string;
 };
 
 /** One time you marked this activity done. */
@@ -141,13 +156,129 @@ export function defaultActivityYear(item: LastDoneItem, now = new Date()): numbe
 }
 
 export function formatInterval(interval: RemindInterval): string {
-  const unit =
-    interval.value === 1
-      ? interval.unit === 'days'
-        ? 'day'
-        : 'month'
-      : interval.unit;
-  return `Every ${interval.value} ${unit}`;
+  let base: string;
+  if (interval.unit === 'weekdays' && interval.weekdays?.length) {
+    const names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const days = [...interval.weekdays]
+      .sort((a, b) => a - b)
+      .map((d) => names[d] ?? '?')
+      .join(' & ');
+    const time = formatRemindClock(interval.hour, interval.minute);
+    base = time ? `Every ${days} at ${time}` : `Every ${days}`;
+  } else {
+    const unit =
+      interval.value === 1
+        ? interval.unit === 'days'
+          ? 'day'
+          : 'month'
+        : interval.unit;
+    base = `Every ${interval.value} ${unit}`;
+  }
+  if (interval.endsAt) {
+    return `${base} · until ${formatRemindDate(interval.endsAt)}`;
+  }
+  return base;
+}
+
+/** 6:30 → "6:30 AM" */
+export function formatRemindClock(
+  hour?: number,
+  minute?: number
+): string | undefined {
+  if (hour == null || !Number.isFinite(hour)) return undefined;
+  const h = Math.max(0, Math.min(23, Math.floor(hour)));
+  const m = Math.max(0, Math.min(59, Math.floor(minute ?? 0)));
+  const suffix = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, '0')} ${suffix}`;
+}
+
+/** Whether a reminder series has passed its optional end date. */
+export function reminderSeriesEnded(
+  interval: RemindInterval | undefined,
+  now = new Date()
+): boolean {
+  if (!interval?.endsAt) return false;
+  const end = parseDateInput(interval.endsAt);
+  if (!end) return false;
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return today.getTime() > end.getTime();
+}
+
+/** Next local calendar day (YYYY-MM-DD) that matches weekdays at hour:minute after `from`. */
+export function nextWeekdayRemindDay(
+  weekdays: number[],
+  hour = 9,
+  minute = 0,
+  from = new Date(),
+  endsAt?: string
+): string | undefined {
+  const set = new Set(
+    weekdays.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6)
+  );
+  if (!set.size) return undefined;
+  const end = endsAt ? parseDateInput(endsAt) : null;
+  const endMs = end
+    ? new Date(end.getFullYear(), end.getMonth(), end.getDate(), 23, 59, 59).getTime()
+    : null;
+  for (let add = 0; add < 400; add++) {
+    const d = new Date(
+      from.getFullYear(),
+      from.getMonth(),
+      from.getDate() + add,
+      hour,
+      minute,
+      0,
+      0
+    );
+    if (endMs != null && d.getTime() > endMs) return undefined;
+    if (!set.has(d.getDay())) continue;
+    if (d.getTime() <= from.getTime()) continue;
+    return startOfDayISO(d);
+  }
+  return undefined;
+}
+
+/** Upcoming weekday occurrences from `from` through `endsAt` (inclusive). Caps at `limit`. */
+export function listWeekdayOccurrences(
+  weekdays: number[],
+  hour: number,
+  minute: number,
+  from: Date,
+  endsAt: string,
+  limit = 48
+): Date[] {
+  const set = new Set(
+    weekdays.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6)
+  );
+  const end = parseDateInput(endsAt);
+  if (!set.size || !end) return [];
+  const endMs = new Date(
+    end.getFullYear(),
+    end.getMonth(),
+    end.getDate(),
+    hour,
+    minute,
+    0,
+    0
+  ).getTime();
+  const out: Date[] = [];
+  for (let add = 0; add < 800 && out.length < limit; add++) {
+    const d = new Date(
+      from.getFullYear(),
+      from.getMonth(),
+      from.getDate() + add,
+      hour,
+      minute,
+      0,
+      0
+    );
+    if (d.getTime() > endMs) break;
+    if (!set.has(d.getDay())) continue;
+    if (d.getTime() <= from.getTime()) continue;
+    out.push(d);
+  }
+  return out;
 }
 
 export function normalizeLabel(raw: string) {
@@ -232,9 +363,29 @@ export function normalizeItem(raw: unknown): LastDoneItem | null {
     typeof r.remindInterval === 'object' &&
     typeof (r.remindInterval as RemindInterval).value === 'number' &&
     ((r.remindInterval as RemindInterval).unit === 'days' ||
-      (r.remindInterval as RemindInterval).unit === 'months')
+      (r.remindInterval as RemindInterval).unit === 'months' ||
+      (r.remindInterval as RemindInterval).unit === 'weekdays')
   ) {
-    item.remindInterval = r.remindInterval as RemindInterval;
+    const ri = r.remindInterval as RemindInterval;
+    const next: RemindInterval = {
+      value: ri.value,
+      unit: ri.unit,
+    };
+    if (Array.isArray(ri.weekdays)) {
+      next.weekdays = ri.weekdays.filter(
+        (d) => Number.isInteger(d) && d >= 0 && d <= 6
+      );
+    }
+    if (typeof ri.hour === 'number' && Number.isFinite(ri.hour)) {
+      next.hour = Math.max(0, Math.min(23, Math.floor(ri.hour)));
+    }
+    if (typeof ri.minute === 'number' && Number.isFinite(ri.minute)) {
+      next.minute = Math.max(0, Math.min(59, Math.floor(ri.minute)));
+    }
+    if (typeof ri.endsAt === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(ri.endsAt.trim())) {
+      next.endsAt = ri.endsAt.trim();
+    }
+    item.remindInterval = next;
   }
 
   return item;
@@ -326,10 +477,23 @@ export function toDateInputValue(isoOrDate?: string | Date | null): string {
 }
 
 export function addInterval(from: Date, interval: RemindInterval): Date {
+  if (interval.unit === 'weekdays' && interval.weekdays?.length) {
+    const next = nextWeekdayRemindDay(
+      interval.weekdays,
+      interval.hour ?? 9,
+      interval.minute ?? 0,
+      from,
+      interval.endsAt
+    );
+    if (next) {
+      const [y, m, d] = next.split('-').map(Number);
+      return new Date(y!, m! - 1, d!);
+    }
+  }
   const d = new Date(from.getFullYear(), from.getMonth(), from.getDate());
   if (interval.unit === 'days') {
     d.setDate(d.getDate() + interval.value);
-  } else {
+  } else if (interval.unit === 'months') {
     d.setMonth(d.getMonth() + interval.value);
   }
   return d;
@@ -343,6 +507,19 @@ export function resolveRemindAt(
   }
 ): Pick<LastDoneItem, 'remindAt' | 'remindInterval'> {
   if (opts.remindInterval) {
+    if (opts.remindInterval.unit === 'weekdays') {
+      const day = nextWeekdayRemindDay(
+        opts.remindInterval.weekdays ?? [],
+        opts.remindInterval.hour ?? 9,
+        opts.remindInterval.minute ?? 0,
+        doneAt,
+        opts.remindInterval.endsAt
+      );
+      return {
+        remindInterval: opts.remindInterval,
+        ...(day ? { remindAt: day } : {}),
+      };
+    }
     return {
       remindInterval: opts.remindInterval,
       remindAt: startOfDayISO(addInterval(doneAt, opts.remindInterval)),

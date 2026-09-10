@@ -137,7 +137,7 @@ export default function LastDoneDetailScreen() {
 
   async function onPickReminder(choice: (typeof REMIND_CHOICES)[number] | { key: 'on' }) {
     if (!item) return;
-    if (choice.key === 'on') {
+    if (choice.key === 'on' && !('interval' in choice)) {
       setPickingSpecificDate(true);
       const fallback = toDateInputValue(
         new Date(Date.now() + 24 * 60 * 60 * 1000)
@@ -153,6 +153,7 @@ export default function LastDoneDetailScreen() {
       }
       return;
     }
+    if (!('interval' in choice)) return;
     setPickingSpecificDate(false);
     try {
       await updateActivity(item.id, { remindInterval: choice.interval });
