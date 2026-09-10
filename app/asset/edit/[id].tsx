@@ -19,6 +19,8 @@ import { useInventory } from '@/lib/InventoryContext';
 import { useSpaces } from '@/lib/SpacesContext';
 import { blurActiveElement } from '@/lib/a11y';
 import { parseDateInput } from '@/lib/lastDone';
+import { useLastDone } from '@/lib/LastDoneContext';
+import { defaultDocumentReminder } from '@/lib/documentReminders';
 import { useToast } from '@/lib/ToastContext';
 import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
 
@@ -28,6 +30,7 @@ export default function EditAssetScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { getById, updateItem, removeItem } = useInventory();
+  const { setReminder } = useLastDone();
   const { spaces, roomsForSpace } = useSpaces();
   const { members } = useHousehold();
   const { showToast, showError } = useToast();
@@ -130,6 +133,27 @@ export default function EditAssetScreen() {
           ...item!.timeline,
         ],
       });
+
+      const savedName = name.trim() || item!.name;
+      const savedExpiry = expiryDate.trim() || warrantyExpiry.trim();
+      const draft = defaultDocumentReminder({
+        kind: item!.documentKind,
+        name: savedName,
+        expiry: savedExpiry,
+      });
+      if (draft) {
+        try {
+          await setReminder({
+            label: draft.label,
+            remindAt: draft.remindAt,
+            notes: draft.notes,
+            inventoryItemId: id,
+          });
+        } catch (err) {
+          console.warn('Document expiry reminder failed', err);
+        }
+      }
+
       // Don't Alert here — an alert presented during the pop races with
       // navigation on iOS and both can be swallowed. A toast doesn't block.
       showToast('Changes saved');

@@ -29,6 +29,12 @@ import { localDayKey } from '@/lib/dates';
 import { parseDateInput } from '@/lib/lastDone';
 import { recognizeImage } from '@/lib/ocr/recognize';
 import {
+  extractDocumentFieldHints,
+  isIdentityDocumentKind,
+  labelDocumentKind,
+  type MrzDocumentKind,
+} from '@/lib/ocr/mrz';
+import {
   extractReceiptHints,
   extractReceiptRef,
   receiptTitleFromOcr,
@@ -37,6 +43,8 @@ import {
 } from '@/lib/ocr/receiptHints';
 import { useInventory } from '@/lib/InventoryContext';
 import { useExpenses } from '@/lib/ExpensesContext';
+import { useLastDone } from '@/lib/LastDoneContext';
+import { defaultDocumentReminder } from '@/lib/documentReminders';
 import { messageForPlanLimit } from '@/lib/planLimits';
 import { persistLocalMediaUri } from '@/lib/mediaPersist';
 import { pickFileWeb } from '@/lib/pickFileWeb';
@@ -93,6 +101,7 @@ export default function CaptureModal() {
   const forcedLink = Boolean(linkItemId);
   const { addItem, updateItem, items, getById } = useInventory();
   const { addExpense, expenses } = useExpenses();
+  const { setReminder } = useLastDone();
   const { currency: defaultCurrency } = useCurrency();
   const linkedItem = linkItemId ? getById(linkItemId) : undefined;
   const cameraRef = useRef<CameraView>(null);
@@ -116,7 +125,7 @@ export default function CaptureModal() {
   const [nationality, setNationality] = useState('');
   const [dob, setDob] = useState('');
   const [isDocument, setIsDocument] = useState(preset.preferDocument);
-  const [docKind, setDocKind] = useState<'passport' | 'emirates_id' | 'unknown'>('unknown');
+  const [docKind, setDocKind] = useState<MrzDocumentKind>('unknown');
   const [ocrNote, setOcrNote] = useState('');
   const [saveDestination, setSaveDestination] =
     useState<ReceiptSaveDestination>('thing');
@@ -287,7 +296,11 @@ export default function CaptureModal() {
     setMatchCandidates([]);
     setLinkedStubId(forcedLink && linkItemId ? linkItemId : null);
 
-    const result = await recognizeImage(uri);
+    // Prefer the durable copy — camera temp URIs can disappear mid-read on some devices.
+    let result = await recognizeImage(durable);
+    if (!result.text?.trim() && durable !== uri) {
+      result = await recognizeImage(uri);
+    }
     setOcrText(result.text || '');
     // Surface OCR failure — otherwise blank fields read as "found nothing"
     // when the engine never ran at all.
@@ -299,9 +312,10 @@ export default function CaptureModal() {
     const receiptHints = extractReceiptHints(result.text);
     // Policy schedules and IDs also contain "total/amount" + prices — don't
     // let those route to Expense just because they mention money.
-    const looksLikeDocInstead = /\b(policy|premium|passport|emirates\s*id|identity\s*card|certificate)\b/i.test(
-      result.text
-    );
+    const looksLikeDocInstead =
+      /\b(policy|premium|passport|emirates\s*id|identity\s*card|driving\s*licen[cs]e|certificate)\b/i.test(
+        result.text
+      ) || Boolean(extractDocumentFieldHints(result.text));
     const receiptFirst =
       receiptHints.looksLikeReceipt &&
       !looksLikeDocInstead &&
@@ -354,43 +368,78 @@ export default function CaptureModal() {
       setExpiry(result.identity.expiryDate);
       setSerial(result.identity.documentNumber);
       setBrand(result.identity.issuingCountry || '');
-      let nextName = 'Identity document';
-      if (result.identity.kind === 'passport') {
-        nextName = `${result.identity.fullName || 'Passport'} · Passport`;
-      } else if (result.identity.kind === 'emirates_id') {
-        nextName = `${result.identity.fullName || 'Emirates ID'} · Emirates ID`;
-      } else if (result.identity.fullName) {
-        nextName = result.identity.fullName;
-      }
+      const kindLabel = labelDocumentKind(result.identity.kind);
+      const nextName = result.identity.fullName
+        ? `${result.identity.fullName} · ${kindLabel}`
+        : kindLabel;
       setName(nextName);
       setStatus('Document fields filled from the MRZ on your device.');
+      setOcrNote('Read on your device — nothing sent to AI or the cloud.');
       proposeTalkLinks(nextName, result.identity.issuingCountry || '', result.text);
-    } else if (result.kind === 'passport' || result.kind === 'emirates_id') {
-      setIsDocument(true);
-      setDocKind(result.kind);
-      const nextName = result.kind === 'passport' ? 'Passport' : 'Emirates ID';
-      setName(nextName);
-      setStatus('Document type detected. Fill in any missing fields.');
-      proposeTalkLinks(nextName, '', result.text);
-    } else if (preset.preferDocument) {
-      applyContextDefaults(true);
-      setDocKind('unknown');
-      setName(preset.defaultName);
-      setStatus(`No MRZ found — save as a ${preset.label.toLowerCase()} document.`);
-      proposeTalkLinks(preset.defaultName, '', result.text);
     } else {
-      applyContextDefaults(false);
-      setDocKind('unknown');
-      // attachKind === 'receipt' is explicit user intent and overrides the
-      // policy/ID keyword guard; bare hints do not.
-      if ((receiptHints.looksLikeReceipt && !looksLikeDocInstead) || attachKind === 'receipt') {
-        applyReceiptFromOcr(result.text, receiptHints);
-      } else {
+      const fieldHints = extractDocumentFieldHints(result.text);
+      const kind =
+        result.kind !== 'unknown'
+          ? result.kind
+          : fieldHints?.kind ?? 'unknown';
+
+      if (isIdentityDocumentKind(kind)) {
+        setIsDocument(true);
+        setDocKind(kind);
+        const kindLabel = labelDocumentKind(kind);
+        if (fieldHints?.documentNumber) {
+          setDocNumber(fieldHints.documentNumber);
+          setSerial(fieldHints.documentNumber);
+        }
+        if (fieldHints?.fullName) setFullName(fieldHints.fullName);
+        if (fieldHints?.expiryDate) setExpiry(fieldHints.expiryDate);
+        if (fieldHints?.dateOfBirth) setDob(fieldHints.dateOfBirth);
+        if (fieldHints?.nationality) setNationality(fieldHints.nationality);
+        const nextName = fieldHints?.fullName
+          ? `${fieldHints.fullName} · ${kindLabel}`
+          : kindLabel;
+        setName(nextName);
+        setBrand(kind === 'emirates_id' || kind === 'driving_licence' ? 'UAE' : '');
+        setStatus(
+          fieldHints?.documentNumber
+            ? `${kindLabel} detected — check the fields and save.`
+            : `${kindLabel} detected. Tip: scan the back (MRZ) for auto-fill, or enter details below.`
+        );
+        setOcrNote(
+          kind === 'emirates_id' && !fieldHints?.documentNumber
+            ? 'Front of Emirates ID often needs the ID number typed in — or retake the back for MRZ.'
+            : 'Read on your device — nothing sent to AI or the cloud.'
+        );
+        proposeTalkLinks(nextName, '', result.text);
+      } else if (preset.preferDocument) {
+        applyContextDefaults(true);
+        setDocKind('unknown');
         setName(preset.defaultName);
-        setReceiptLooksLike(false);
-        setSaveDestination('thing');
-        setStatus(`No document MRZ found — saving to ${preset.label}.`);
+        setStatus(`No MRZ found — save as a ${preset.label.toLowerCase()} document.`);
         proposeTalkLinks(preset.defaultName, '', result.text);
+      } else {
+        applyContextDefaults(false);
+        setDocKind('unknown');
+        // attachKind === 'receipt' is explicit user intent and overrides the
+        // policy/ID keyword guard; bare hints do not.
+        if ((receiptHints.looksLikeReceipt && !looksLikeDocInstead) || attachKind === 'receipt') {
+          applyReceiptFromOcr(result.text, receiptHints);
+        } else {
+          setName(preset.defaultName);
+          setReceiptLooksLike(false);
+          setSaveDestination('thing');
+          setStatus(
+            result.text?.trim()
+              ? `Couldn’t classify this photo — saving to ${preset.label}. Rename if it’s an ID or licence.`
+              : `No text found — try better light, or the back of an ID. Saving to ${preset.label}.`
+          );
+          if (result.engine !== 'none' && !result.text?.trim()) {
+            setOcrNote(
+              'No readable text in this photo. For Emirates ID, use the back (MRZ strip). For licences, fill in the name and number below.'
+            );
+          }
+          proposeTalkLinks(preset.defaultName, '', result.text);
+        }
       }
     }
 
@@ -510,8 +559,7 @@ export default function CaptureModal() {
       // Forced attach always updates the linked Thing; destination only controls expense.
       const saveThing = forcedLink || !expenseOnly;
 
-      const identityDoc =
-        asDocument && (docKind === 'passport' || docKind === 'emirates_id');
+      const identityDoc = asDocument && isIdentityDocumentKind(docKind);
       const icon: Icon3DName = identityDoc
         ? docKind === 'passport'
           ? 'passport'
@@ -599,6 +647,34 @@ export default function CaptureModal() {
               : `Captured for ${preset.label}.`,
           });
           savedId = item.id;
+        }
+      }
+
+      // Passports: default reminder 6 months before expiry (travel validity).
+      if (
+        saveThing &&
+        savedId &&
+        asDocument &&
+        docKind === 'passport' &&
+        (expiry || '').trim() &&
+        (expiry || '').trim() !== '—'
+      ) {
+        const draft = defaultDocumentReminder({
+          kind: 'passport',
+          name: fields.name,
+          expiry,
+        });
+        if (draft) {
+          try {
+            await setReminder({
+              label: draft.label,
+              remindAt: draft.remindAt,
+              notes: draft.notes,
+              inventoryItemId: savedId,
+            });
+          } catch (err) {
+            console.warn('Passport expiry reminder failed', err);
+          }
         }
       }
 
@@ -738,7 +814,9 @@ export default function CaptureModal() {
                   ? 'Logging expense'
                   : receiptLooksLike
                     ? 'From receipt'
-                    : `Saving to ${preset.label}`}
+                    : isDocument || saveDestination === 'document'
+                      ? 'Saving to Documents'
+                      : `Saving to ${preset.label}`}
             </Text>
             <Text style={styles.contextChipMeta}>
               {forcedLink
@@ -747,7 +825,13 @@ export default function CaptureModal() {
                   : 'Photo'
                 : receiptLooksLike
                   ? purchasedFrom || name || 'Receipt scan'
-                  : `${preset.room}${preset.category ? ` · ${preset.category}` : ''}`}
+                  : isDocument || saveDestination === 'document'
+                    ? `Personal Documents${
+                        isIdentityDocumentKind(docKind)
+                          ? ` · ${labelDocumentKind(docKind)}`
+                          : ''
+                      }`
+                    : `${preset.room}${preset.category ? ` · ${preset.category}` : ''}`}
             </Text>
           </View>
 
@@ -854,23 +938,26 @@ export default function CaptureModal() {
             </>
           ) : (
             <>
-              <Field label="Name" value={name} onChange={setName} />
               {isDocument ? (
                 <>
-                  <Field label="Full name" value={fullName} onChange={setFullName} />
                   <Field
-                    label="Document number"
-                    value={docNumber}
-                    onChange={setDocNumber}
-                    autoCorrect={false}
-                    autoCapitalize="characters"
+                    label="Name"
+                    value={name}
+                    onChange={setName}
+                    placeholder="e.g. Passport · Jane Doe"
                   />
-                  <Field label="Nationality" value={nationality} onChange={setNationality} />
-                  <DateRow label="Date of birth" value={dob} onChange={setDob} />
                   <DateRow label="Expiry" value={expiry} onChange={setExpiry} />
+                  {docKind === 'passport' ? (
+                    <Text style={styles.remindHint}>
+                      {expiry.trim()
+                        ? 'Reminder set for 6 months before expiry by default.'
+                        : 'Add an expiry date to get a reminder 6 months before.'}
+                    </Text>
+                  ) : null}
                 </>
               ) : (
                 <>
+                  <Field label="Name" value={name} onChange={setName} />
                   <Field label="Brand" value={brand} onChange={setBrand} />
                   <Field
                     label="Serial"
@@ -1336,6 +1423,15 @@ function makeStyles(colors: ThemeColors) {
     fontSize: 16,
     lineHeight: 18,
     color: colors.forest,
+  },
+  remindHint: {
+    fontFamily: fonts.sans,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.mute,
+    marginTop: spacing.xs,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
   },
   matchCard: {
     marginHorizontal: spacing.lg,

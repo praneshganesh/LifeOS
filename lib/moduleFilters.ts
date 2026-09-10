@@ -44,7 +44,11 @@ export type DocBucket =
 export function docBucket(
   item: Pick<InventoryItem, 'documentKind' | 'category' | 'name'>
 ): DocBucket {
-  if (item.documentKind === 'passport' || item.documentKind === 'emirates_id') {
+  if (
+    item.documentKind === 'passport' ||
+    item.documentKind === 'emirates_id' ||
+    item.documentKind === 'driving_licence'
+  ) {
     return 'Identity';
   }
   const hay = `${item.category} ${item.name}`.toLowerCase();

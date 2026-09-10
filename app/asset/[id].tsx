@@ -492,6 +492,7 @@ function QuickAction({
 function labelDocKind(kind?: string) {
   if (kind === 'passport') return 'Passport';
   if (kind === 'emirates_id') return 'Emirates ID';
+  if (kind === 'driving_licence') return 'Driving licence';
   return 'Document';
 }
 

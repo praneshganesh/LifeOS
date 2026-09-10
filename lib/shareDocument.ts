@@ -16,7 +16,7 @@ export type ShareableDocument = {
 export type ShareMode = 'full' | 'redacted';
 
 function isIdentityDoc(kind?: string) {
-  return kind === 'passport' || kind === 'emirates_id';
+  return kind === 'passport' || kind === 'emirates_id' || kind === 'driving_licence';
 }
 
 /** Confirm before opening the system share sheet (WhatsApp, Messages, etc.). */

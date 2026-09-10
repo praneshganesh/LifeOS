@@ -27,7 +27,17 @@ import {
 } from '../habitHeatmap';
 import { hrefFromNotificationData } from '../notificationHref';
 import { dayOnly } from '../chat/prompt';
-import { classifyDocumentFromText, parseMrzFromOcr } from '../ocr/mrz';
+import {
+  classifyDocumentFromText,
+  extractDocumentFieldHints,
+  extractEmiratesIdNumber,
+  parseMrzFromOcr,
+} from '../ocr/mrz';
+import {
+  dayMonthsBefore,
+  defaultDocumentReminder,
+  defaultRemindMonthsBefore,
+} from '../documentReminders';
 import { moduleHref, moduleHrefPreserveFrom, parseModuleOrigin } from '../moduleNav';
 
 describe('module navigation', () => {
@@ -65,6 +75,90 @@ describe('document classification', () => {
       'Phone 97147076055 TRN 100228723100003 Dubai United Arab Emirates',
     ].join('\n');
     assert.equal(parseMrzFromOcr(noisy), null);
+  });
+
+  it('classifies Emirates ID from front-side ID number', () => {
+    const front = [
+      'UNITED ARAB EMIRATES',
+      'FEDERAL AUTHORITY FOR IDENTITY & CITIZENSHIP, CUSTOMS & PORT SECURITY',
+      'Resident Identity Card',
+      'ID Number 784-1988-1234567-1',
+      'Name: Jane Doe',
+      'Date of Birth: 19/04/1988',
+      'Nationality: Exampleland',
+      'Expiry Date: 26/08/2028',
+    ].join('\n');
+    assert.equal(classifyDocumentFromText(front), 'emirates_id');
+    assert.equal(extractEmiratesIdNumber(front), '784-1988-1234567-1');
+    const hints = extractDocumentFieldHints(front);
+    assert.equal(hints?.kind, 'emirates_id');
+    assert.equal(hints?.documentNumber, '784-1988-1234567-1');
+    assert.equal(hints?.fullName, 'Jane Doe');
+    assert.equal(hints?.dateOfBirth, '1988-04-19');
+    assert.equal(hints?.expiryDate, '2028-08-26');
+    assert.equal(hints?.nationality, 'Exampleland');
+  });
+
+  it('parses Emirates ID back MRZ when OCR drops < fillers', () => {
+    // Realistic OCR of UAE ID back — line1 often becomes ILARE… without <
+    const back = [
+      'Occupation Fumigator',
+      'Issuing Place Abu Dhabi',
+      'ILARE1247400019784199226207191',
+      '9202014M2410063IND<<<<<<<<<<<6',
+      'ABDULSHUKOR<<MUHAMMED<NIYAS<KU',
+    ].join('\n');
+    const parsed = parseMrzFromOcr(back);
+    assert.ok(parsed);
+    assert.equal(parsed?.kind, 'emirates_id');
+    assert.equal(parsed?.documentNumber, '784-1992-2620719-1');
+    assert.equal(parsed?.dateOfBirth, '1992-02-01');
+    assert.equal(parsed?.expiryDate, '2024-10-06');
+    assert.match(parsed?.fullName ?? '', /MUHAMMED/i);
+  });
+
+  it('classifies driving licence from typical card text', () => {
+    const lic = [
+      'United Arab Emirates',
+      'Driving License',
+      'License No.: 737237',
+      'Name: SAMPLE PERSON NAME',
+      'Nationality: EXAMPLELAND',
+      'Date of Birth: 01-08-1975',
+      'Issue Date: 24-02-2013',
+      'Expiry Date: 23-02-2028',
+      'Licensing Authority',
+    ].join('\n');
+    assert.equal(classifyDocumentFromText(lic), 'driving_licence');
+    const hints = extractDocumentFieldHints(lic);
+    assert.equal(hints?.kind, 'driving_licence');
+    assert.equal(hints?.documentNumber, '737237');
+    assert.equal(hints?.fullName, 'SAMPLE PERSON NAME');
+    assert.equal(hints?.dateOfBirth, '1975-08-01');
+    assert.equal(hints?.expiryDate, '2028-02-23');
+  });
+});
+
+describe('document reminders', () => {
+  it('defaults passport reminders to 6 months before expiry', () => {
+    assert.equal(defaultRemindMonthsBefore('passport'), 6);
+    assert.equal(defaultRemindMonthsBefore('emirates_id'), null);
+    assert.equal(dayMonthsBefore('2027-08-15', 6, new Date('2025-01-01')), '2027-02-15');
+    const draft = defaultDocumentReminder({
+      kind: 'passport',
+      name: 'Passport · Alex',
+      expiry: '2027-08-15',
+      now: new Date('2025-01-01'),
+    });
+    assert.equal(draft?.remindAt, '2027-02-15');
+    assert.match(draft?.label ?? '', /Renew/);
+  });
+
+  it('clamps passport remind date to today when already inside the 6-month window', () => {
+    assert.equal(
+      dayMonthsBefore('2026-04-01', 6, new Date('2026-01-15')),
+      '2026-01-15'
+    );
   });
 });
 
