@@ -53,9 +53,6 @@ export default function DoneTabScreen() {
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
             <Text variant="title">Done</Text>
-            <Text variant="body" style={styles.lead}>
-              What you keep track of — history, not a to-do list.
-            </Text>
           </View>
           <Pressable
             onPress={openLog}
@@ -74,7 +71,7 @@ export default function DoneTabScreen() {
               Nothing logged yet
             </Text>
             <Text variant="caption" style={{ marginTop: 4 }}>
-              AC filter, car service, descaling — tap to add the first one
+              Tap + to add
             </Text>
           </Pressable>
         ) : (

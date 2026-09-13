@@ -24,6 +24,7 @@ import {
   type LogDoneInput,
   type RemindInterval,
 } from '@/lib/lastDone';
+import { finalizeReminderLabel } from '@/lib/dates';
 import {
   cancelLastDoneReminder,
   ensureNotificationHandler,
@@ -34,6 +35,8 @@ import {
   loadVersionedArray,
   saveVersionedArray,
 } from '@/lib/storage/versioned';
+import { queueReminderDelete, queueReminderUpsert } from '@/lib/sync/outbox';
+import { subscribeSyncApplied } from '@/lib/sync/engine';
 
 const STORAGE_KEY = 'lifeos:last-done:v2';
 const LEGACY_STORAGE_KEY = 'lifeos:last-done:v1';
@@ -111,6 +114,11 @@ async function loadItems(): Promise<LastDoneItem[]> {
 
 async function saveItems(items: LastDoneItem[]) {
   await saveVersionedArray(STORAGE_KEY, SCHEMA_VERSION, items);
+}
+
+/** Stamp the last-write-wins clock right before persisting a mutation. */
+function touch(item: LastDoneItem): LastDoneItem {
+  return { ...item, updatedAt: new Date().toISOString() };
 }
 
 function applyLog(existing: LastDoneItem | null, input: LogDoneInput): LastDoneItem {
@@ -218,6 +226,18 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Reload when the sync engine merges remote rows into the local store.
+  useEffect(() => {
+    return subscribeSyncApplied((tables) => {
+      if (!tables.includes('reminders')) return;
+      void loadItems().then((loaded) => {
+        itemsRef.current = loaded;
+        setItems(loaded);
+        void syncLastDoneReminders(loaded);
+      });
+    });
+  }, []);
+
   const persist = useCallback(async (next: LastDoneItem[]) => {
     const sorted = sortByMostRecent(next);
     itemsRef.current = sorted;
@@ -231,9 +251,10 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
       if (input.id) {
         const existing = list.find((i) => i.id === input.id);
         if (!existing) throw new Error('Item not found');
-        const updated = applyLog(existing, input);
+        const updated = touch(applyLog(existing, input));
         await persist(list.map((i) => (i.id === updated.id ? updated : i)));
         void scheduleLastDoneReminder(updated);
+        void queueReminderUpsert(updated);
         return updated;
       }
 
@@ -271,15 +292,17 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
         );
 
       if (match) {
-        const updated = applyLog(match, { ...input, id: match.id });
+        const updated = touch(applyLog(match, { ...input, id: match.id }));
         await persist(list.map((i) => (i.id === updated.id ? updated : i)));
         void scheduleLastDoneReminder(updated);
+        void queueReminderUpsert(updated);
         return updated;
       }
 
-      const created = applyLog(null, { ...input, label });
+      const created = touch(applyLog(null, { ...input, label }));
       await persist([created, ...list]);
       void scheduleLastDoneReminder(created);
+      void queueReminderUpsert(created);
       return created;
     },
     [persist]
@@ -296,7 +319,7 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
       assignedTo?: string | null;
     }) => {
       const list = itemsRef.current;
-      const label = normalizeLabel(input.label ?? '');
+      const label = finalizeReminderLabel(normalizeLabel(input.label ?? ''));
       if (!label) throw new Error('Label required');
       const remindFields = resolveRemindAt(new Date(), {
         remindAt: input.remindInterval ? undefined : input.remindAt,
@@ -328,29 +351,33 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
         list.find((i) => labelsMatch(i.label, label) && samePerson(i));
 
       if (match) {
-        const updated: LastDoneItem = {
+        const updated: LastDoneItem = touch({
           ...match,
           ...remindFields,
           ...(input.notes?.trim() ? { notes: input.notes.trim() } : {}),
           ...(linkId ? { inventoryItemId: linkId } : {}),
           ...(personId ? { personId, assignedTo: assignedTo || match.assignedTo } : {}),
-        };
+        });
         await persist(list.map((i) => (i.id === updated.id ? updated : i)));
         void scheduleLastDoneReminder(updated);
+        void queueReminderUpsert(updated);
         return updated;
       }
 
-      const created = createLastDoneItem(label, {
-        doneAt: null,
-        remindAt: remindFields.remindAt,
-        remindInterval: remindFields.remindInterval,
-        notes: input.notes?.trim(),
-        inventoryItemId: linkId,
-        personId,
-        assignedTo,
-      });
+      const created = touch(
+        createLastDoneItem(label, {
+          doneAt: null,
+          remindAt: remindFields.remindAt,
+          remindInterval: remindFields.remindInterval,
+          notes: input.notes?.trim(),
+          inventoryItemId: linkId,
+          personId,
+          assignedTo,
+        })
+      );
       await persist([created, ...list]);
       void scheduleLastDoneReminder(created);
+      void queueReminderUpsert(created);
       return created;
     },
     [persist]
@@ -371,7 +398,7 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
       if (!existing) throw new Error('Item not found');
       let updated: LastDoneItem = { ...existing };
       if (patch.label !== undefined) {
-        const label = normalizeLabel(patch.label);
+        const label = finalizeReminderLabel(normalizeLabel(patch.label));
         if (!label) throw new Error('Label required');
         updated = { ...updated, label };
       }
@@ -405,9 +432,11 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
           };
         }
       }
+      updated = touch(updated);
       await persist(list.map((i) => (i.id === id ? updated : i)));
       if (updated.remindAt) void scheduleLastDoneReminder(updated);
       else void cancelLastDoneReminder(id);
+      void queueReminderUpsert(updated);
       return updated;
     },
     [persist]
@@ -417,6 +446,7 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
     async (id: string) => {
       await persist(itemsRef.current.filter((i) => i.id !== id));
       void cancelLastDoneReminder(id);
+      void queueReminderDelete(id);
     },
     [persist]
   );
@@ -424,6 +454,7 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
   const removeLog = useCallback(
     async (itemId: string, logId: string) => {
       let removedActivity = false;
+      let changedItem: LastDoneItem | null = null;
       const next = itemsRef.current
         .map((item) => {
           if (item.id !== itemId) return item;
@@ -432,11 +463,17 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
             removedActivity = true;
             return null;
           }
-          return { ...item, logs };
+          changedItem = touch({ ...item, logs });
+          return changedItem;
         })
         .filter((i): i is LastDoneItem => i != null);
       await persist(sortByMostRecent(next));
-      if (removedActivity) void cancelLastDoneReminder(itemId);
+      if (removedActivity) {
+        void cancelLastDoneReminder(itemId);
+        void queueReminderDelete(itemId);
+      } else if (changedItem) {
+        void queueReminderUpsert(changedItem);
+      }
     },
     [persist]
   );

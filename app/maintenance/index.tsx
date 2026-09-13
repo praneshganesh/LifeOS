@@ -33,7 +33,6 @@ export default function MaintenanceScreen() {
   return (
     <ModuleScreen
       title="Maintenance"
-      subtitle="Service due from Last Done — schedules for Things you own."
       defaultOrigin="things"
       right={<CaptureContextButton kind="maintenance" label="Capture maintenance" />}
     >

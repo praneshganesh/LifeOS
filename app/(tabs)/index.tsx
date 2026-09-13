@@ -13,15 +13,12 @@ import {
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { AppIcon } from '@/components/ui/Icon3D';
+import { DotField, hubCardBg, isNearGray, type DotTone } from '@/components/ui/DotField';
 import { HomeHeader } from '@/components/HomeHeader';
 import { greetingForNow } from '@/data/mock';
-import {
-  buildDashboard,
-  formatDashDate,
-  givenName,
-  type ChecklistRow,
-  type DashRow,
-} from '@/lib/dashboard';
+import { buildDashboard, formatDashDate, givenName, type DashRow } from '@/lib/dashboard';
+import { openAttentionQueue } from '@/lib/attention';
+import { useAttentionDismissals } from '@/lib/attentionDismiss';
 import { loadHomeSurface } from '@/lib/homeSurface';
 import { useInventory } from '@/lib/InventoryContext';
 import { useLastDone } from '@/lib/LastDoneContext';
@@ -48,6 +45,7 @@ export default function HomeDashboard() {
   const router = useRouter();
   const { items } = useInventory();
   const { items: lastDoneItems, logDone } = useLastDone();
+  const { isDismissed } = useAttentionDismissals();
   const { members } = useHousehold();
   const { habits, checkIn } = useHabits();
   const { packs: classPacks } = useClasses();
@@ -97,6 +95,14 @@ export default function HomeDashboard() {
     [items, lastDoneItems, subscriptions, classPacks, habits, displayName]
   );
 
+  const reminderOpenCount = useMemo(
+    () =>
+      openAttentionQueue(items, lastDoneItems, subscriptions, classPacks).filter(
+        (a) => !isDismissed(a.id)
+      ).length,
+    [items, lastDoneItems, subscriptions, classPacks, isDismissed]
+  );
+
   const classesLeft = useMemo(
     () => classPacks.reduce((n, p) => n + (remainingCount(p) ?? 0), 0),
     [classPacks]
@@ -106,11 +112,12 @@ export default function HomeDashboard() {
   const featured = dash.featured;
   const restToday = dash.today.filter((row) => row.id !== featured?.id);
   const restNext = dash.next.filter((row) => row.id !== featured?.id);
+  const doneToday = dash.doneToday.filter((row) => row.id !== featured?.id);
   const clear =
     !featured &&
     restToday.length === 0 &&
     restNext.length === 0 &&
-    dash.checklist.length === 0;
+    doneToday.length === 0;
 
   async function onHabitCheck(habitId: string) {
     if (busyId) return;
@@ -222,7 +229,7 @@ export default function HomeDashboard() {
               You’re clear
             </Text>
             <Text variant="body" style={{ marginTop: 4, textAlign: 'center' }}>
-              Nothing waiting today. Capture a Thing, or talk one in.
+              Nothing waiting today.
             </Text>
             <View style={styles.clearActions}>
               <Pressable
@@ -252,34 +259,8 @@ export default function HomeDashboard() {
           </View>
         ) : null}
 
-        {dash.checklist.length ? (
-          <Section
-            title="Check-ins"
-            meta={
-              dash.habitsOpen + dash.habitsDone > 0
-                ? `${dash.habitsDone} of ${dash.habitsOpen + dash.habitsDone}`
-                : undefined
-            }
-          >
-            <View style={[styles.checkCard, { backgroundColor: colors.surface }, shade.soft]}>
-              {dash.checklist.map((row, i) => (
-                <ChecklistLine
-                  key={row.id}
-                  row={row}
-                  first={i === 0}
-                  busy={busyId === row.habitId}
-                  onOpen={() => open(row.href)}
-                  onCheck={
-                    row.habitId ? () => void onHabitCheck(row.habitId!) : undefined
-                  }
-                />
-              ))}
-            </View>
-          </Section>
-        ) : null}
-
         {restToday.length ? (
-          <Section title="Still today">
+          <Section title="Today">
             {restToday.map((row) => (
               <RowCard
                 key={row.id}
@@ -287,6 +268,23 @@ export default function HomeDashboard() {
                 busy={busyId === row.habitId || busyId === row.lastDoneId}
                 onOpen={() => open(row.href)}
                 onCheck={checkFor(row)}
+              />
+            ))}
+          </Section>
+        ) : null}
+
+        {doneToday.length ? (
+          <Section
+            title="Done today"
+            meta={`${doneToday.length}`}
+          >
+            {doneToday.map((row) => (
+              <RowCard
+                key={row.id}
+                row={row}
+                busy={false}
+                done
+                onOpen={() => open(row.href)}
               />
             ))}
           </Section>
@@ -311,8 +309,11 @@ export default function HomeDashboard() {
                   : '—'
               }
               hint={habits.length ? 'done today' : 'start one'}
-              accent={colors.accent}
-              accentSoft={colors.accentWash}
+              accent={colors.coral}
+              dots={{
+                bg: hubCardBg(colors.coral, resolved === 'light', '#A66A5C'),
+                dot: colors.coral,
+              }}
               onPress={() => {
                 blurActiveElement();
                 router.push(moduleHref('/habits', 'today'));
@@ -321,10 +322,13 @@ export default function HomeDashboard() {
             <Tile
               Icon={Bell}
               label="Reminders"
-              value={lastDoneItems.length ? String(lastDoneItems.length) : '—'}
-              hint={lastDoneItems.length ? 'tracked' : 'add one'}
+              value={reminderOpenCount ? String(reminderOpenCount) : '—'}
+              hint={reminderOpenCount ? 'open' : 'add one'}
               accent={colors.amber}
-              accentSoft={colors.amberSoft}
+              dots={{
+                bg: hubCardBg(colors.amber, resolved === 'light', '#A8884A'),
+                dot: colors.amber,
+              }}
               onPress={() => {
                 blurActiveElement();
                 router.push(moduleHref('/tasks', 'today'));
@@ -335,8 +339,11 @@ export default function HomeDashboard() {
               label="Classes"
               value={classesLeft ? String(classesLeft) : '—'}
               hint={classesLeft ? 'sessions left' : 'add a pack'}
-              accent={colors.sky}
-              accentSoft={colors.skySoft}
+              accent={isNearGray(colors.sky) ? '#5E7A8C' : colors.sky}
+              dots={{
+                bg: hubCardBg(colors.sky, resolved === 'light', '#5E7A8C'),
+                dot: isNearGray(colors.sky) ? '#5E7A8C' : colors.sky,
+              }}
               onPress={() => {
                 blurActiveElement();
                 router.push(moduleHref('/classes', 'today'));
@@ -344,11 +351,14 @@ export default function HomeDashboard() {
             />
             <Tile
               Icon={Package}
-              label="Life"
+              label="Things"
               value={items.length ? String(items.length) : '—'}
               hint={items.length ? 'things saved' : 'browse'}
-              accent={colors.violet}
-              accentSoft={colors.violetSoft}
+              accent={isNearGray(colors.violet) ? '#7A6E8E' : colors.violet}
+              dots={{
+                bg: hubCardBg(colors.violet, resolved === 'light', '#7A6E8E'),
+                dot: isNearGray(colors.violet) ? '#7A6E8E' : colors.violet,
+              }}
               onPress={() => {
                 blurActiveElement();
                 router.push('/(tabs)/spaces' as Href);
@@ -393,74 +403,6 @@ function Section({
   );
 }
 
-function ChecklistLine({
-  row,
-  first,
-  busy,
-  onOpen,
-  onCheck,
-}: {
-  row: ChecklistRow;
-  first: boolean;
-  busy: boolean;
-  onOpen: () => void;
-  onCheck?: () => void;
-}) {
-  const { colors } = useTheme();
-
-  return (
-    <View
-      style={[
-        styles.checkRow,
-        !first && {
-          borderTopWidth: StyleSheet.hairlineWidth,
-          borderTopColor: colors.line,
-        },
-      ]}
-    >
-      {row.done ? (
-        <View style={[styles.checkCircle, { backgroundColor: colors.forestSoft }]}>
-          <Check size={15} color={colors.forest} strokeWidth={2.8} />
-        </View>
-      ) : (
-        <Pressable
-          onPress={() => {
-            if (!busy) onCheck?.();
-          }}
-          hitSlop={10}
-          style={[
-            styles.checkCircle,
-            {
-              borderWidth: 1.5,
-              borderColor: busy ? colors.faint : colors.slate,
-            },
-          ]}
-          accessibilityRole="checkbox"
-          accessibilityState={{ checked: false }}
-          accessibilityLabel={`Check in ${row.title}`}
-        />
-      )}
-      <Pressable
-        onPress={onOpen}
-        style={({ pressed }) => [styles.checkBody, { opacity: pressed ? 0.85 : 1 }]}
-      >
-        <Text
-          variant="bodyMedium"
-          numberOfLines={1}
-          style={row.done ? { color: colors.mute } : undefined}
-        >
-          {row.title}
-        </Text>
-        {row.meta ? (
-          <Text variant="caption" style={{ flexShrink: 0 }}>
-            {row.meta}
-          </Text>
-        ) : null}
-      </Pressable>
-    </View>
-  );
-}
-
 function RowCard({
   row,
   busy,
@@ -491,7 +433,11 @@ function RowCard({
           <AppIcon name={row.icon} size={40} />
         )}
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text variant="bodyMedium" numberOfLines={1}>
+          <Text
+            variant="bodyMedium"
+            numberOfLines={1}
+            style={done ? { color: colors.mute } : undefined}
+          >
             {row.title}
           </Text>
           <Text variant="caption" style={{ marginTop: 2 }} numberOfLines={1}>
@@ -515,7 +461,7 @@ function RowCard({
         >
           <Check size={18} color={colors.accent} strokeWidth={2.4} />
         </Pressable>
-      ) : (
+      ) : done ? null : (
         <ArrowUpRight size={18} color={colors.faint} strokeWidth={1.8} />
       )}
     </View>
@@ -528,7 +474,7 @@ function Tile({
   value,
   hint,
   accent,
-  accentSoft,
+  dots,
   onPress,
 }: {
   Icon: typeof Sparkles;
@@ -536,7 +482,7 @@ function Tile({
   value: string;
   hint: string;
   accent: string;
-  accentSoft: string;
+  dots: DotTone;
   onPress: () => void;
 }) {
   const { colors } = useTheme();
@@ -545,24 +491,26 @@ function Tile({
       onPress={onPress}
       style={({ pressed }) => [
         styles.tile,
-        {
-          backgroundColor: colors.surface,
-          borderColor: colors.line,
-          opacity: pressed ? 0.88 : 1,
-        },
+        { borderColor: colors.line },
+        pressed && { opacity: 0.92, transform: [{ scale: 0.985 }] },
       ]}
       accessibilityLabel={`${label} — ${value} ${hint}`}
     >
-      <View style={[styles.tileIcon, { backgroundColor: accentSoft }]}>
-        <Icon size={18} color={accent} strokeWidth={2.1} />
+      <DotField tone={dots} />
+      <View style={styles.tileFill}>
+        <View style={[styles.tileIcon, { backgroundColor: colors.surfaceSoft }]}>
+          <Icon size={18} color={accent} strokeWidth={2.1} />
+        </View>
+        <View>
+          <Text style={[styles.tileLabel, { color: colors.mute }]}>{label}</Text>
+          <Text style={[styles.tileValue, { color: colors.ink }]} numberOfLines={1}>
+            {value}
+          </Text>
+          <Text style={[styles.tileHint, { color: colors.faint }]} numberOfLines={1}>
+            {hint}
+          </Text>
+        </View>
       </View>
-      <Text style={[styles.tileLabel, { color: colors.mute }]}>{label}</Text>
-      <Text style={[styles.tileValue, { color: colors.ink }]} numberOfLines={1}>
-        {value}
-      </Text>
-      <Text style={[styles.tileHint, { color: colors.faint }]} numberOfLines={1}>
-        {hint}
-      </Text>
     </Pressable>
   );
 }
@@ -678,33 +626,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 20,
   },
-  checkCard: {
-    borderRadius: radius.lg,
-    paddingHorizontal: spacing.md,
-  },
-  checkRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    minHeight: 46,
-    paddingVertical: 6,
-  },
-  checkCircle: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkBody: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-    alignSelf: 'stretch',
-  },
   rowCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -744,12 +665,18 @@ const styles = StyleSheet.create({
   tile: {
     flexGrow: 1,
     flexBasis: '46%',
-    minHeight: 132,
-    borderRadius: radius.lg,
+    minHeight: 136,
+    borderRadius: radius.xl,
+    overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth,
+  },
+  tileFill: {
+    flex: 1,
     paddingHorizontal: 14,
     paddingTop: 14,
     paddingBottom: 16,
+    minHeight: 136,
+    justifyContent: 'space-between',
   },
   tileIcon: {
     width: 34,
@@ -757,10 +684,9 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 14,
   },
   tileLabel: {
-    fontFamily: fonts.sans,
+    fontFamily: fonts.sansMedium,
     fontSize: 13,
     lineHeight: 16,
     letterSpacing: -0.08,

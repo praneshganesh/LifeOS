@@ -14,33 +14,40 @@ import {
 import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useMemo, useRef, type ReactNode } from 'react';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { useMemo, useRef } from 'react';
 import {
   BookOpen,
   Camera,
   ChevronLeft,
+  ChevronRight,
   FileText,
-  Pencil,
   Share2,
-  Trash2,
   Wrench,
 } from 'lucide-react-native';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
-import { AppIcon } from '@/components/ui/Icon3D';
+import {
+  DETAIL_DOCK_PAD,
+  DetailEditButton,
+  DetailFact,
+  DetailFacts,
+  DetailHero,
+  DetailRemoveButton,
+  DetailSection,
+} from '@/components/ui/DetailKit';
 import { useInventory } from '@/lib/InventoryContext';
 import { useLastDone } from '@/lib/LastDoneContext';
 import { forInventoryItem, formatRelativeDone, getLastDoneAt } from '@/lib/lastDone';
+import { formatDisplayDate, localDayKey } from '@/lib/dates';
 import { inventoryToAsset } from '@/lib/mergeAssets';
 import { captureHref } from '@/lib/captureContext';
 import { resolveManualLink } from '@/lib/manualLink';
 import { confirmDelete } from '@/lib/confirmDelete';
 import { shareDocument } from '@/lib/shareDocument';
 import { blurActiveElement } from '@/lib/a11y';
-import { type ThemeColors,  colors, fonts, radius, spacing, shadows  } from '@/constants/theme';
+import { type ThemeColors, fonts, radius, spacing, shadows } from '@/constants/theme';
 
-const DOCK_CLEARANCE = 96;
 const CHROME_TOP = 18;
 
 export default function AssetDetailScreen() {
@@ -166,8 +173,24 @@ export default function AssetDetailScreen() {
     );
 
   const showManual = Boolean(manual) && !isDoc;
+  const accent = isDoc ? colors.sky : colors.accent;
+  const vividFallback = isDoc ? colors.sky : colors.forest;
 
-  const chips = [
+  // Subtitle is brand · person only — category / document kind lives in the
+  // hero eyebrow (or photo chrome), so it isn’t repeated on this line.
+  const categoryPart = isDoc
+    ? labelDocKind(captured?.documentKind) || 'Document'
+    : asset.category && asset.category !== '—'
+      ? asset.category
+      : null;
+
+  const heroEyebrow = isDoc
+    ? categoryPart || undefined
+    : asset.category && asset.category !== '—'
+      ? asset.category
+      : asset.room || undefined;
+
+  const subtitle = [
     ...new Set(
       [
         asset.brand &&
@@ -176,92 +199,128 @@ export default function AssetDetailScreen() {
         !/^identity$/i.test(asset.brand)
           ? asset.brand
           : null,
-        captured?.assignedTo || asset.assignedTo
-          ? `For ${captured?.assignedTo || asset.assignedTo}`
-          : null,
-        asset.room &&
-        asset.room !== '—' &&
-        !/^identity$/i.test(asset.room) &&
-        asset.room !== asset.brand
-          ? asset.room
-          : null,
-        isDoc
-          ? labelDocKind(captured?.documentKind) || 'Document'
-          : asset.category && asset.category !== '—'
-            ? asset.category
-            : null,
+        // Photo hero has no eyebrow — keep category there so it’s still visible.
+        hasPhoto && categoryPart ? categoryPart : null,
+        captured?.assignedTo || asset.assignedTo || null,
       ].filter(Boolean) as string[]
     ),
-  ];
+  ].join(' · ');
 
-  const glance: { label: string; value: string }[] = isDoc
+  const warrantyDisplay = formatDisplayDate(
+    asset.warrantyExpiry && asset.warrantyExpiry !== '—' ? asset.warrantyExpiry : undefined,
+    { yearEndAsMonthYear: true }
+  );
+  const warrantyExpired = Boolean(
+    asset.warrantyExpiry &&
+      /^\d{4}-\d{2}-\d{2}/.test(asset.warrantyExpiry) &&
+      asset.warrantyExpiry.slice(0, 10) < localDayKey()
+  );
+  const expiresDisplay = formatDisplayDate(captured?.expiryDate) ?? warrantyDisplay;
+  const docExpired = Boolean(
+    captured?.expiryDate &&
+      /^\d{4}-\d{2}-\d{2}/.test(captured.expiryDate) &&
+      captured.expiryDate.slice(0, 10) < localDayKey()
+  );
+
+  const glance: { label: string; value: string; tint?: string }[] = isDoc
     ? [
         { label: 'Type', value: labelDocKind(captured?.documentKind) },
         {
+          label:
+            captured?.documentKind === 'emirates_id'
+              ? 'ID number'
+              : captured?.documentKind === 'passport'
+                ? 'Passport #'
+                : 'Document #',
+          value: captured?.documentNumber || (asset.serial !== '—' ? asset.serial : '—'),
+        },
+        {
           label: 'Expires',
-          value: captured?.expiryDate || asset.warrantyExpiry || '—',
+          value: expiresDisplay ?? '—',
+          tint: expiresDisplay ? (docExpired ? colors.coral : colors.forest) : undefined,
         },
       ]
     : [
         { label: 'Price', value: asset.price && asset.price !== '—' ? asset.price : '—' },
         {
           label: 'Warranty',
-          value:
-            asset.warrantyExpiry && asset.warrantyExpiry !== '—'
-              ? asset.warrantyExpiry
-              : '—',
+          value: warrantyDisplay ?? '—',
+          tint: warrantyDisplay
+            ? warrantyExpired
+              ? colors.coral
+              : colors.forest
+            : undefined,
         },
         {
           label: 'Purchased',
-          value:
-            asset.purchaseDate && asset.purchaseDate !== '—'
-              ? asset.purchaseDate
-              : '—',
+          value: formatDisplayDate(asset.purchaseDate) ?? '—',
         },
       ];
 
-  const detailRows: { label: string; value: string }[] = isDoc
-    ? [
-        {
-          label: 'Document #',
-          value: captured?.documentNumber || (asset.serial !== '—' ? asset.serial : '—'),
-        },
-        { label: 'Full name', value: captured?.fullName || '—' },
-        { label: 'Nationality', value: captured?.nationality || '—' },
-        { label: 'Date of birth', value: captured?.dateOfBirth || '—' },
-      ]
-    : [
-        { label: 'Serial', value: asset.serial || '—' },
-        {
-          label: 'Bought from',
-          value: captured?.purchasedFrom || asset.purchasedFrom || '—',
-        },
-        { label: 'Condition', value: asset.condition || '—' },
-      ];
+  // Empty facts are hidden, never rendered as "—" placeholders.
+  const detailRows = (
+    isDoc
+      ? [
+          { label: 'Full name', value: captured?.fullName },
+          { label: 'Nationality', value: captured?.nationality },
+          { label: 'Date of birth', value: formatDisplayDate(captured?.dateOfBirth) },
+        ]
+      : [
+          { label: 'Serial', value: asset.serial },
+          { label: 'Bought from', value: captured?.purchasedFrom || asset.purchasedFrom },
+          { label: 'Condition', value: asset.condition },
+        ]
+  ).filter(
+    (row): row is { label: string; value: string } =>
+      Boolean(row.value && row.value.trim()) &&
+      row.value !== '—' &&
+      row.value !== '-' &&
+      !/^unknown$/i.test(row.value!)
+  );
+
+  const editHref = `/asset/edit/${asset.id}` as Href;
 
   return (
     <Screen>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <View
-        style={[styles.chrome, { top: insets.top + CHROME_TOP }]}
-        pointerEvents="box-none"
-      >
-        <Pressable
-          onPress={goBack}
-          style={({ pressed }) => [styles.chromeBtn, pressed && { opacity: 0.75 }]}
-          accessibilityLabel="Back"
-          hitSlop={8}
+      {hasPhoto ? (
+        <View
+          style={[styles.chrome, { top: insets.top + CHROME_TOP }]}
+          pointerEvents="box-none"
         >
-          <ChevronLeft size={22} color={colors.ink} strokeWidth={2.2} />
-        </Pressable>
-      </View>
+          <Pressable
+            onPress={goBack}
+            style={({ pressed }) => [
+              styles.chromeBtn,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.line,
+              },
+              pressed && { opacity: 0.75 },
+            ]}
+            accessibilityLabel="Back"
+            hitSlop={8}
+          >
+            <ChevronLeft size={22} color={colors.ink} strokeWidth={2.2} />
+          </Pressable>
+          {isUserItem ? (
+            <DetailEditButton
+              accent={accent}
+              onPress={() => {
+                blurActiveElement();
+                router.push(editHref);
+              }}
+            />
+          ) : null}
+        </View>
+      ) : null}
 
       <ScrollView
         ref={scrollRef}
         onScroll={onScroll}
         scrollEventThrottle={16}
-        contentContainerStyle={{ paddingBottom: insets.bottom + DOCK_CLEARANCE }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + DETAIL_DOCK_PAD }}
         showsVerticalScrollIndicator={false}
       >
         {hasPhoto && captured?.imageUri ? (
@@ -287,35 +346,57 @@ export default function AssetDetailScreen() {
         <View
           style={[
             styles.body,
-            !hasPhoto && { paddingTop: insets.top + CHROME_TOP + 40 + spacing.lg },
+            !hasPhoto && {
+              paddingTop: Math.max(insets.top, 12) + spacing.xs,
+            },
           ]}
         >
+          {!hasPhoto ? (
+            <View style={styles.topNav}>
+              <Pressable
+                onPress={goBack}
+                style={({ pressed }) => [
+                  styles.backBtn,
+                  pressed && styles.backBtnPressed,
+                ]}
+                hitSlop={12}
+                accessibilityRole="button"
+                accessibilityLabel="Go back"
+              >
+                <ChevronLeft size={20} color={colors.ink} strokeWidth={2.4} />
+                <Text style={styles.backLabel}>Back</Text>
+              </Pressable>
+              {isUserItem ? (
+                <DetailEditButton
+                  accent={accent}
+                  onPress={() => {
+                    blurActiveElement();
+                    router.push(editHref);
+                  }}
+                />
+              ) : null}
+            </View>
+          ) : null}
+
           <Animated.View entering={FadeInDown.springify().damping(18)}>
             {!hasPhoto ? (
-              <View style={styles.titleRow}>
-                <AppIcon name={asset.icon} size={56} tone="soft" />
-                <Text style={[styles.title, { flex: 1 }]}>{asset.name}</Text>
-              </View>
+              <DetailHero
+                eyebrow={heroEyebrow}
+                title={asset.name}
+                subtitle={subtitle || undefined}
+                accent={accent}
+                vividFallback={vividFallback}
+              />
             ) : (
-              <Text style={styles.title}>{asset.name}</Text>
+              <>
+                <Text style={styles.title}>{asset.name}</Text>
+                {subtitle ? (
+                  <Text style={styles.subtitle} numberOfLines={2}>
+                    {subtitle}
+                  </Text>
+                ) : null}
+              </>
             )}
-
-            {linkedService ? (
-              <Text style={styles.lastMaintained}>
-                Last: {linkedService.label} ·{' '}
-                {formatRelativeDone(getLastDoneAt(linkedService))}
-              </Text>
-            ) : null}
-
-            {chips.length ? (
-              <View style={styles.chipRow}>
-                {chips.map((chip, i) => (
-                  <View key={`${chip}-${i}`} style={styles.chip}>
-                    <Text style={styles.chipText}>{chip}</Text>
-                  </View>
-                ))}
-              </View>
-            ) : null}
           </Animated.View>
 
           <Animated.View
@@ -324,22 +405,25 @@ export default function AssetDetailScreen() {
           >
             {isUserItem && isDoc ? (
               <QuickAction
-                icon={<Share2 size={20} color={colors.forest} strokeWidth={2} />}
+                icon={<Share2 size={19} color={colors.pure} strokeWidth={2.2} />}
                 label="Share"
+                accent={accent}
                 onPress={() => void onShare()}
               />
             ) : null}
             {isUserItem ? (
               <>
                 <QuickAction
-                  icon={<Camera size={20} color={colors.forest} strokeWidth={2} />}
+                  icon={<Camera size={19} color={colors.pure} strokeWidth={2.2} />}
                   label={hasPhoto ? 'Photo' : 'Add photo'}
+                  accent={accent}
                   onPress={() => openAttach('photo')}
                 />
                 {!isDoc ? (
                   <QuickAction
-                    icon={<FileText size={20} color={colors.forest} strokeWidth={2} />}
+                    icon={<FileText size={19} color={colors.pure} strokeWidth={2.2} />}
                     label="Receipt"
+                    accent={accent}
                     onPress={() => openAttach('receipt')}
                   />
                 ) : null}
@@ -347,8 +431,9 @@ export default function AssetDetailScreen() {
             ) : null}
             {showManual && manual ? (
               <QuickAction
-                icon={<BookOpen size={20} color={colors.forest} strokeWidth={2} />}
+                icon={<BookOpen size={19} color={colors.pure} strokeWidth={2.2} />}
                 label="Manual"
+                accent={accent}
                 onPress={() => {
                   void Linking.openURL(manual.url);
                 }}
@@ -356,8 +441,9 @@ export default function AssetDetailScreen() {
             ) : null}
             {!isDoc ? (
               <QuickAction
-                icon={<Wrench size={20} color={colors.forest} strokeWidth={2} />}
+                icon={<Wrench size={19} color={colors.pure} strokeWidth={2.2} />}
                 label="Maintain"
+                accent={accent}
                 onPress={() =>
                   router.push(`/last-done?linkItemId=${encodeURIComponent(asset.id)}` as Href)
                 }
@@ -366,19 +452,64 @@ export default function AssetDetailScreen() {
           </Animated.View>
 
           <Animated.View entering={FadeInDown.delay(120).springify().damping(18)}>
-            <View style={styles.glanceStrip}>
+            <DetailFacts>
               {glance.map((g, i) => (
                 <View
                   key={g.label}
-                  style={[styles.glanceTile, i < glance.length - 1 && styles.glanceDivider]}
+                  style={[
+                    styles.glanceFact,
+                    i < glance.length - 1 && {
+                      borderBottomWidth: StyleSheet.hairlineWidth,
+                      borderBottomColor: colors.line,
+                    },
+                  ]}
                 >
-                  <Text style={styles.glanceValue} numberOfLines={1}>
+                  <Text style={[styles.glanceLabel, { color: colors.mute }]}>{g.label}</Text>
+                  <Text
+                    style={[
+                      styles.glanceValue,
+                      { color: g.tint ?? colors.ink },
+                    ]}
+                    numberOfLines={1}
+                  >
                     {g.value}
                   </Text>
-                  <Text style={styles.glanceLabel}>{g.label}</Text>
                 </View>
               ))}
-            </View>
+            </DetailFacts>
+
+            {linkedService ? (
+              <Pressable
+                onPress={() => {
+                  blurActiveElement();
+                  router.push(`/last-done/${linkedService.id}` as Href);
+                }}
+                style={({ pressed }) => [styles.maintCard, pressed && { opacity: 0.85 }]}
+                accessibilityLabel={`Open ${linkedService.label}`}
+              >
+                <View style={[styles.maintIcon, { backgroundColor: colors.accentWash }]}>
+                  <Wrench size={17} color={accent} strokeWidth={2} />
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text variant="headline" numberOfLines={1}>
+                    {linkedService.label}
+                  </Text>
+                  <Text variant="caption" style={{ marginTop: 2 }} numberOfLines={1}>
+                    {[
+                      linkedService.logs?.length
+                        ? `Last ${formatRelativeDone(getLastDoneAt(linkedService)).toLowerCase()}`
+                        : null,
+                      linkedService.remindAt
+                        ? `Next ${formatDisplayDate(linkedService.remindAt)}`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ') || 'No history yet'}
+                  </Text>
+                </View>
+                <ChevronRight size={16} color={colors.faint} strokeWidth={1.8} />
+              </Pressable>
+            ) : null}
 
             {isDoc ? (
               <View style={styles.privacyBanner}>
@@ -388,36 +519,27 @@ export default function AssetDetailScreen() {
               </View>
             ) : null}
 
-            <View style={styles.detailCard}>
-              {detailRows.map((row, i) => (
-                <View
-                  key={row.label}
-                  style={[styles.detailRow, i < detailRows.length - 1 && styles.detailBorder]}
-                >
-                  <Text variant="body" style={{ color: colors.mute }}>
-                    {row.label}
-                  </Text>
-                  <Text
-                    variant="bodyMedium"
-                    style={{ maxWidth: '58%', textAlign: 'right' }}
-                  >
-                    {row.value}
-                  </Text>
-                </View>
-              ))}
-            </View>
-
-            {asset.insight ? <Text style={styles.insight}>{asset.insight}</Text> : null}
+            {detailRows.length ? (
+              <DetailSection label="Details">
+                <DetailFacts>
+                  {detailRows.map((row, i) => (
+                    <DetailFact
+                      key={row.label}
+                      label={row.label}
+                      value={row.value}
+                      last={i === detailRows.length - 1}
+                    />
+                  ))}
+                </DetailFacts>
+              </DetailSection>
+            ) : null}
 
             {asset.timeline?.length ? (
-              <View style={styles.timeline}>
-                <Text variant="label" style={styles.timelineLabel}>
-                  Timeline
-                </Text>
+              <DetailSection label="Timeline">
                 {asset.timeline.map((event, i) => (
                   <View key={event.date + event.event + i} style={styles.timelineItem}>
                     <View style={styles.timelineRail}>
-                      <View style={styles.timelineDot} />
+                      <View style={[styles.timelineDot, { backgroundColor: accent }]} />
                       {i < asset.timeline.length - 1 ? (
                         <View style={styles.timelineLine} />
                       ) : null}
@@ -430,31 +552,11 @@ export default function AssetDetailScreen() {
                     </View>
                   </View>
                 ))}
-              </View>
+              </DetailSection>
             ) : null}
 
             {isUserItem ? (
-              <View style={styles.bottomActions}>
-                <Pressable
-                  onPress={() => {
-                    blurActiveElement();
-                    router.push(`/asset/edit/${asset.id}` as Href);
-                  }}
-                  style={({ pressed }) => [styles.editBtn, pressed && { opacity: 0.9 }]}
-                  accessibilityLabel="Edit"
-                >
-                  <Pencil size={18} color={colors.forest} strokeWidth={2.1} />
-                  <Text style={styles.editBtnText}>Edit</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => void onDelete()}
-                  style={({ pressed }) => [styles.deleteBtn, pressed && { opacity: 0.9 }]}
-                  accessibilityLabel="Delete"
-                >
-                  <Trash2 size={18} color={colors.coral} strokeWidth={2.1} />
-                  <Text style={styles.deleteBtnText}>Delete</Text>
-                </Pressable>
-              </View>
+              <DetailRemoveButton onPress={() => void onDelete()} />
             ) : null}
           </Animated.View>
         </View>
@@ -466,10 +568,12 @@ export default function AssetDetailScreen() {
 function QuickAction({
   icon,
   label,
+  accent,
   onPress,
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   label: string;
+  accent: string;
   onPress: () => void;
 }) {
   const { colors } = useTheme();
@@ -480,11 +584,14 @@ function QuickAction({
         blurActiveElement();
         onPress();
       }}
-      style={({ pressed }) => [styles.quickAction, pressed && { opacity: 0.8 }]}
+      style={({ pressed }) => [
+        styles.quickAction,
+        pressed && { opacity: 0.88, transform: [{ scale: 0.96 }] },
+      ]}
       accessibilityLabel={label}
     >
-      <View style={styles.quickCircle}>{icon}</View>
-      <Text style={styles.quickLabel}>{label}</Text>
+      <View style={[styles.quickCircle, { backgroundColor: accent }]}>{icon}</View>
+      <Text style={[styles.quickLabel, { color: colors.ink }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -501,19 +608,54 @@ function makeStyles(colors: ThemeColors) {
   chrome: {
     position: 'absolute',
     left: spacing.lg,
+    right: spacing.lg,
     zIndex: 50,
     elevation: 50,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   chromeBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: colors.surface,
     ...shadows.soft,
+  },
+  topNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+    marginLeft: -6,
+  },
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingVertical: 6,
+    paddingHorizontal: 6,
+    borderRadius: radius.sm,
+  },
+  backBtnPressed: {
+    opacity: 0.65,
+  },
+  backLabel: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 15,
+    color: colors.ink,
+    letterSpacing: -0.2,
+  },
+  softIconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.surfaceSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   missing: {
     flex: 1,
@@ -542,141 +684,89 @@ function makeStyles(colors: ThemeColors) {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.xl,
   },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
   title: {
     fontFamily: fonts.sansSemi,
-    fontSize: 22,
-    lineHeight: 28,
-    letterSpacing: -0.4,
+    fontSize: 26,
+    lineHeight: 32,
+    letterSpacing: -0.5,
     color: colors.ink,
   },
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: spacing.md,
-  },
-  lastMaintained: {
-    marginTop: spacing.sm,
+  subtitle: {
+    marginTop: 6,
     fontFamily: fonts.sans,
-    fontSize: 16,
+    fontSize: 15,
+    lineHeight: 20,
     color: colors.mute,
-  },
-  chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: radius.full,
-    backgroundColor: colors.white,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-  },
-  chipText: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    color: colors.slate,
   },
   quickRow: {
     flexDirection: 'row',
-    gap: spacing.xl,
-    marginTop: spacing.xl,
+    flexWrap: 'wrap',
+    gap: spacing.lg,
+    marginTop: spacing.md,
+    marginBottom: spacing.md,
   },
   quickAction: {
     alignItems: 'center',
     gap: 6,
+    minWidth: 56,
   },
   quickCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.white,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     alignItems: 'center',
     justifyContent: 'center',
     ...shadows.soft,
   },
   quickLabel: {
     fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    color: colors.slate,
+    fontSize: 12,
+    letterSpacing: -0.1,
   },
-  glanceStrip: {
-    flexDirection: 'row',
-    marginTop: spacing.xl,
-    backgroundColor: colors.white,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    paddingVertical: spacing.lg,
-    ...shadows.soft,
-  },
-  glanceTile: {
-    flex: 1,
-    alignItems: 'center',
-    paddingHorizontal: spacing.sm,
-  },
-  glanceDivider: {
-    borderRightWidth: StyleSheet.hairlineWidth,
-    borderRightColor: colors.line,
-  },
-  glanceValue: {
-    fontFamily: fonts.sansSemi,
-    fontSize: 16,
-    color: colors.ink,
+  glanceFact: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: 14,
+    gap: 4,
   },
   glanceLabel: {
-    marginTop: 4,
-    fontFamily: fonts.sans,
+    fontFamily: fonts.sansMedium,
+    fontSize: 12,
+    letterSpacing: 0.2,
+    textTransform: 'uppercase',
+  },
+  glanceValue: {
+    fontFamily: fonts.sansMedium,
     fontSize: 16,
-    color: colors.mute,
+    letterSpacing: -0.2,
+  },
+  maintCard: {
+    marginBottom: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.surfaceSoft,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  maintIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   privacyBanner: {
-    marginTop: spacing.md,
+    marginBottom: spacing.md,
     padding: spacing.md,
     borderRadius: radius.sm,
     backgroundColor: colors.forestWash,
   },
   privacyText: {
     fontFamily: fonts.sans,
-    fontSize: 16,
+    fontSize: 13,
     lineHeight: 18,
     color: colors.forest,
-  },
-  detailCard: {
-    marginTop: spacing.md,
-    backgroundColor: colors.white,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    paddingHorizontal: spacing.lg,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 14,
-  },
-  detailBorder: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
-  },
-  insight: {
-    marginTop: spacing.lg,
-    fontFamily: fonts.sans,
-    fontSize: 16,
-    lineHeight: 20,
-    color: colors.mute,
-  },
-  timeline: {
-    marginTop: spacing.xl,
-  },
-  timelineLabel: {
-    marginBottom: spacing.md,
-    color: colors.mute,
   },
   timelineItem: {
     flexDirection: 'row',
@@ -691,51 +781,12 @@ function makeStyles(colors: ThemeColors) {
     height: 8,
     borderRadius: 4,
     marginTop: 5,
-    backgroundColor: colors.forestBright,
   },
   timelineLine: {
     flex: 1,
     width: StyleSheet.hairlineWidth * 2,
     backgroundColor: colors.lineStrong,
     marginTop: 2,
-  },
-  bottomActions: {
-    marginTop: spacing.xxl,
-    flexDirection: 'row',
-    gap: 10,
-  },
-  editBtn: {
-    flex: 1,
-    height: 50,
-    borderRadius: radius.full,
-    backgroundColor: colors.white,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    ...shadows.soft,
-  },
-  editBtnText: {
-    fontFamily: fonts.sansSemi,
-    fontSize: 16,
-    color: colors.forest,
-  },
-  deleteBtn: {
-    flex: 1,
-    height: 50,
-    borderRadius: radius.full,
-    backgroundColor: colors.coralSoft,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  deleteBtnText: {
-    fontFamily: fonts.sansSemi,
-    fontSize: 16,
-    color: colors.coral,
   },
 });
 }

@@ -4,18 +4,26 @@ import {
   Alert,
   Pressable,
   StyleSheet,
-  TextInput,
   View,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Screen } from '@/components/ui/Screen';
 import { KeyboardFormScroll } from '@/components/ui/KeyboardFormScroll';
+import {
+  DetailChip,
+  DetailChipRow,
+  DetailField,
+  DetailPrimaryButton,
+  DetailRemoveButton,
+  DetailSection,
+  DETAIL_DOCK_PAD,
+} from '@/components/ui/DetailKit';
 import { Text } from '@/components/ui/Text';
 import { Icon3DBadge, type Icon3DName } from '@/components/ui/Icon3D';
 import { useInventory } from '@/lib/InventoryContext';
 import { useSpaces, type SpaceKind } from '@/lib/SpacesContext';
 import { useToast } from '@/lib/ToastContext';
-import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
+import { type ThemeColors, fonts, radius, spacing } from '@/constants/theme';
 
 const KINDS: { id: SpaceKind; label: string; icon: Icon3DName }[] = [
   { id: 'home', label: 'Home', icon: 'house' },
@@ -44,6 +52,7 @@ export default function EditSpaceScreen() {
   const { showToast, showError } = useToast();
   const space = id ? getSpace(id) : undefined;
   const spaceRooms = id ? roomsForSpace(id) : [];
+  const accent = colors.forest;
 
   const [name, setName] = useState('');
   const [meta, setMeta] = useState('');
@@ -69,7 +78,7 @@ export default function EditSpaceScreen() {
         <View style={styles.missing}>
           <Text variant="body">Space not found.</Text>
           <Pressable onPress={() => router.back()} style={{ marginTop: spacing.md }}>
-            <Text style={styles.link}>Go back</Text>
+            <Text style={[styles.link, { color: accent }]}>Go back</Text>
           </Pressable>
         </View>
       </Screen>
@@ -155,71 +164,69 @@ export default function EditSpaceScreen() {
   return (
     <Screen>
       <Stack.Screen options={{ title: 'Edit space' }} />
-      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={40}>
-          <Text style={styles.label}>Name</Text>
-          <TextInput
-            value={name}
-            onChangeText={setName}
-            style={styles.input}
-            placeholderTextColor={colors.faint}
-          />
+      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={DETAIL_DOCK_PAD}>
+        <DetailSection label="Name">
+          <DetailField value={name} onChangeText={setName} />
+        </DetailSection>
 
-          <Text style={styles.label}>Location or note</Text>
-          <TextInput
-            value={meta}
-            onChangeText={setMeta}
-            style={styles.input}
-            placeholderTextColor={colors.faint}
-          />
+        <DetailSection label="Location or note">
+          <DetailField value={meta} onChangeText={setMeta} />
+        </DetailSection>
 
-          <Text style={styles.label}>Type</Text>
-          <View style={styles.kindRow}>
+        <DetailSection label="Type">
+          <DetailChipRow>
             {KINDS.map((k) => (
-              <Pressable
+              <DetailChip
                 key={k.id}
+                label={k.label}
+                selected={kind === k.id}
                 onPress={() => {
                   setKind(k.id);
                   if (k.id !== 'home') setIcon(k.icon);
                 }}
-                style={[styles.chip, kind === k.id && styles.chipOn]}
-              >
-                <Text style={[styles.chipText, kind === k.id && styles.chipTextOn]}>
-                  {k.label}
-                </Text>
-              </Pressable>
+                accent={accent}
+              />
             ))}
-          </View>
+          </DetailChipRow>
+        </DetailSection>
 
-          {kind === 'home' ? (
-            <>
-              <Text style={styles.label}>Icon</Text>
-              <View style={styles.iconRow}>
-                {HOME_ICONS.map((ic) => (
-                  <Pressable
-                    key={ic}
-                    onPress={() => setIcon(ic)}
-                    style={[styles.iconPick, icon === ic && styles.iconPickOn]}
-                  >
-                    <Icon3DBadge name={ic} size={44} />
-                  </Pressable>
-                ))}
-              </View>
-            </>
-          ) : null}
+        {kind === 'home' ? (
+          <DetailSection label="Icon">
+            <View style={styles.iconRow}>
+              {HOME_ICONS.map((ic) => (
+                <Pressable
+                  key={ic}
+                  onPress={() => setIcon(ic)}
+                  style={[
+                    styles.iconPick,
+                    {
+                      backgroundColor: colors.surfaceSoft,
+                      borderColor: icon === ic ? accent : 'transparent',
+                    },
+                  ]}
+                >
+                  <Icon3DBadge name={ic} size={44} />
+                </Pressable>
+              ))}
+            </View>
+          </DetailSection>
+        ) : null}
 
-          <Text style={styles.label}>Rooms</Text>
-          <Text style={styles.roomHint}>Tap a room name to rename it.</Text>
+        <DetailSection label="Rooms">
           {spaceRooms.map((room) => (
-            <View key={room.id} style={styles.roomRow}>
+            <View
+              key={room.id}
+              style={[styles.roomRow, { borderBottomColor: colors.line }]}
+            >
               {editingRoomId === room.id ? (
-                <TextInput
+                <DetailField
                   value={roomDraft}
                   onChangeText={setRoomDraft}
                   autoFocus
                   returnKeyType="done"
                   onSubmitEditing={() => void commitRoomRename(room.id, room.name)}
                   onBlur={() => void commitRoomRename(room.id, room.name)}
-                  style={[styles.input, styles.roomEditInput]}
+                  style={styles.roomEditInput}
                 />
               ) : (
                 <Pressable
@@ -230,7 +237,7 @@ export default function EditSpaceScreen() {
                   style={{ flex: 1 }}
                   hitSlop={4}
                 >
-                  <Text style={styles.roomName}>{room.name}</Text>
+                  <Text style={[styles.roomName, { color: colors.ink }]}>{room.name}</Text>
                 </Pressable>
               )}
               <Pressable
@@ -249,190 +256,104 @@ export default function EditSpaceScreen() {
                 }}
                 hitSlop={8}
               >
-                <Text style={styles.removeText}>Remove</Text>
+                <Text style={[styles.removeText, { color: colors.mute }]}>Remove</Text>
               </Pressable>
             </View>
           ))}
           <View style={styles.addRoomRow}>
-            <TextInput
+            <DetailField
               value={newRoom}
               onChangeText={setNewRoom}
               placeholder="Add a room…"
-              placeholderTextColor={colors.faint}
-              style={[styles.input, { flex: 1, marginBottom: 0 }]}
+              style={{ flex: 1 }}
               onSubmitEditing={() => void onAddRoom()}
             />
             <Pressable
               onPress={() => void onAddRoom()}
               disabled={!newRoom.trim()}
-              style={[styles.addRoomBtn, !newRoom.trim() && { opacity: 0.4 }]}
+              style={[
+                styles.addRoomBtn,
+                { backgroundColor: accent },
+                !newRoom.trim() && { opacity: 0.4 },
+              ]}
             >
-              <Text style={styles.addRoomBtnText}>Add</Text>
+              <Text style={[styles.addRoomBtnText, { color: colors.forestOn }]}>Add</Text>
             </Pressable>
           </View>
+        </DetailSection>
 
-          <Pressable
-            onPress={() => void save()}
-            disabled={!name.trim() || saving}
-            style={({ pressed }) => [
-              styles.save,
-              (!name.trim() || saving) && { opacity: 0.45 },
-              pressed && { opacity: 0.9 },
-            ]}
-          >
-            <Text style={styles.saveText}>{saving ? 'Saving…' : 'Save changes'}</Text>
-          </Pressable>
+        <DetailPrimaryButton
+          label={saving ? 'Saving…' : 'Save changes'}
+          accent={accent}
+          disabled={!name.trim() || saving}
+          onPress={() => void save()}
+        />
 
-          <Pressable onPress={confirmDelete} style={styles.deleteBtn}>
-            <Text style={styles.deleteText}>Delete space</Text>
-          </Pressable>
-        </KeyboardFormScroll>
+        <DetailRemoveButton onPress={confirmDelete} />
+      </KeyboardFormScroll>
     </Screen>
   );
 }
 
-function makeStyles(colors: ThemeColors) {
+function makeStyles(_colors: ThemeColors) {
   return StyleSheet.create({
-  content: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
-  },
-  missing: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.xl,
-  },
-  link: {
-    fontFamily: fonts.sansMedium,
-    color: colors.forest,
-  },
-  label: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    color: colors.mute,
-    marginBottom: 8,
-    marginTop: spacing.md,
-  },
-  input: {
-    fontFamily: fonts.sans,
-    fontSize: 16,
-    color: colors.ink,
-    backgroundColor: colors.white,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 14,
-    marginBottom: 0,
-  },
-  kindRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  chip: {
-    borderRadius: radius.full,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    backgroundColor: colors.white,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-  },
-  chipOn: {
-    backgroundColor: colors.forest,
-    borderColor: colors.forest,
-  },
-  chipText: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    color: colors.slate,
-  },
-  chipTextOn: {
-    color: colors.forestOn,
-  },
-  iconRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  iconPick: {
-    padding: 6,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    backgroundColor: colors.white,
-  },
-  iconPickOn: {
-    borderColor: colors.forest,
-    backgroundColor: colors.surfaceSoft,
-  },
-  roomRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
-  },
-  roomName: {
-    fontFamily: fonts.sans,
-    fontSize: 16,
-    color: colors.ink,
-  },
-  roomHint: {
-    fontFamily: fonts.sans,
-    fontSize: 13,
-    color: colors.mute,
-    marginBottom: 4,
-  },
-  roomEditInput: {
-    flex: 1,
-    marginRight: spacing.md,
-    paddingVertical: 8,
-  },
-  removeText: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    color: colors.amber,
-  },
-  addRoomRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginTop: spacing.md,
-  },
-  addRoomBtn: {
-    backgroundColor: colors.forest,
-    borderRadius: radius.full,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-  },
-  addRoomBtnText: {
-    fontFamily: fonts.sansSemi,
-    fontSize: 16,
-    color: colors.forestOn,
-  },
-  save: {
-    marginTop: spacing.xl,
-    backgroundColor: colors.forest,
-    borderRadius: radius.full,
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  saveText: {
-    fontFamily: fonts.sansSemi,
-    fontSize: 16,
-    color: colors.forestOn,
-  },
-  deleteBtn: {
-    marginTop: spacing.lg,
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-  },
-  deleteText: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    color: colors.amber,
-  },
-});
+    content: {
+      paddingHorizontal: spacing.xl,
+      paddingTop: spacing.md,
+    },
+    missing: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: spacing.xl,
+    },
+    link: {
+      fontFamily: fonts.sansMedium,
+    },
+    iconRow: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+    },
+    iconPick: {
+      padding: 6,
+      borderRadius: radius.md,
+      borderWidth: 1.5,
+    },
+    roomRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 12,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      gap: spacing.sm,
+    },
+    roomName: {
+      fontFamily: fonts.sans,
+      fontSize: 16,
+    },
+    roomEditInput: {
+      flex: 1,
+      marginRight: spacing.sm,
+      paddingVertical: 8,
+    },
+    removeText: {
+      fontFamily: fonts.sansMedium,
+      fontSize: 14,
+    },
+    addRoomRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginTop: spacing.sm,
+    },
+    addRoomBtn: {
+      borderRadius: radius.full,
+      paddingHorizontal: 18,
+      paddingVertical: 14,
+    },
+    addRoomBtnText: {
+      fontFamily: fonts.sansSemi,
+      fontSize: 16,
+    },
+  });
 }

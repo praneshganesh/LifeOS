@@ -75,7 +75,6 @@ export default function ReportsScreen() {
   return (
     <ModuleScreen
       title="Reports"
-      subtitle="Live snapshot of your data."
       defaultOrigin="settings"
     >
       <StatStrip

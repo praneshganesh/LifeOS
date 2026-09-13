@@ -13,7 +13,7 @@ export type ShareableDocument = {
   dateOfBirth?: string;
 };
 
-export type ShareMode = 'full' | 'redacted';
+export type ShareMode = 'full' | 'details';
 
 function isIdentityDoc(kind?: string) {
   return kind === 'passport' || kind === 'emirates_id' || kind === 'driving_licence';
@@ -25,14 +25,14 @@ export function confirmShareDocument(
   mode: ShareMode = 'full'
 ): Promise<boolean> {
   const body =
-    mode === 'redacted'
-      ? `Share redacted details for “${name}”? Document number and date of birth are omitted. The photo is not shared.`
-      : `Share “${name}”? The photo or details leave Saavi through your phone’s share sheet (WhatsApp, Messages, Mail…). Nothing is uploaded by Saavi.`;
+    mode === 'details'
+      ? `Share number and expiry for “${name}”? The photo and date of birth are not included.`
+      : `Share “${name}”? The photo and details leave Saavi through your phone’s share sheet (WhatsApp, Messages, Mail…). Nothing is uploaded by Saavi.`;
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
     return Promise.resolve(window.confirm(body));
   }
   return new Promise((resolve) => {
-    Alert.alert(mode === 'redacted' ? 'Share redacted?' : 'Share document?', body, [
+    Alert.alert(mode === 'details' ? 'Share details?' : 'Share document?', body, [
       { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
       { text: 'Share', onPress: () => resolve(true) },
     ]);
@@ -40,51 +40,61 @@ export function confirmShareDocument(
 }
 
 /**
- * For passports / Emirates ID — pick full photo+details or redacted text only.
+ * For passports / Emirates ID — photo+details, or number+expiry text only.
  */
 export function chooseShareMode(item: ShareableDocument): Promise<ShareMode | null> {
   if (!isIdentityDoc(item.documentKind)) {
     return Promise.resolve('full');
   }
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    const redacted = window.confirm(
-      `Share “${item.name}”?\n\nOK = full (photo + details)\nCancel = choose redacted in the next step is not available on web — use Cancel then try again.\n\nUse the app for redacted share.`
+    const full = window.confirm(
+      `Share “${item.name}”?\n\nOK = photo + details\nCancel = number & expiry text only`
     );
-    return Promise.resolve(redacted ? 'full' : null);
+    return Promise.resolve(full ? 'full' : 'details');
   }
   return new Promise((resolve) => {
     Alert.alert('Share document', `How should “${item.name}” be shared?`, [
       { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) },
-      { text: 'Redacted details', onPress: () => resolve('redacted') },
-      { text: 'Full (photo)', onPress: () => resolve('full') },
+      { text: 'Number & expiry', onPress: () => resolve('details') },
+      { text: 'Photo + details', onPress: () => resolve('full') },
     ]);
   });
 }
 
-function buildTextSummary(item: ShareableDocument, mode: ShareMode): string {
-  const lines = [item.name];
-  if (item.fullName) lines.push(`Name: ${item.fullName}`);
-  if (mode === 'full' && item.documentNumber) {
+/** Number + expiry first — what people usually need when sharing an ID. */
+export function buildTextSummary(item: ShareableDocument, mode: ShareMode): string {
+  const kind =
+    item.documentKind === 'passport'
+      ? 'Passport'
+      : item.documentKind === 'emirates_id'
+        ? 'Emirates ID'
+        : item.documentKind === 'driving_licence'
+          ? 'Driving licence'
+          : 'Document';
+  const lines = [item.name || kind];
+  if (item.documentNumber) {
     lines.push(`Number: ${item.documentNumber}`);
-  } else if (mode === 'redacted') {
-    lines.push('Number: •••••••• (redacted)');
-  }
-  if (item.nationality) lines.push(`Nationality: ${item.nationality}`);
-  if (mode === 'full' && item.dateOfBirth) {
-    lines.push(`Date of birth: ${item.dateOfBirth}`);
   }
   const expires = item.expiryDate || item.warrantyExpiry;
-  if (expires && expires !== '—') lines.push(`Expires: ${expires}`);
+  if (expires && expires !== '—') {
+    lines.push(`Expires: ${expires}`);
+  }
+  if (mode === 'full') {
+    if (item.fullName) lines.push(`Name: ${item.fullName}`);
+    if (item.nationality) lines.push(`Nationality: ${item.nationality}`);
+  }
   lines.push('');
   lines.push(
-    mode === 'redacted' ? 'Shared from Saavi · redacted.' : 'Shared from Saavi.'
+    mode === 'details'
+      ? 'Shared from Saavi · number & expiry only.'
+      : 'Shared from Saavi.'
   );
   return lines.join('\n');
 }
 
 /**
  * Confirm, then open the OS share sheet.
- * Identity docs can share full photo or redacted text (FP4).
+ * Identity docs can share photo+details or number+expiry text.
  */
 export async function shareDocument(
   item: ShareableDocument
@@ -95,11 +105,13 @@ export async function shareDocument(
   const ok = await confirmShareDocument(item.name, mode);
   if (!ok) return 'cancelled';
 
-  if (mode === 'redacted') {
+  const summary = buildTextSummary(item, mode);
+
+  if (mode === 'details') {
     try {
       const result = await Share.share({
-        title: `${item.name} (redacted)`,
-        message: buildTextSummary(item, 'redacted'),
+        title: `${item.name} (details)`,
+        message: summary,
       });
       if (result.action === Share.dismissedAction) return 'cancelled';
       return 'shared';
@@ -109,6 +121,19 @@ export async function shareDocument(
   }
 
   const uri = item.imageUri?.trim();
+  // Prefer a message that includes number + expiry (photo-only shares hide those).
+  try {
+    const result = await Share.share({
+      title: item.name,
+      message: summary,
+      ...(uri && Platform.OS === 'ios' ? { url: uri } : null),
+    });
+    if (result.action === Share.dismissedAction) return 'cancelled';
+    return 'shared';
+  } catch {
+    /* fall through to image-only */
+  }
+
   if (uri && Platform.OS !== 'web') {
     try {
       const available = await Sharing.isAvailableAsync();
@@ -121,21 +146,11 @@ export async function shareDocument(
         return 'shared';
       }
     } catch {
-      /* fall through to text */
+      /* fall through */
     }
   }
 
-  try {
-    const result = await Share.share({
-      title: item.name,
-      message: buildTextSummary(item, 'full'),
-      ...(uri && Platform.OS === 'ios' ? { url: uri } : null),
-    });
-    if (result.action === Share.dismissedAction) return 'cancelled';
-    return 'shared';
-  } catch {
-    return 'unavailable';
-  }
+  return 'unavailable';
 }
 
 function guessMime(uri: string): string {

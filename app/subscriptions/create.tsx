@@ -1,15 +1,21 @@
 import { useTheme } from '@/lib/ThemeContext';
 import { useMemo, useEffect, useState } from 'react';
 import {
-  Pressable,
   StyleSheet,
   Switch,
-  TextInput,
   View,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { Screen } from '@/components/ui/Screen';
 import { KeyboardFormScroll } from '@/components/ui/KeyboardFormScroll';
+import {
+  DetailChip,
+  DetailChipRow,
+  DetailField,
+  DetailPrimaryButton,
+  DetailSection,
+  DETAIL_DOCK_PAD,
+} from '@/components/ui/DetailKit';
 import { Text } from '@/components/ui/Text';
 import { DateField } from '@/components/ui/DateField';
 import { useSubscriptions } from '@/lib/SubscriptionsContext';
@@ -24,7 +30,7 @@ import {
   type SubscriptionCategory,
   type SubscriptionCycle,
 } from '@/lib/subscriptions';
-import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
+import { type ThemeColors, fonts, radius, spacing } from '@/constants/theme';
 
 export default function SubscriptionFormScreen() {
   const { colors } = useTheme();
@@ -38,6 +44,7 @@ export default function SubscriptionFormScreen() {
   const existing = editId ? getById(editId) : undefined;
   const editing = Boolean(existing);
   const currency = existing?.currency || defaultCurrency;
+  const accent = colors.forest;
 
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
@@ -143,195 +150,129 @@ export default function SubscriptionFormScreen() {
       <Stack.Screen
         options={{ title: editing ? 'Edit subscription' : 'Add subscription' }}
       />
-      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={40}>
-          <Text style={styles.label}>Name</Text>
-          <TextInput
+      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={DETAIL_DOCK_PAD}>
+        <DetailSection label="Name">
+          <DetailField
             value={title}
             onChangeText={setTitle}
             placeholder="e.g. Netflix"
-            placeholderTextColor={colors.faint}
-            style={styles.input}
             autoFocus={!editing}
           />
+        </DetailSection>
 
-          <Text style={styles.label}>Amount ({currency})</Text>
-          <TextInput
+        <DetailSection label={`Amount (${currency})`}>
+          <DetailField
             value={amount}
             onChangeText={(t) => setAmount(sanitizeAmountInput(t))}
             placeholder="0.00"
-            placeholderTextColor={colors.faint}
-            style={styles.input}
             keyboardType="decimal-pad"
           />
+        </DetailSection>
 
-          <Text style={styles.label}>Provider (optional)</Text>
-          <TextInput
+        <DetailSection label="Provider">
+          <DetailField
             value={provider}
             onChangeText={setProvider}
             placeholder="e.g. Apple"
-            placeholderTextColor={colors.faint}
-            style={styles.input}
           />
+        </DetailSection>
 
-          <Text style={styles.label}>Billing cycle</Text>
-          <View style={styles.chips}>
-            {SUBSCRIPTION_CYCLES.map((c) => {
-              const on = cycle === c.id;
-              return (
-                <Pressable
-                  key={c.id}
-                  onPress={() => onCycle(c.id)}
-                  style={[styles.chip, on && styles.chipOn]}
-                >
-                  <Text style={[styles.chipText, on && styles.chipTextOn]}>{c.label}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
+        <DetailSection label="Billing cycle">
+          <DetailChipRow>
+            {SUBSCRIPTION_CYCLES.map((c) => (
+              <DetailChip
+                key={c.id}
+                label={c.label}
+                selected={cycle === c.id}
+                onPress={() => onCycle(c.id)}
+                accent={accent}
+              />
+            ))}
+          </DetailChipRow>
+        </DetailSection>
 
-          <Text style={styles.label}>Next renewal</Text>
+        <DetailSection label="Next renewal">
           <DateField value={renewsOn} onChange={setRenewsOn} />
+        </DetailSection>
 
-          <View style={styles.switchRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.switchTitle}>Auto-renews</Text>
-              <Text style={styles.switchHint}>
-                Off if you cancel it and it just runs out.
-              </Text>
-            </View>
-            <Switch
-              value={autoRenew}
-              onValueChange={setAutoRenew}
-              trackColor={{ false: colors.lineStrong, true: colors.forest }}
-              thumbColor={colors.white}
-            />
+        <View
+          style={[
+            styles.switchRow,
+            { backgroundColor: colors.surfaceSoft },
+          ]}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.switchTitle, { color: colors.ink }]}>Auto-renews</Text>
+            <Text style={[styles.switchHint, { color: colors.mute }]}>
+              Off if you cancel it and it just runs out.
+            </Text>
           </View>
+          <Switch
+            value={autoRenew}
+            onValueChange={setAutoRenew}
+            trackColor={{ false: colors.lineStrong, true: accent }}
+            thumbColor={colors.white}
+          />
+        </View>
 
-          <Text style={styles.label}>Note (optional)</Text>
-          <TextInput
+        <DetailSection label="Note">
+          <DetailField
             value={note}
             onChangeText={setNote}
             placeholder="e.g. Family plan, shared with Maya"
-            placeholderTextColor={colors.faint}
-            style={styles.input}
           />
+        </DetailSection>
 
-          <Text style={styles.label}>Category</Text>
-          <View style={styles.chips}>
-            {SUBSCRIPTION_CATEGORIES.map((c) => {
-              const on = category === c.id;
-              return (
-                <Pressable
-                  key={c.id}
-                  onPress={() => setCategory(c.id)}
-                  style={[styles.chip, on && styles.chipOn]}
-                >
-                  <Text style={[styles.chipText, on && styles.chipTextOn]}>{c.label}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
+        <DetailSection label="Category">
+          <DetailChipRow>
+            {SUBSCRIPTION_CATEGORIES.map((c) => (
+              <DetailChip
+                key={c.id}
+                label={c.label}
+                selected={category === c.id}
+                onPress={() => setCategory(c.id)}
+                accent={accent}
+              />
+            ))}
+          </DetailChipRow>
+        </DetailSection>
 
-          <Pressable
-            onPress={() => void save()}
-            disabled={!canSave || saving}
-            style={[styles.save, (!canSave || saving) && styles.saveDisabled]}
-          >
-            <Text style={styles.saveText}>
-              {saving ? 'Saving…' : editing ? 'Save changes' : 'Save subscription'}
-            </Text>
-          </Pressable>
-        </KeyboardFormScroll>
+        <DetailPrimaryButton
+          label={
+            saving ? 'Saving…' : editing ? 'Save changes' : 'Save subscription'
+          }
+          accent={accent}
+          disabled={!canSave || saving}
+          onPress={() => void save()}
+        />
+      </KeyboardFormScroll>
     </Screen>
   );
 }
 
-function makeStyles(colors: ThemeColors) {
+function makeStyles(_colors: ThemeColors) {
   return StyleSheet.create({
-  content: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xs,
-  },
-  label: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    color: colors.mute,
-    marginBottom: spacing.sm,
-    marginTop: spacing.md,
-  },
-  input: {
-    backgroundColor: colors.white,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 14,
-    fontFamily: fonts.sans,
-    fontSize: 16,
-    color: colors.ink,
-  },
-  chips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: radius.md,
-    backgroundColor: colors.white,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-  },
-  chipOn: {
-    backgroundColor: colors.forestSoft,
-    borderColor: colors.forest,
-  },
-  chipText: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    color: colors.ink,
-  },
-  chipTextOn: {
-    color: colors.forest,
-  },
-  save: {
-    marginTop: spacing.xl,
-    backgroundColor: colors.forest,
-    borderRadius: radius.md,
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  saveDisabled: {
-    opacity: 0.45,
-  },
-  saveText: {
-    fontFamily: fonts.sansSemi,
-    fontSize: 16,
-    color: colors.forestOn,
-  },
-  switchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    marginTop: spacing.md,
-    backgroundColor: colors.white,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 12,
-  },
-  switchTitle: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    color: colors.ink,
-  },
-  switchHint: {
-    fontFamily: fonts.sans,
-    fontSize: 13,
-    color: colors.mute,
-    marginTop: 2,
-  },
-});
+    content: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.xs,
+    },
+    switchRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      marginBottom: spacing.lg,
+      borderRadius: radius.md,
+      paddingHorizontal: spacing.md,
+      paddingVertical: 12,
+    },
+    switchTitle: {
+      fontFamily: fonts.sansMedium,
+      fontSize: 16,
+    },
+    switchHint: {
+      fontFamily: fonts.sans,
+      fontSize: 13,
+      marginTop: 2,
+    },
+  });
 }

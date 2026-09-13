@@ -263,18 +263,23 @@ export function LastDoneActivityCard({
   onOpen,
   year: yearProp,
   onYearChange,
+  hideReminder = false,
+  compact = false,
 }: {
   item: LastDoneItem;
   onLog?: () => void;
   onOpen?: () => void;
-  compact?: boolean;
   /** Detail screen — browse years that have logs. */
   year?: number;
   onYearChange?: (year: number) => void;
+  /** Hide embedded reminder summary when the parent already edits schedule. */
+  hideReminder?: boolean;
+  /** List rows — tighter padding, no heatmap. */
+  compact?: boolean;
 }) {
   const { colors } = useTheme();
   const category = paintLastDoneCategory(categorizeLastDone(item.label).id, colors);
-  const showHeatmap = hasActivityHistory(item);
+  const showHeatmap = !compact && hasActivityHistory(item);
   const last = item.logs?.length
     ? formatRelativeDone(getLastDoneAt(item))
     : item.remindAt
@@ -340,7 +345,8 @@ export function LastDoneActivityCard({
           emptyColor={colors.lineStrong}
           yearNav={yearNav}
         />
-      ) : item.remindAt || item.remindInterval?.unit === 'weekdays' ? (
+      ) : !hideReminder &&
+        (item.remindAt || item.remindInterval?.unit === 'weekdays') ? (
         <View style={[styles.reminderPanel, { backgroundColor: colors.surfaceSoft }]}>
           <Text variant="caption" style={{ color: colors.mute }}>
             Reminder

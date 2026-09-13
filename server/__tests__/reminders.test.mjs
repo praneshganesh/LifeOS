@@ -63,7 +63,7 @@ describe('chat-api reminder repair', () => {
     assert.equal(recurring?.remindAt, '2026-09-11');
     assert.equal(remindAtFromUtterance(utterance, wed), '2026-09-11');
     assert.equal(parseReminderFromUtterance(utterance)?.label, 'Stretch');
-    const next = ensureReminderActions([], utterance, []);
+    const next = ensureReminderActions([], utterance, [], wed);
     assert.equal(next[0]?.type, 'set_reminder');
     assert.equal(next[0]?.remindAt, '2026-09-11');
     assert.equal(next[0]?.remindInterval?.unit, 'weekdays');
@@ -75,8 +75,24 @@ describe('chat-api reminder repair', () => {
     const next = ensureReminderActions(
       [],
       'Remind me every Tuesday and Friday at 6:30 AM for 8 weeks to stretch',
-      []
+      [],
+      wed
     );
     assert.equal(next[0]?.remindInterval?.endsAt, '2026-11-04');
+  });
+
+  it('drops leading for from reminder titles', () => {
+    assert.equal(
+      reminderLabelFromUtterance(
+        'Set a reminder for PE uniform every Tuesday and Friday'
+      ),
+      'PE uniform'
+    );
+    const next = ensureReminderActions(
+      [{ type: 'set_reminder', label: 'For PE uniform in the morning', remindAt: '2026-09-15' }],
+      'Remind me for PE uniform in the morning every Tuesday and Friday',
+      []
+    );
+    assert.equal(next[0]?.label, 'PE uniform in the morning');
   });
 });

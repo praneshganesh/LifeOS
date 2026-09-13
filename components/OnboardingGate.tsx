@@ -22,8 +22,11 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (needOnboarding == null) return;
-    const inOnboarding = segments[0] === 'onboarding';
-    if (needOnboarding && !inOnboarding) {
+    const root = segments[0];
+    const inOnboarding = root === 'onboarding';
+    const inPaywall = root === 'paywall';
+    const inInvite = root === 'invite';
+    if (needOnboarding && !inOnboarding && !inPaywall && !inInvite) {
       router.replace('/onboarding' as Href);
     } else if (!needOnboarding && inOnboarding) {
       router.replace('/(tabs)' as Href);

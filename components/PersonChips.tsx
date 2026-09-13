@@ -165,7 +165,9 @@ export function PersonChips({
 const styles = StyleSheet.create({
   label: {
     fontFamily: fonts.sansMedium,
-    fontSize: 16,
+    fontSize: 13,
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
     marginBottom: spacing.sm,
     marginTop: spacing.md,
   },
@@ -173,6 +175,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
+    marginBottom: spacing.md,
   },
   chip: {
     paddingHorizontal: 12,

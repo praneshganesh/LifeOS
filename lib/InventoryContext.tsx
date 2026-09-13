@@ -9,8 +9,11 @@ import {
   type ReactNode,
 } from 'react';
 import type { Icon3DName } from '@/components/ui/Icon3D';
+import { newUuid } from '@/lib/ids';
 import type { MrzDocumentKind } from '@/lib/ocr/mrz';
 import { normalizeInventoryItem } from '@/lib/inventoryNormalize';
+import { queueThingDelete, queueThingUpsert } from '@/lib/sync/outbox';
+import { subscribeSyncApplied } from '@/lib/sync/engine';
 import {
   loadVersionedArray,
   saveVersionedArray,
@@ -65,6 +68,8 @@ export type InventoryItem = {
   /** How the item entered LifeOS */
   source?: 'talk' | 'capture' | 'manual';
   createdAt: string;
+  /** Last local mutation time — the last-write-wins clock for row sync. */
+  updatedAt?: string;
 };
 
 type InventoryContextValue = {
@@ -101,6 +106,21 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
+  // Reload when the sync engine merges remote rows into the local store.
+  useEffect(() => {
+    return subscribeSyncApplied((tables) => {
+      if (!tables.includes('things')) return;
+      void loadVersionedArray<InventoryItem>(
+        STORAGE_KEY,
+        SCHEMA_VERSION,
+        normalizeInventoryItem
+      ).then((loaded) => {
+        itemsRef.current = loaded;
+        setItems(loaded);
+      });
+    });
+  }, []);
+
   // itemsRef is the authoritative list (updated synchronously), so mutators
   // can compute from it, show the optimistic state, and then AWAIT the disk
   // write — a failed write rejects instead of silently losing data.
@@ -117,25 +137,35 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       if (wouldExceedAssetLimit(plan, itemsRef.current.length)) {
         throw new PlanLimitError('assets');
       }
+      const now = new Date().toISOString();
       const item: InventoryItem = {
         ...input,
-        id: input.id ?? `inv-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        createdAt: new Date().toISOString(),
+        id: input.id ?? newUuid(),
+        createdAt: now,
+        updatedAt: now,
       };
       await persist([item, ...itemsRef.current]);
+      void queueThingUpsert(item);
       return item;
     },
     []
   );
 
   const updateItem = useCallback(async (id: string, patch: Partial<InventoryItem>) => {
+    let updated: InventoryItem | null = null;
     await persist(
-      itemsRef.current.map((i) => (i.id === id ? { ...i, ...patch } : i))
+      itemsRef.current.map((i) => {
+        if (i.id !== id) return i;
+        updated = { ...i, ...patch, updatedAt: new Date().toISOString() };
+        return updated;
+      })
     );
+    if (updated) void queueThingUpsert(updated);
   }, []);
 
   const removeItem = useCallback(async (id: string) => {
     await persist(itemsRef.current.filter((i) => i.id !== id));
+    void queueThingDelete(id);
   }, []);
 
   const getById = useCallback(

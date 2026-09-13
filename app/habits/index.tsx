@@ -47,7 +47,6 @@ export default function HabitsScreen() {
   return (
     <ModuleScreen
       title="Habits"
-      subtitle="Auto-categorized rhythms — optionally linked to Things."
       defaultOrigin="things"
       right={
         <Pressable
@@ -78,7 +77,7 @@ export default function HabitsScreen() {
       {habits.length === 0 ? (
         <ModuleSection label="Your rhythms">
           <Text variant="body" style={{ color: colors.mute }}>
-            Add something like “Walk” or “Service the AC” — link a Thing if you want check-ins to log Last Done.
+            No habits yet.
           </Text>
         </ModuleSection>
       ) : (

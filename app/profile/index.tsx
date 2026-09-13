@@ -3,12 +3,18 @@ import {
   View,
   StyleSheet,
   Pressable,
-  TextInput,
 } from 'react-native';
 import { useFocusEffect, useRouter, type Href } from 'expo-router';
-import { ChevronRight, User } from 'lucide-react-native';
+import { ChevronRight } from 'lucide-react-native';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { ListCard, ListRow, StatStrip } from '@/components/ui/ListKit';
+import {
+  DetailField,
+  DetailHero,
+  DetailPrimaryButton,
+  DetailSection,
+  DETAIL_DOCK_PAD,
+} from '@/components/ui/DetailKit';
 import { Text } from '@/components/ui/Text';
 import { useInventory } from '@/lib/InventoryContext';
 import { useSpaces } from '@/lib/SpacesContext';
@@ -44,6 +50,7 @@ export default function ProfileScreen() {
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
   const [planPrefs, setPlanPrefs] = useState<PlanPrefs>({ planId: 'trial' });
+  const accent = colors.amber;
 
   const documentsSpaceId = spaceIdByKind(spaces, 'documents');
   const homes = spaces.filter((s) => s.kind === 'home').length;
@@ -105,29 +112,16 @@ export default function ProfileScreen() {
       title="Profile"
       subtitle={locale || 'Your account'}
       defaultOrigin="today"
-    >
-      <View
-        style={[
-          styles.hero,
-          { backgroundColor: colors.surface, borderColor: colors.line },
-        ]}
-      >
-        <View style={styles.heroRow}>
-          <View style={[styles.avatar, { backgroundColor: colors.ink }]}>
-            {letter ? (
-              <Text style={[styles.letter, { color: colors.onInk }]}>{letter}</Text>
-            ) : (
-              <User size={22} color={colors.onInk} strokeWidth={1.8} />
-            )}
-          </View>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text variant="headline" numberOfLines={1}>
-              {name.trim() || 'You'}
-            </Text>
-            <Text variant="caption" style={{ marginTop: 2 }}>
-              {planLabel}
-            </Text>
-          </View>
+      bottomExtra={DETAIL_DOCK_PAD}
+      hero={
+        <DetailHero
+          eyebrow={letter ? `${letter} · You` : 'You'}
+          title={name.trim() || 'You'}
+          meta={planLabel}
+          subtitle={locale || undefined}
+          accent={accent}
+          vividFallback="#A8884A"
+        >
           <Pressable
             onPress={() => setEditing((v) => !v)}
             hitSlop={8}
@@ -138,24 +132,16 @@ export default function ProfileScreen() {
               {editing ? 'Cancel' : 'Edit'}
             </Text>
           </Pressable>
-        </View>
-
-        {editing ? (
-          <View style={styles.editForm}>
-            <Text style={[styles.label, { color: colors.mute }]}>Display name</Text>
-            <TextInput
+        </DetailHero>
+      }
+    >
+      {editing ? (
+        <>
+          <DetailSection label="Display name">
+            <DetailField
               value={name}
               onChangeText={setName}
               placeholder="Your name"
-              placeholderTextColor={colors.faint}
-              style={[
-                styles.input,
-                {
-                  backgroundColor: colors.surfaceSoft,
-                  borderColor: colors.line,
-                  color: colors.ink,
-                },
-              ]}
               autoCorrect={false}
               spellCheck={false}
               autoComplete="off"
@@ -163,38 +149,23 @@ export default function ProfileScreen() {
               autoCapitalize="words"
               editable={ready}
             />
-            <Text style={[styles.label, { color: colors.mute }]}>Locale note</Text>
-            <TextInput
+          </DetailSection>
+          <DetailSection label="Locale note">
+            <DetailField
               value={locale}
               onChangeText={setLocale}
               placeholder="e.g. Dubai"
-              placeholderTextColor={colors.faint}
-              style={[
-                styles.input,
-                {
-                  backgroundColor: colors.surfaceSoft,
-                  borderColor: colors.line,
-                  color: colors.ink,
-                },
-              ]}
               editable={ready}
             />
-            <Pressable
-              onPress={() => void save()}
-              disabled={saving || !ready}
-              style={[
-                styles.save,
-                { backgroundColor: colors.ink },
-                saving && { opacity: 0.5 },
-              ]}
-            >
-              <Text style={[styles.saveText, { color: colors.onInk }]}>
-                {saving ? 'Saving…' : 'Save'}
-              </Text>
-            </Pressable>
-          </View>
-        ) : null}
-      </View>
+          </DetailSection>
+          <DetailPrimaryButton
+            label={saving ? 'Saving…' : 'Save'}
+            accent={accent}
+            disabled={saving || !ready}
+            onPress={() => void save()}
+          />
+        </>
+      ) : null}
 
       <StatStrip
         items={[
@@ -241,7 +212,7 @@ export default function ProfileScreen() {
         onPress={() => router.push('/settings/plan' as Href)}
         style={[
           styles.upgrade,
-          { backgroundColor: colors.surface, borderColor: colors.line },
+          { backgroundColor: colors.surfaceSoft, borderColor: colors.line },
         ]}
       >
         <View style={{ flex: 1 }}>
@@ -259,63 +230,16 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  hero: {
-    borderRadius: radius.lg,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  heroRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  letter: {
-    fontFamily: fonts.sansSemi,
-    fontSize: 20,
-  },
   editChip: {
+    alignSelf: 'flex-start',
+    marginTop: spacing.sm,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: radius.full,
   },
   editChipText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 16,
-  },
-  editForm: {
-    marginTop: spacing.sm,
-  },
-  label: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    marginBottom: spacing.sm,
-    marginTop: spacing.sm,
-  },
-  input: {
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 12,
-    fontFamily: fonts.sans,
-    fontSize: 16,
-  },
-  save: {
-    marginTop: spacing.md,
-    borderRadius: radius.md,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  saveText: {
-    fontFamily: fonts.sansSemi,
-    fontSize: 16,
+    fontSize: 14,
   },
   upgrade: {
     flexDirection: 'row',

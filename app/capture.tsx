@@ -946,6 +946,24 @@ export default function CaptureModal() {
                     onChange={setName}
                     placeholder="e.g. Passport · Jane Doe"
                   />
+                  <Field
+                    label={
+                      docKind === 'emirates_id'
+                        ? 'ID number'
+                        : docKind === 'passport'
+                          ? 'Passport number'
+                          : docKind === 'driving_licence'
+                            ? 'Licence number'
+                            : 'Document number'
+                    }
+                    value={docNumber}
+                    onChange={setDocNumber}
+                    autoCorrect={false}
+                    autoCapitalize="characters"
+                    placeholder={
+                      docKind === 'emirates_id' ? '784-····-·······-·' : undefined
+                    }
+                  />
                   <DateRow label="Expiry" value={expiry} onChange={setExpiry} />
                   {docKind === 'passport' ? (
                     <Text style={styles.remindHint}>

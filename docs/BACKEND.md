@@ -1,8 +1,12 @@
 # Backend (staging)
 
-LifeOS stays **local-first**. Supabase is for a future account + sync, not a place to dump the household.
+LifeOS stays **offline-capable**. Supabase is Auth + Postgres (and later Storage) for sync — not a dump of the whole household as one JSON blob.
+
+**Target architecture (household-scoped rows, outbox, airplane mode):** see [`docs/SYNC_ARCHITECTURE.md`](./SYNC_ARCHITECTURE.md).  
+The `life_stores` JSON snapshot below is **transitional** solo backup only; do not extend it for Family.
 
 Supabase is the right default at this scale: Postgres + Auth + RLS, connection pooling, and a path to larger compute later. Talk’s bottleneck is still OpenAI, not the database. Persistent [preview branches](https://supabase.com/docs/guides/deployment/branching) are extra compute (billed per hour); keep one long-lived **staging** branch, not a branch per PR, until we need previews.
+
 
 ## Git ↔ Supabase
 
@@ -62,18 +66,20 @@ With GitHub linked, pushing `supabase/migrations/` to Git `staging` applies them
 
 `lib/supabase.ts` is a no-op until those env vars exist, so Talk and inventory keep working offline.
 
-## What we store on the server (v1)
+## What we store on the server (legacy v1 snapshot — transitional)
+
+> Prefer the row-level design in [`SYNC_ARCHITECTURE.md`](./SYNC_ARCHITECTURE.md). The tables below remain until migration cutover.
 
 | Table | Columns | Why |
 |-------|---------|-----|
 | `auth.users` | id (anonymous until Apple Sign in) | Session for RLS |
 | `public.profiles` | `id` (= auth uid), timestamps | Empty profile so RLS has a row |
-| `public.life_stores` | `user_id`, `store_key`, `body` jsonb | Per-module JSON snapshot |
-| `public.life_recovery` | `code_hash`, `body` jsonb | Restore on a new phone with a recovery code |
+| `public.life_stores` | `user_id`, `store_key`, `body` jsonb | Per-module JSON snapshot (legacy) |
+| `public.life_recovery` | `code_hash`, `body` jsonb | Restore on a new phone with a recovery code (legacy) |
 
 **In the JSON snapshot:** Things, spaces, household, expenses, habits, classes, subscriptions, Last Done, profile, plan, appearance, notification prefs, talk-voice, onboarding. Local photo URIs are stripped. Face ID prefs stay on the device.
 
-**Not in the cloud yet:** item photos, document scans, Apple user identity.
+**Not in the cloud yet:** item photos, document scans, Apple user identity. Row-level sync + media bucket are defined in `SYNC_ARCHITECTURE.md`.
 
 Turn on **Anonymous** sign-ins in the staging Auth providers (or `enable_anonymous_sign_ins` locally). Apply `supabase/migrations/20260815180000_life_stores.sql` on staging before relying on backup.
 

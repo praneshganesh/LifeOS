@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { Alert, Platform, StyleSheet, TextInput, View } from 'react-native';
 import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import Constants from 'expo-constants';
+import { DETAIL_DOCK_PAD } from '@/components/ui/DetailKit';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { ListCard, ListRow } from '@/components/ui/ListKit';
 import { Text } from '@/components/ui/Text';
@@ -207,9 +208,9 @@ export default function DataSettingsScreen() {
   return (
     <ModuleScreen
       title="Export & backup"
-      subtitle="On this phone, plus a cloud copy when Supabase is configured."
       backLabel="Settings"
       backFallbackHref="/settings"
+      bottomExtra={DETAIL_DOCK_PAD}
     >
       {loadFailures.length ? (
         <View

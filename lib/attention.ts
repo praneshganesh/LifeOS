@@ -12,6 +12,7 @@ import {
   iconForSubscriptionCategory,
   type Subscription,
 } from '@/lib/subscriptions';
+import { categorizeLastDone, type LastDoneCategoryId } from '@/lib/lastDoneCategories';
 import type { ClassPack } from '@/lib/classes';
 import {
   daysLeftInWindow,
@@ -33,6 +34,19 @@ export type AttentionItem = {
   icon: Icon3DName;
   daysLeft?: number;
   href?: string;
+};
+
+/**
+ * Reminder rows reuse the Last Done keyword grouping. Anything that doesn't
+ * match a real group is just labelled "Reminder" — never a wrong guess.
+ */
+const REMINDER_BADGE: Record<LastDoneCategoryId, { label: string; icon: Icon3DName }> = {
+  home: { label: 'Home', icon: 'house' },
+  health: { label: 'Health', icon: 'medical' },
+  vehicle: { label: 'Vehicles', icon: 'car' },
+  documents: { label: 'Documents', icon: 'document' },
+  family: { label: 'Family', icon: 'family' },
+  other: { label: 'Reminder', icon: 'bell' },
 };
 
 function parseDay(raw?: string): Date | null {
@@ -158,13 +172,14 @@ export function buildAttentionItems(
         : daysLeft === 0
           ? 'Due today'
           : `Due in ${daysLeft} days`;
+    const badge = REMINDER_BADGE[categorizeLastDone(activity.label).id];
     out.push({
       id: `ld-${activity.id}`,
       title: activity.label,
       subtitle: when,
       urgency,
-      category: 'Maintenance',
-      icon: 'tools',
+      category: badge.label,
+      icon: badge.icon,
       daysLeft,
       href: `/last-done/${activity.id}`,
     });
@@ -274,9 +289,23 @@ export function dueSoonForHome(
   limit = 3,
   now = new Date()
 ): AttentionItem[] {
-  return buildAttentionItems(inventory, lastDone, subscriptions, classPacks, now)
-    .filter((a) => a.urgency === 'urgent' || a.urgency === 'soon')
-    .slice(0, limit);
+  return openAttentionQueue(inventory, lastDone, subscriptions, classPacks, now).slice(
+    0,
+    limit
+  );
+}
+
+/** Open queue — same set as Tasks & reminders (urgent + soon). */
+export function openAttentionQueue(
+  inventory: InventoryItem[],
+  lastDone: LastDoneItem[] = [],
+  subscriptions: Subscription[] = [],
+  classPacks: ClassPack[] = [],
+  now = new Date()
+): AttentionItem[] {
+  return buildAttentionItems(inventory, lastDone, subscriptions, classPacks, now).filter(
+    (a) => a.urgency === 'urgent' || a.urgency === 'soon'
+  );
 }
 
 export function warrantyRecordsFromInventory(inventory: InventoryItem[]) {

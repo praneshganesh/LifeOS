@@ -1,9 +1,20 @@
 import { useTheme } from '@/lib/ThemeContext';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { ModuleScreen } from '@/components/ui/ModuleScreen';
-import { ListCard, ListRow } from '@/components/ui/ListKit';
+import {
+  DetailChip,
+  DetailChipRow,
+  DetailFact,
+  DetailFacts,
+  DetailField,
+  DetailHero,
+  DetailPrimaryButton,
+  DetailRemoveButton,
+  DetailSection,
+  DETAIL_DOCK_PAD,
+} from '@/components/ui/DetailKit';
 import { Text } from '@/components/ui/Text';
 import { DateField } from '@/components/ui/DateField';
 import { useClasses } from '@/lib/ClassesContext';
@@ -25,7 +36,7 @@ import { useToast } from '@/lib/ToastContext';
 import { displayNameFor } from '@/lib/people';
 import { localDayKey } from '@/lib/dates';
 import { sanitizeIntegerInput } from '@/lib/currency';
-import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
+import { type ThemeColors, fonts, radius, spacing } from '@/constants/theme';
 import CreateClassPackScreen from './create';
 
 export default function ClassPackDetailScreen() {
@@ -86,6 +97,32 @@ export default function ClassPackDetailScreen() {
     else router.replace('/classes' as Href);
   }
 
+  function onSave() {
+    if (!pack || !title.trim() || saving) return;
+    const digits = total.replace(/[^\d]/g, '');
+    const parsed = Math.round(Number(digits));
+    if (total.trim() && (!digits || parsed <= 0)) {
+      showError('Total classes must be a number above 0.');
+      return;
+    }
+    const nextTotal = digits && parsed > 0 ? parsed : pack.total;
+    setSaving(true);
+    void updatePack(pack.id, {
+      title: title.trim(),
+      total: nextTotal,
+      scheduleDays: scheduleDays.length ? scheduleDays : undefined,
+      scheduleTime: scheduleTime.trim() || undefined,
+      scheduleTimeInferred: false,
+    })
+      .then(() => {
+        showToast('Class pack saved');
+        if (router.canGoBack()) router.back();
+        else router.replace('/classes' as Href);
+      })
+      .catch(saveFailed)
+      .finally(() => setSaving(false));
+  }
+
   if (!pack) {
     return (
       <ModuleScreen
@@ -98,6 +135,7 @@ export default function ClassPackDetailScreen() {
     );
   }
 
+  const accent = colors.sky;
   const used = usedCount(pack);
   const remaining = remainingCount(pack);
   const today = localDayKey();
@@ -127,327 +165,229 @@ export default function ClassPackDetailScreen() {
         .join(', ')}${pack.scheduleTime ? ` at ${pack.scheduleTime}` : ''}${pack.scheduleTimeInferred ? ' · Time assumed' : ''}`
     : undefined;
 
+  const countLine =
+    remaining == null
+      ? `${used} logged · until ${formatPackWindow(pack)}`
+      : `${remaining} / ${pack.total} left · until ${formatPackWindow(pack)}`;
+
   return (
     <ModuleScreen
       title={pack.title}
-      subtitle={ownerName ? `For ${ownerName}` : 'Class pack'}
       backLabel="Classes"
       backFallbackHref="/classes"
+      bottomExtra={DETAIL_DOCK_PAD}
+      hero={
+        <DetailHero
+          eyebrow={ownerName ? `For ${ownerName}` : 'Class pack'}
+          accent={accent}
+          vividFallback={accent}
+          editableTitle
+          titleValue={title}
+          onTitleChange={setTitle}
+          titlePlaceholder="Pack name"
+          subtitle={countLine}
+          meta={[scheduleDesc, pace].filter(Boolean).join(' · ') || undefined}
+        >
+          <Pressable
+            onPress={() => void logClass(pack.id, today).catch(saveFailed)}
+            style={({ pressed }) => [
+              styles.logToday,
+              {
+                backgroundColor: todayDone ? accent : colors.surface,
+                borderColor: accent,
+                opacity: pressed ? 0.9 : 1,
+              },
+            ]}
+            accessibilityRole="button"
+          >
+            <Text
+              style={[
+                styles.logTodayText,
+                { color: todayDone ? colors.pure : accent },
+              ]}
+            >
+              {todayDone ? 'Undo today’s class' : 'Log today’s class'}
+            </Text>
+          </Pressable>
+        </DetailHero>
+      }
     >
       <Stack.Screen options={{ headerShown: false }} />
 
-      <View style={styles.hero}>
-        <Text style={styles.big}>
-          {remaining == null ? used : remaining}
-          <Text style={styles.bigMute}>
-            {pack.total > 0 ? ` / ${pack.total}` : ' logged'}
-          </Text>
-        </Text>
-        <Text variant="caption">
-          {remaining == null
-            ? `classes logged · until ${formatPackWindow(pack)}`
-            : `classes left · until ${formatPackWindow(pack)}`}
-        </Text>
-        {scheduleDesc ? (
-          <Text variant="caption" style={{ marginTop: 4, color: colors.mute }}>
-            {scheduleDesc}
-          </Text>
-        ) : null}
-        {pace ? (
-          <Text variant="caption" style={{ marginTop: 6, color: colors.forest }}>
-            {pace}
-          </Text>
-        ) : null}
-        <Pressable
-          onPress={() => void logClass(pack.id, today).catch(saveFailed)}
-          style={[styles.logToday, todayDone && styles.logTodayOn]}
-        >
-          <Text style={[styles.logTodayText, todayDone && styles.logTodayTextOn]}>
-            {todayDone ? 'Undo today’s class' : 'Log today’s class'}
-          </Text>
-        </Pressable>
-      </View>
-
-      <ListCard>
-        <ListRow
-          title="Used"
-          meta={pack.total > 0 ? `${used} of ${pack.total}` : String(used)}
+      <DetailFacts>
+        <DetailFact
+          label="Used"
+          value={pack.total > 0 ? `${used} of ${pack.total}` : String(used)}
         />
         {nextOcc ? (
-          <ListRow
-            title="Next class"
-            meta={`${nextOcc.daysAhead === 0 ? 'Today' : nextOcc.daysAhead === 1 ? 'Tomorrow' : nextOcc.dayName}${pack.scheduleTime ? ` · ${pack.scheduleTime}` : ''}`}
+          <DetailFact
+            label="Next class"
+            value={`${nextOcc.daysAhead === 0 ? 'Today' : nextOcc.daysAhead === 1 ? 'Tomorrow' : nextOcc.dayName}${pack.scheduleTime ? ` · ${pack.scheduleTime}` : ''}`}
           />
         ) : null}
-        <ListRow title="Window" meta={statusLabel} last />
-      </ListCard>
+        <DetailFact label="Window" value={statusLabel} last />
+      </DetailFacts>
 
-      <Text variant="headline" style={{ fontSize: 16, marginTop: spacing.lg }}>
-        Details
-      </Text>
-      <Text style={styles.fieldLabel}>Name</Text>
-      <TextInput
-        value={title}
-        onChangeText={setTitle}
-        style={styles.input}
-        placeholderTextColor={colors.faint}
-      />
-      <Text style={styles.fieldLabel}>Total classes</Text>
-      <TextInput
-        value={total}
-        onChangeText={(t) => setTotal(sanitizeIntegerInput(t))}
-        keyboardType="number-pad"
-        style={styles.input}
-        placeholder="Not set yet"
-        placeholderTextColor={colors.faint}
-      />
+      <DetailSection label="Total classes">
+        <DetailField
+          value={total}
+          onChangeText={(t) => setTotal(sanitizeIntegerInput(t))}
+          keyboardType="number-pad"
+          placeholder="Not set yet"
+          accessibilityLabel="Total classes"
+        />
+      </DetailSection>
 
-      <Text style={styles.fieldLabel}>Schedule days</Text>
-      <View style={styles.chips}>
-        {SCHEDULE_DAYS.map((day) => {
-          const on = scheduleDays.includes(day.id);
-          return (
-            <Pressable
+      <DetailSection label="Schedule days">
+        <DetailChipRow>
+          {SCHEDULE_DAYS.map((day) => (
+            <DetailChip
               key={day.id}
+              label={day.short}
+              selected={scheduleDays.includes(day.id)}
+              accent={accent}
               onPress={() => toggleDay(day.id)}
-              style={[styles.chip, on && styles.chipOn]}
-            >
-              <Text style={[styles.chipText, on && styles.chipTextOn]}>
-                {day.short}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+            />
+          ))}
+        </DetailChipRow>
+      </DetailSection>
 
-      <Text style={styles.fieldLabel}>Schedule time</Text>
-      <TextInput
-        value={scheduleTime}
-        onChangeText={setScheduleTime}
-        style={styles.input}
-        placeholder="e.g. 10:00 AM"
-        placeholderTextColor={colors.faint}
-      />
+      <DetailSection label="Schedule time">
+        <DetailField
+          value={scheduleTime}
+          onChangeText={setScheduleTime}
+          placeholder="e.g. 10:00 AM"
+          accessibilityLabel="Schedule time"
+        />
+      </DetailSection>
 
-      <Text style={styles.fieldLabel}>Starts</Text>
-      <DateField
-        value={pack.startsOn}
-        onChange={(startsOn) => void updatePack(pack.id, { startsOn }).catch(saveFailed)}
-      />
-      <Text style={[styles.fieldLabel, { marginTop: spacing.md }]}>Ends</Text>
-      <DateField
-        value={pack.endsOn}
-        onChange={(endsOn) => void updatePack(pack.id, { endsOn }).catch(saveFailed)}
-      />
+      <DetailSection label="Starts">
+        <DateField
+          value={pack.startsOn}
+          onChange={(startsOn) => void updatePack(pack.id, { startsOn }).catch(saveFailed)}
+        />
+      </DetailSection>
+
+      <DetailSection label="Ends">
+        <DateField
+          value={pack.endsOn}
+          onChange={(endsOn) => void updatePack(pack.id, { endsOn }).catch(saveFailed)}
+        />
+      </DetailSection>
 
       {members.length ? (
-        <>
-          <Text style={styles.fieldLabel}>Who</Text>
-          <View style={styles.chips}>
-            <Pressable
+        <DetailSection label="Who">
+          <DetailChipRow>
+            <DetailChip
+              label="Unassigned"
+              selected={!pack.personId}
+              accent={accent}
               onPress={() =>
                 void updatePack(pack.id, {
                   personId: undefined,
                   assignedTo: undefined,
                 }).catch(saveFailed)
               }
-              style={[styles.chip, !pack.personId && styles.chipOn]}
-            >
-              <Text style={[styles.chipText, !pack.personId && styles.chipTextOn]}>
-                Unassigned
-              </Text>
-            </Pressable>
-            {members.map((m) => {
-              const on = pack.personId === m.id;
-              return (
-                <Pressable
-                  key={m.id}
-                  onPress={() =>
-                    void updatePack(pack.id, {
-                      personId: m.id,
-                      assignedTo: m.name,
-                    }).catch(saveFailed)
-                  }
-                  style={[styles.chip, on && styles.chipOn]}
-                >
-                  <Text style={[styles.chipText, on && styles.chipTextOn]}>{m.name}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </>
-      ) : null}
-
-      <Pressable
-        onPress={() => {
-          if (!title.trim() || saving) return;
-          const digits = total.replace(/[^\d]/g, '');
-          const parsed = Math.round(Number(digits));
-          if (total.trim() && (!digits || parsed <= 0)) {
-            showError('Total classes must be a number above 0.');
-            return;
-          }
-          const nextTotal = digits && parsed > 0 ? parsed : pack.total;
-          setSaving(true);
-          void updatePack(pack.id, {
-            title: title.trim(),
-            total: nextTotal,
-            scheduleDays: scheduleDays.length ? scheduleDays : undefined,
-            scheduleTime: scheduleTime.trim() || undefined,
-            scheduleTimeInferred: false,
-          })
-            .then(() => {
-              showToast('Class pack saved');
-              if (router.canGoBack()) router.back();
-              else router.replace('/classes' as Href);
-            })
-            .catch(saveFailed)
-            .finally(() => setSaving(false));
-        }}
-        disabled={!title.trim() || saving}
-        style={[styles.saveBtn, (!title.trim() || saving) && { opacity: 0.45 }]}
-      >
-        <Text style={styles.saveBtnText}>{saving ? 'Saving…' : 'Save details'}</Text>
-      </Pressable>
-
-      {recent.length ? (
-        <>
-          <Text variant="headline" style={{ fontSize: 16, marginTop: spacing.lg }}>
-            Attendance
-          </Text>
-          <ListCard style={{ marginTop: spacing.sm }}>
-            {recent.map((log, i) => (
-              <ListRow
-                key={log.id}
-                title={log.doneAt}
-                meta="Logged"
-                last={i === recent.length - 1}
-                onPress={() => void logClass(pack.id, log.doneAt).catch(saveFailed)}
+            />
+            {members.map((m) => (
+              <DetailChip
+                key={m.id}
+                label={m.name}
+                selected={pack.personId === m.id}
+                accent={accent}
+                onPress={() =>
+                  void updatePack(pack.id, {
+                    personId: m.id,
+                    assignedTo: m.name,
+                  }).catch(saveFailed)
+                }
               />
             ))}
-          </ListCard>
-          <Text variant="caption" style={{ marginTop: 8 }}>
-            Tap a day to undo it.
-          </Text>
-        </>
+          </DetailChipRow>
+        </DetailSection>
+      ) : null}
+
+      <DetailPrimaryButton
+        label={saving ? 'Saving…' : 'Save details'}
+        onPress={onSave}
+        accent={accent}
+        disabled={!title.trim() || saving}
+      />
+
+      {recent.length ? (
+        <DetailSection label="Attendance" style={{ marginTop: spacing.md }}>
+          <View style={[styles.logList, { backgroundColor: colors.surfaceSoft }]}>
+            {recent.map((log, i) => (
+              <Pressable
+                key={log.id}
+                onPress={() => void logClass(pack.id, log.doneAt).catch(saveFailed)}
+                style={({ pressed }) => [
+                  styles.logRow,
+                  i < recent.length - 1 && {
+                    borderBottomWidth: StyleSheet.hairlineWidth,
+                    borderBottomColor: colors.line,
+                  },
+                  pressed && { opacity: 0.7 },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={`Undo class on ${log.doneAt}`}
+              >
+                <Text style={[styles.logWhen, { color: colors.ink }]}>{log.doneAt}</Text>
+                <Text style={[styles.logMeta, { color: colors.mute }]}>Logged · tap to undo</Text>
+              </Pressable>
+            ))}
+          </View>
+        </DetailSection>
       ) : (
-        <Text variant="body" style={{ marginTop: spacing.lg, color: colors.mute }}>
+        <Text style={[styles.emptyLogs, { color: colors.mute }]}>
           No classes logged yet. Use Log today, or Talk: “went to {pack.title}.”
         </Text>
       )}
 
-      <Pressable onPress={() => void onRemove()} style={styles.remove}>
-        <Text style={styles.removeText}>Delete pack</Text>
-      </Pressable>
+      <DetailRemoveButton onPress={() => void onRemove()} />
     </ModuleScreen>
   );
 }
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
-  hero: {
-    backgroundColor: colors.white,
-    borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    alignItems: 'flex-start',
-  },
-  big: {
-    fontFamily: fonts.sansSemi,
-    fontSize: 26,
-    lineHeight: 32,
-    letterSpacing: -0.6,
-    color: colors.ink,
-  },
-  bigMute: {
-    fontFamily: fonts.sans,
-    fontSize: 16,
-    color: colors.mute,
-  },
-  logToday: {
-    marginTop: spacing.md,
-    backgroundColor: colors.forestSoft,
-    borderRadius: radius.md,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-  },
-  logTodayOn: {
-    backgroundColor: colors.forest,
-  },
-  logTodayText: {
-    fontFamily: fonts.sansSemi,
-    fontSize: 16,
-    color: colors.forest,
-  },
-  logTodayTextOn: {
-    color: colors.forestOn,
-  },
-  fieldLabel: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    color: colors.mute,
-    marginBottom: spacing.sm,
-    marginTop: spacing.md,
-  },
-  input: {
-    backgroundColor: colors.white,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 14,
-    fontFamily: fonts.sans,
-    fontSize: 16,
-    color: colors.ink,
-  },
-  chips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: radius.md,
-    backgroundColor: colors.white,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-  },
-  chipOn: {
-    backgroundColor: colors.forestSoft,
-    borderColor: colors.forest,
-  },
-  chipText: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    color: colors.ink,
-  },
-  chipTextOn: {
-    color: colors.forest,
-  },
-  saveBtn: {
-    marginTop: spacing.lg,
-    backgroundColor: colors.forest,
-    borderRadius: radius.md,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  saveBtnText: {
-    fontFamily: fonts.sansSemi,
-    fontSize: 16,
-    color: colors.forestOn,
-  },
-  remove: {
-    marginTop: spacing.xl,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  removeText: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    color: colors.coral,
-  },
-});
+    logToday: {
+      marginTop: spacing.sm,
+      alignSelf: 'flex-start',
+      borderRadius: radius.full,
+      borderWidth: 1.5,
+      paddingVertical: 11,
+      paddingHorizontal: 16,
+    },
+    logTodayText: {
+      fontFamily: fonts.sansSemi,
+      fontSize: 15,
+      letterSpacing: -0.2,
+    },
+    logList: {
+      borderRadius: radius.md,
+      overflow: 'hidden',
+    },
+    logRow: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: 14,
+      gap: 4,
+    },
+    logWhen: {
+      fontFamily: fonts.sansMedium,
+      fontSize: 16,
+      letterSpacing: -0.2,
+    },
+    logMeta: {
+      fontFamily: fonts.sans,
+      fontSize: 12,
+    },
+    emptyLogs: {
+      fontFamily: fonts.sans,
+      fontSize: 15,
+      lineHeight: 22,
+      marginTop: spacing.md,
+      marginBottom: spacing.sm,
+    },
+  });
 }

@@ -55,6 +55,7 @@ import {
   remindAtFromUtterance,
   parseReminderFromUtterance,
   parseRecurringWeekdayReminder,
+  finalizeReminderLabel,
   reminderLabelFromUtterance,
   warrantyExpiryFromUtterance,
 } from '@/lib/dates';
@@ -259,7 +260,8 @@ function resolveCondition(
   return titleCase(c);
 }
 
-/** Category/room/icon defaults when the model omits them — not brand correction. */
+/** Category/icon defaults when the model omits them — not brand correction.
+ *  Everything lives in one Things pool (s1). Vehicles/docs are categories. */
 function inferMeta(text: string): {
   category: string;
   room: string;
@@ -271,19 +273,19 @@ function inferMeta(text: string): {
   if (/\b(passport|visa|emirates|eid|licence|license|deed|will)\b/.test(t)) {
     return {
       category: 'Documents',
-      room: 'Personal Documents',
-      spaceId: 's5',
+      room: '—',
+      spaceId: 's1',
       icon: 'document',
       isDocument: true,
     };
   }
-  if (/\b(car|vehicle|prado|toyota|bmw|tyre|tire)\b/.test(t)) {
-    return { category: 'Vehicle', room: 'Vehicles', spaceId: 's4', icon: 'car', isDocument: false };
+  if (/\b(car|vehicle|prado|toyota|bmw|tyre|tire|tesla)\b/.test(t)) {
+    return { category: 'Vehicle', room: '—', spaceId: 's1', icon: 'car', isDocument: false };
   }
   if (/\b(coffee|espresso|barista|fridge|dishwasher|microwave|oven)\b/.test(t)) {
     return {
       category: 'Appliances',
-      room: 'Kitchen',
+      room: '—',
       spaceId: 's1',
       icon: /\bfridge|refrigerator\b/.test(t) ? 'fridge' : 'coffee',
       isDocument: false,
@@ -292,16 +294,16 @@ function inferMeta(text: string): {
   if (/\b(tv|television|laptop|macbook|iphone|phone|headphones|watch|ipad|tablet)\b/.test(t)) {
     return {
       category: 'Electronics',
-      room: 'Personal',
+      room: '—',
       spaceId: 's1',
       icon: /\b(tv|television)\b/.test(t) ? 'tv' : 'laptop',
       isDocument: false,
     };
   }
   if (/\b(washer|washing|vacuum|utility)\b/.test(t)) {
-    return { category: 'Home', room: 'Utility', spaceId: 's1', icon: 'washing', isDocument: false };
+    return { category: 'Home', room: '—', spaceId: 's1', icon: 'washing', isDocument: false };
   }
-  return { category: 'Home', room: 'Inbox', spaceId: 's1', icon: 'package', isDocument: false };
+  return { category: 'Home', room: '—', spaceId: 's1', icon: 'package', isDocument: false };
 }
 
 function addActionToInput(
@@ -323,15 +325,15 @@ function addActionToInput(
   const brand = action.brand?.trim() ? titleCase(action.brand.trim()) : 'Unknown';
   let category = action.category?.trim() || inferred.category;
   let room = action.room?.trim() || inferred.room;
-  let spaceId = inferred.spaceId;
+  const spaceId = 's1';
 
-  // Never park laptops/phones in document folders
+  // Never park laptops/phones as documents
   if (
     !inferred.isDocument &&
     category !== 'Documents' &&
     /personal documents/i.test(room)
   ) {
-    room = 'Personal';
+    room = '—';
   }
 
   const person = resolveAssignment({
@@ -341,20 +343,24 @@ function addActionToInput(
     members: household,
   });
 
-  if (person && !inferred.isDocument) {
-    // Belonging to a family member → Family space unless it's a shared kitchen appliance
-    if (!/\b(kitchen|living room|utility)\b/i.test(room)) {
-      spaceId = 's6';
-      if (/^personal$/i.test(room) || !room) room = 'Family';
-    }
+  // Who tags ownership; it does not move the Thing into a "Family space".
+  if (person) {
+    // keep room as-is (usually unused in the new model)
   }
 
   const price = formatMoney(action.price) || '—';
   const purchasedFrom = formatPurchasedFrom(action.purchasedFrom);
   const manualUrl = sanitizeManualUrl(action.manualUrl);
+  // "until next december" is deterministic on-device — when the user spoke a
+  // relative phrase, trust our parse over the model's date (models tend to
+  // read "next december" as the nearest one).
+  const spokenWarranty = warrantyExpiryFromUtterance(lastUserText);
+  const spokeRelative =
+    /\b(?:until|till|through|to)\s+next\b|\bnext\s+year\b/i.test(lastUserText ?? '');
   const warrantyExpiry =
+    (spokeRelative ? spokenWarranty : undefined) ||
     normalizeWarrantyExpiry(action.warrantyExpiry) ||
-    warrantyExpiryFromUtterance(lastUserText) ||
+    spokenWarranty ||
     '—';
   const warrantyActive = warrantyExpiry !== '—';
   const condition = resolveCondition(action.condition, lastUserText);
@@ -1177,7 +1183,13 @@ export async function applyChatActions(
       }
       const spokenLabel = reminderLabelFromUtterance(lastUserText);
       const parsedReminder = parseReminderFromUtterance(lastUserText);
-      const label = (parsedReminder?.label || spokenLabel || action.label).trim();
+      const parsedLabel =
+        parsedReminder?.label && parsedReminder.label !== 'Reminder'
+          ? parsedReminder.label
+          : null;
+      const label = finalizeReminderLabel(
+        parsedLabel || spokenLabel || action.label
+      );
       const notes = parsedReminder?.notes?.trim() || action.note?.trim();
       const remindInterval =
         recurring?.remindInterval ||

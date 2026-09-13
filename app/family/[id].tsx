@@ -1,7 +1,19 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, View, Pressable, TextInput } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { ModuleScreen } from '@/components/ui/ModuleScreen';
+import {
+  DetailChip,
+  DetailChipRow,
+  DetailFact,
+  DetailFacts,
+  DetailField,
+  DetailHero,
+  DetailPrimaryButton,
+  DetailRemoveButton,
+  DetailSection,
+  DETAIL_DOCK_PAD,
+} from '@/components/ui/DetailKit';
 import { ListCard, ListRow } from '@/components/ui/ListKit';
 import { Text } from '@/components/ui/Text';
 import { SwipeableThingRow } from '@/components/SwipeableThingRow';
@@ -17,7 +29,7 @@ import {
   type SharingPermission,
 } from '@/lib/household';
 import { confirmDelete } from '@/lib/confirmDelete';
-import { fonts, radius, spacing } from '@/constants/theme';
+import { spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
 import { noFocusRing } from '@/lib/a11y';
 import CreateScreen from './create';
@@ -146,160 +158,98 @@ export default function FamilyMemberScreen() {
     );
   }
 
+  const roleLabel = ROLES.find((r) => r.id === role)?.label ?? 'Adult';
+  const accent = colors.amber;
+
   return (
     <ModuleScreen
       title={member.name}
-      subtitle={member.relation}
       backLabel="Household"
       backFallbackHref="/family"
+      bottomExtra={DETAIL_DOCK_PAD}
+      hero={
+        <DetailHero
+          eyebrow={`${member.avatarLetter} · ${roleLabel}`}
+          editableTitle
+          titleValue={name}
+          onTitleChange={setName}
+          titlePlaceholder="Name"
+          subtitle={
+            relation.trim()
+              ? `${relation.trim()} · ${labelForPermission(member.permission)}`
+              : labelForPermission(member.permission)
+          }
+          accent={accent}
+          vividFallback="#A8884A"
+        />
+      }
     >
       <Stack.Screen options={{ headerShown: false }} />
-      <View style={styles.hero}>
-        <View style={[styles.avatar, { backgroundColor: colors.surfaceSoft }]}>
-          <Text style={[styles.letter, { color: colors.ink }]}>{member.avatarLetter}</Text>
-        </View>
-        <Text
-          variant="caption"
-          style={{ marginTop: spacing.sm, textTransform: 'capitalize' }}
-        >
-          {member.role} · {labelForPermission(member.permission)}
-        </Text>
-      </View>
 
-      <Text variant="label" style={[styles.label, { color: colors.mute }]}>
-        Profile
-      </Text>
-      <Text style={[styles.fieldLabel, { color: colors.mute }]}>Name</Text>
-      <TextInput
-        value={name}
-        onChangeText={setName}
-        style={[
-          styles.input,
-          noFocusRing,
-          {
-            backgroundColor: colors.surface,
-            borderColor: colors.line,
-            color: colors.ink,
-          },
-        ]}
-        placeholderTextColor={colors.faint}
-        autoCorrect={false}
-        spellCheck={false}
-        autoComplete="off"
-        textContentType="none"
-        autoCapitalize="words"
-      />
-      <Text style={[styles.fieldLabel, { color: colors.mute }]}>Relation</Text>
-      <TextInput
-        value={relation}
-        onChangeText={setRelation}
-        placeholder="e.g. Partner"
-        placeholderTextColor={colors.faint}
-        style={[
-          styles.input,
-          noFocusRing,
-          {
-            backgroundColor: colors.surface,
-            borderColor: colors.line,
-            color: colors.ink,
-          },
-        ]}
-        autoCorrect={false}
-        spellCheck={false}
-        autoComplete="off"
-        textContentType="none"
-        autoCapitalize="words"
-      />
-      <Text style={[styles.fieldLabel, { color: colors.mute }]}>Type</Text>
-      <View style={styles.permRow}>
-        {ROLES.map((r) => {
-          const on = role === r.id;
-          return (
-            <Pressable
+      <DetailSection label="Profile">
+        <DetailField
+          value={relation}
+          onChangeText={setRelation}
+          placeholder="Relation · e.g. Partner"
+          autoCorrect={false}
+          spellCheck={false}
+          autoComplete="off"
+          textContentType="none"
+          autoCapitalize="words"
+          style={noFocusRing}
+        />
+        <DetailChipRow>
+          {ROLES.map((r) => (
+            <DetailChip
               key={r.id}
+              label={r.label}
+              selected={role === r.id}
               onPress={() => setRole(r.id)}
-              style={[
-                styles.permChip,
-                {
-                  backgroundColor: on ? colors.ink : colors.surface,
-                  borderColor: on ? colors.ink : colors.line,
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.permLabel,
-                  { color: on ? colors.onInk : colors.slate },
-                ]}
-              >
-                {r.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-      <Pressable
-        onPress={() => void onSaveProfile()}
+              accent={accent}
+            />
+          ))}
+        </DetailChipRow>
+      </DetailSection>
+
+      <DetailPrimaryButton
+        label={saving ? 'Saving…' : 'Save profile'}
+        accent={accent}
         disabled={!name.trim() || saving}
-        style={[
-          styles.saveBtn,
-          { backgroundColor: colors.ink },
-          (!name.trim() || saving) && { opacity: 0.45 },
-        ]}
-      >
-        <Text style={[styles.saveBtnText, { color: colors.onInk }]}>
-          {saving ? 'Saving…' : 'Save profile'}
+        onPress={() => void onSaveProfile()}
+      />
+
+      <DetailFacts>
+        <DetailFact label="Documents" value={String(docs.length)} />
+        <DetailFact
+          label="Things"
+          value={String(devices.length - docs.length)}
+          last
+        />
+      </DetailFacts>
+
+      <DetailSection label="Sharing role">
+        <Text variant="caption" style={{ color: colors.mute }}>
+          Roles aren’t enforced yet — enforcement comes with live sharing.
         </Text>
-      </Pressable>
-
-      <ListCard style={{ marginTop: spacing.lg }}>
-        <ListRow title="Documents" meta={String(docs.length)} />
-        <ListRow title="Things" meta={String(devices.length - docs.length)} last />
-      </ListCard>
-
-      <Text variant="label" style={[styles.label, { color: colors.mute }]}>
-        Sharing role
-      </Text>
-      <Text variant="caption" style={{ marginBottom: spacing.sm, color: colors.mute }}>
-        Roles aren’t enforced yet — enforcement comes with live sharing.
-      </Text>
-      <View style={styles.permRow}>
-        {PERMS.map((p) => {
-          const on = member.permission === p;
-          return (
-            <Pressable
+        <DetailChipRow>
+          {PERMS.map((p) => (
+            <DetailChip
               key={p}
+              label={labelForPermission(p)}
+              selected={member.permission === p}
+              accent={accent}
               onPress={() =>
                 void updateMember(member.id, { permission: p }).catch(() =>
                   showError('Couldn’t save — try again.')
                 )
               }
-              style={[
-                styles.permChip,
-                {
-                  backgroundColor: on ? colors.ink : colors.surface,
-                  borderColor: on ? colors.ink : colors.line,
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.permLabel,
-                  { color: on ? colors.onInk : colors.slate },
-                ]}
-              >
-                {labelForPermission(p)}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+            />
+          ))}
+        </DetailChipRow>
+      </DetailSection>
 
       {theirHabits.length ? (
-        <>
-          <Text variant="label" style={styles.label}>
-            Habits
-          </Text>
+        <DetailSection label="Habits">
           {theirHabits.map((h) => (
             <ListCard key={h.id} style={{ marginBottom: spacing.sm }}>
               <ListRow
@@ -311,14 +261,11 @@ export default function FamilyMemberScreen() {
               />
             </ListCard>
           ))}
-        </>
+        </DetailSection>
       ) : null}
 
       {theirClasses.length ? (
-        <>
-          <Text variant="label" style={styles.label}>
-            Classes
-          </Text>
+        <DetailSection label="Classes">
           {theirClasses.map((p) => (
             <ListCard key={p.id} style={{ marginBottom: spacing.sm }}>
               <ListRow
@@ -335,14 +282,11 @@ export default function FamilyMemberScreen() {
               />
             </ListCard>
           ))}
-        </>
+        </DetailSection>
       ) : null}
 
       {devices.length ? (
-        <>
-          <Text variant="label" style={styles.label}>
-            Their things
-          </Text>
+        <DetailSection label="Their things">
           {devices.map((d) => (
             <SwipeableThingRow
               key={d.id}
@@ -350,79 +294,22 @@ export default function FamilyMemberScreen() {
               icon={d.icon}
               subtitle={[d.brand, d.room].filter(Boolean).join(' · ')}
               onPress={() => router.push(`/asset/${d.id}` as Href)}
+              onEdit={() => router.push(`/asset/edit/${d.id}` as Href)}
               onDelete={() => void onDeleteThing(d.id, d.name)}
             />
           ))}
-        </>
+        </DetailSection>
       ) : (
         <Text variant="body" style={[styles.empty, { color: colors.mute }]}>
-          Nothing tagged to {member.name} yet. Try Talk: “I got a laptop for {member.name}.”
+          Nothing tagged to {member.name} yet.
         </Text>
       )}
 
-      <Pressable onPress={() => void onRemoveMember()} style={styles.remove}>
-        <Text style={[styles.removeText, { color: colors.coral }]}>Remove from household</Text>
-      </Pressable>
+      <DetailRemoveButton onPress={() => void onRemoveMember()} />
     </ModuleScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  hero: { alignItems: 'center', marginBottom: spacing.lg },
-  avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  letter: {
-    fontFamily: fonts.sansSemi,
-    fontSize: 28,
-  },
-  label: {
-    marginTop: spacing.lg,
-    marginBottom: spacing.sm,
-  },
-  fieldLabel: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    marginBottom: 6,
-    marginTop: spacing.sm,
-  },
-  input: {
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 12,
-    fontFamily: fonts.sans,
-    fontSize: 16,
-  },
-  saveBtn: {
-    marginTop: spacing.md,
-    borderRadius: radius.md,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  saveBtnText: {
-    fontFamily: fonts.sansSemi,
-    fontSize: 16,
-  },
-  permRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  permChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: radius.full,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  permLabel: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-  },
   empty: { marginTop: spacing.md },
-  remove: { marginTop: spacing.xxl, alignItems: 'center', padding: spacing.md },
-  removeText: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-  },
 });

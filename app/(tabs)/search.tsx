@@ -101,7 +101,6 @@ export default function SearchScreen() {
   return (
     <ModuleScreen
       title="Search"
-      subtitle="Things, docs, spend, habits, classes, people — all in one place."
       defaultOrigin="today"
     >
       <View style={styles.inputCard}>
@@ -159,6 +158,11 @@ export default function SearchScreen() {
                     icon={hit.icon}
                     subtitle={hit.subtitle}
                     onPress={() => router.push(hit.href as Href)}
+                    onEdit={
+                      getById(hit.id)
+                        ? () => router.push(`/asset/edit/${hit.id}` as Href)
+                        : undefined
+                    }
                     onDelete={
                       getById(hit.id)
                         ? () => void onDeleteThing(hit.id, hit.title)

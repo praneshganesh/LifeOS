@@ -7,7 +7,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, Plus } from 'lucide-react-native';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
-import { Icon3DBadge } from '@/components/ui/Icon3D';
+import {
+  DETAIL_DOCK_PAD,
+  DetailHero,
+  DetailSection,
+} from '@/components/ui/DetailKit';
 import { SwipeableThingRow } from '@/components/SwipeableThingRow';
 import { useSpaces } from '@/lib/SpacesContext';
 import { useInventory } from '@/lib/InventoryContext';
@@ -15,7 +19,7 @@ import { inventoryToAsset } from '@/lib/mergeAssets';
 import { confirmDelete } from '@/lib/confirmDelete';
 import { captureHref } from '@/lib/captureContext';
 import { blurActiveElement } from '@/lib/a11y';
-import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
+import { type ThemeColors, fonts, radius, spacing } from '@/constants/theme';
 import { useRememberCaptureContext } from '@/components/CaptureContextButton';
 
 export default function RoomDetailScreen() {
@@ -84,6 +88,9 @@ export default function RoomDetailScreen() {
     );
   }
 
+  const accent = colors.accent;
+  const vivid = colors.forest;
+
   return (
     <Screen>
       <Stack.Screen options={{ headerShown: false }} />
@@ -93,7 +100,7 @@ export default function RoomDetailScreen() {
           styles.content,
           {
             paddingTop: Math.max(insets.top, 12) + spacing.xs,
-            paddingBottom: insets.bottom + 40,
+            paddingBottom: insets.bottom + DETAIL_DOCK_PAD,
           },
         ]}
         showsVerticalScrollIndicator={false}
@@ -112,10 +119,6 @@ export default function RoomDetailScreen() {
             <ChevronLeft size={20} color={colors.ink} strokeWidth={2.4} />
             <Text style={styles.backLabel}>{space?.name || 'Space'}</Text>
           </Pressable>
-        </View>
-
-        <View style={styles.headerRow}>
-          <Icon3DBadge name={room.icon} size={64} />
           <Pressable
             onPress={() => {
               blurActiveElement();
@@ -127,38 +130,56 @@ export default function RoomDetailScreen() {
                 })
               );
             }}
-            style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.9 }]}
+            style={({ pressed }) => [
+              styles.addBtn,
+              { backgroundColor: accent },
+              pressed && { opacity: 0.9 },
+            ]}
             accessibilityLabel={`Capture for ${room.name}`}
           >
-            <Plus size={18} color={colors.forestOn} strokeWidth={2.2} />
+            <Plus size={18} color={colors.pure} strokeWidth={2.2} />
           </Pressable>
         </View>
-        <Text variant="title" style={{ marginTop: spacing.md }}>
-          {room.name}
-        </Text>
-        <Text variant="body" style={{ marginTop: 6, marginBottom: spacing.xl }}>
-          {space?.name ?? 'Home'} · {roomAssets.length} items
-        </Text>
 
-        <Text variant="label" style={styles.label}>
-          Things here
-        </Text>
-        <View>
-          {roomAssets.map((asset) => (
-            <SwipeableThingRow
-              key={asset.id}
-              name={asset.name}
-              icon={asset.icon}
-              subtitle={asset.brand}
-              onPress={() => router.push(`/asset/${asset.id}`)}
-              onDelete={
-                getById(asset.id)
-                  ? () => void onDeleteThing(asset.id, asset.name)
-                  : undefined
-              }
-            />
-          ))}
-        </View>
+        <DetailHero
+          eyebrow={space?.name ?? 'Room'}
+          title={room.name}
+          subtitle={`${roomAssets.length} item${roomAssets.length === 1 ? '' : 's'}`}
+          accent={accent}
+          vividFallback={vivid}
+        />
+
+        <DetailSection label="Things here">
+          <View>
+            {roomAssets.map((asset) => (
+              <SwipeableThingRow
+                key={asset.id}
+                name={asset.name}
+                icon={asset.icon}
+                subtitle={asset.brand}
+                onPress={() => router.push(`/asset/${asset.id}`)}
+                onEdit={
+                  getById(asset.id)
+                    ? () => router.push(`/asset/edit/${asset.id}`)
+                    : undefined
+                }
+                onDelete={
+                  getById(asset.id)
+                    ? () => void onDeleteThing(asset.id, asset.name)
+                    : undefined
+                }
+              />
+            ))}
+            {roomAssets.length === 0 ? (
+              <View style={styles.empty}>
+                <Text variant="headline">Nothing here yet</Text>
+                <Text variant="caption" style={{ marginTop: 4 }}>
+                  Tap + to capture
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        </DetailSection>
       </ScrollView>
     </Screen>
   );
@@ -173,6 +194,7 @@ function makeStyles(colors: ThemeColors) {
   topNav: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: spacing.sm,
     marginLeft: -6,
   },
@@ -193,16 +215,10 @@ function makeStyles(colors: ThemeColors) {
     color: colors.ink,
     letterSpacing: -0.2,
   },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
   addBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.forest,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -211,9 +227,10 @@ function makeStyles(colors: ThemeColors) {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  label: {
-    marginBottom: spacing.sm,
-    color: colors.mute,
+  empty: {
+    backgroundColor: colors.surfaceSoft,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
   },
 });
 }

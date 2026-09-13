@@ -39,6 +39,89 @@ import {
   defaultRemindMonthsBefore,
 } from '../documentReminders';
 import { moduleHref, moduleHrefPreserveFrom, parseModuleOrigin } from '../moduleNav';
+import {
+  formatDisplayDate,
+  parseReminderEndsAtFromUtterance,
+  warrantyExpiryFromUtterance,
+} from '../dates';
+
+describe('formatDisplayDate', () => {
+  it('renders ISO days as human dates', () => {
+    assert.equal(formatDisplayDate('2026-12-31'), 'Dec 31, 2026');
+    assert.equal(formatDisplayDate('2027-03-05'), 'Mar 5, 2027');
+  });
+
+  it('renders year-end warranties as month + year when asked', () => {
+    assert.equal(
+      formatDisplayDate('2027-12-31', { yearEndAsMonthYear: true }),
+      'Dec 2027'
+    );
+    assert.equal(
+      formatDisplayDate('2027-06-30', { yearEndAsMonthYear: true }),
+      'Jun 30, 2027'
+    );
+  });
+
+  it('hides empty and dash values', () => {
+    assert.equal(formatDisplayDate('—'), undefined);
+    assert.equal(formatDisplayDate(''), undefined);
+    assert.equal(formatDisplayDate(null), undefined);
+  });
+
+  it('passes non-ISO strings through', () => {
+    assert.equal(formatDisplayDate('sometime in 2027'), 'sometime in 2027');
+  });
+});
+
+describe('relative month parsing (warranty / until phrases)', () => {
+  const sept2026 = new Date(2026, 8, 12); // Sep 12, 2026
+
+  it('"until next december" means december of NEXT year', () => {
+    assert.equal(
+      warrantyExpiryFromUtterance('warranty until next december', sept2026),
+      '2027-12-31'
+    );
+    assert.equal(
+      parseReminderEndsAtFromUtterance('until next december', sept2026),
+      '2027-12-31'
+    );
+  });
+
+  it('"until december next year" also means next year', () => {
+    assert.equal(
+      warrantyExpiryFromUtterance('guarantee until december next year', sept2026),
+      '2027-12-31'
+    );
+  });
+
+  it('bare "until december" keeps the coming december', () => {
+    assert.equal(
+      warrantyExpiryFromUtterance('warranty until december', sept2026),
+      '2026-12-31'
+    );
+  });
+
+  it('bare month already past rolls to the coming one', () => {
+    assert.equal(
+      parseReminderEndsAtFromUtterance('until march', sept2026),
+      '2027-03-31'
+    );
+  });
+
+  it('explicit year always wins', () => {
+    assert.equal(
+      warrantyExpiryFromUtterance('warranty until december 2029', sept2026),
+      '2029-12-31'
+    );
+  });
+
+  it('year-only phrasing still works', () => {
+    assert.equal(
+      warrantyExpiryFromUtterance('2 year warranty until 2028', sept2026),
+      '2028-12-31'
+    );
+  });
+});
 
 describe('module navigation', () => {
   it('builds hrefs with from param and parses origins', () => {
@@ -82,11 +165,16 @@ describe('document classification', () => {
       'UNITED ARAB EMIRATES',
       'FEDERAL AUTHORITY FOR IDENTITY & CITIZENSHIP, CUSTOMS & PORT SECURITY',
       'Resident Identity Card',
-      'ID Number 784-1988-1234567-1',
+      'ID Number / رقم الهوية',
+      '784-1988-1234567-1',
       'Name: Jane Doe',
-      'Date of Birth: 19/04/1988',
+      'Date of Birth / تاريخ الميلاد',
+      '19/04/1988',
       'Nationality: Exampleland',
-      'Expiry Date: 26/08/2028',
+      'Issuing Date / تاريخ الإصدار',
+      '04/09/2022',
+      'Expiry Date / تاريخ الانتهاء',
+      '26/08/2028',
     ].join('\n');
     assert.equal(classifyDocumentFromText(front), 'emirates_id');
     assert.equal(extractEmiratesIdNumber(front), '784-1988-1234567-1');
@@ -158,6 +246,19 @@ describe('document reminders', () => {
     assert.equal(
       dayMonthsBefore('2026-04-01', 6, new Date('2026-01-15')),
       '2026-01-15'
+    );
+  });
+});
+
+describe('speechAccumulate', () => {
+  it('grows a rewritten final instead of duplicating', async () => {
+    const { mergeFinalSpeechPart } = await import('../speechAccumulate');
+    assert.deepEqual(mergeFinalSpeechPart(['Remind me every'], 'Remind me every Tuesday'), [
+      'Remind me every Tuesday',
+    ]);
+    assert.deepEqual(
+      mergeFinalSpeechPart(['Remind me every Tuesday'], 'and Friday at 6'),
+      ['Remind me every Tuesday', 'and Friday at 6']
     );
   });
 });

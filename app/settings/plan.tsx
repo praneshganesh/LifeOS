@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { DETAIL_DOCK_PAD } from '@/components/ui/DetailKit';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { ListCard, ListRow } from '@/components/ui/ListKit';
 import { Text } from '@/components/ui/Text';
@@ -8,38 +9,22 @@ import { useSpaces } from '@/lib/SpacesContext';
 import { useHousehold } from '@/lib/HouseholdContext';
 import {
   PLANS,
-  TRIAL_DAYS,
   buildLimitMeters,
-  loadPlanPrefs,
-  planById,
-  savePlanPrefs,
-  trialDaysLeft,
   type PlanId,
-  type PlanPrefs,
 } from '@/lib/planLimits';
-import { useCallback, useState } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { usePlan } from '@/lib/PlanContext';
+import { useRouter, type Href } from 'expo-router';
 import { fonts, radius, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
 
 export default function PlanSettingsScreen() {
   const { colors } = useTheme();
+  const router = useRouter();
   const { items } = useInventory();
   const { spaces } = useSpaces();
   const { members } = useHousehold();
-  const [prefs, setPrefs] = useState<PlanPrefs>({ planId: 'trial' });
-
-  useFocusEffect(
-    useCallback(() => {
-      let live = true;
-      void loadPlanPrefs().then((p) => {
-        if (live) setPrefs(p);
-      });
-      return () => {
-        live = false;
-      };
-    }, [])
-  );
+  const { prefs, entitlement, subscribe, restore, restartTrial, refresh, billingReady } =
+    usePlan();
 
   const usage = useMemo(
     () => ({
@@ -51,37 +36,76 @@ export default function PlanSettingsScreen() {
   );
 
   const planId = prefs.planId;
-  const plan = planById(planId);
+  const plan = PLANS.find((p) => p.id === planId) ?? PLANS[0]!;
   const meters = buildLimitMeters(plan, usage);
-  const daysLeft = trialDaysLeft(prefs);
-  const subtitle =
-    planId === 'trial' && daysLeft != null
-      ? daysLeft > 0
-        ? `Trial — ${daysLeft} day${daysLeft === 1 ? '' : 's'} left of ${TRIAL_DAYS}. Full Pro.`
-        : 'Trial ended. Billing needs an Apple Developer account — nothing is locked yet.'
-      : `You’re on ${plan.name}. App Store billing comes later.`;
 
   async function selectPlan(id: PlanId) {
+    if (id === 'trial') {
+      if (__DEV__) {
+        await restartTrial();
+        await refresh();
+        Alert.alert('Dev', 'Trial restarted for 14 days.');
+      }
+      return;
+    }
     if (id === planId) return;
     Alert.alert(
-      'Plan preview',
-      'App Store billing isn’t connected yet (needs Apple Developer / DUNS). This only switches the plan label — no charge.'
+      `Switch to ${id === 'pro' ? 'Pro' : 'Family'}?`,
+      billingReady
+        ? 'This opens the App Store purchase sheet for the yearly plan.'
+        : __DEV__
+          ? 'RevenueCat isn’t available here — unlocks locally in development only.'
+          : 'Use a TestFlight / native build to purchase.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Continue',
+          onPress: () => {
+            void (async () => {
+              try {
+                await subscribe(id, 'yearly');
+                await refresh();
+              } catch (e) {
+                Alert.alert(
+                  'Purchase',
+                  e instanceof Error ? e.message : 'Could not complete purchase.'
+                );
+              }
+            })();
+          },
+        },
+      ]
     );
-    const next: PlanPrefs = {
-      planId: id,
-      trialStartedAt: prefs.trialStartedAt,
-    };
-    setPrefs(next);
-    await savePlanPrefs(next);
   }
+
+  const statusLine =
+    entitlement.status === 'trial_active'
+      ? `Trial · ${entitlement.trialDaysLeft} day${entitlement.trialDaysLeft === 1 ? '' : 's'} left`
+      : entitlement.status === 'trial_expired'
+        ? 'Trial ended — subscribe to continue'
+        : entitlement.status === 'member'
+          ? 'Family member · on owner’s plan'
+          : entitlement.status === 'family'
+            ? `Family · ${entitlement.seatsRemaining} invite seat${entitlement.seatsRemaining === 1 ? '' : 's'} left`
+            : 'Pro · one login';
 
   return (
     <ModuleScreen
       title="Plan & billing"
-      subtitle={subtitle}
       backLabel="Settings"
       backFallbackHref="/settings"
+      bottomExtra={DETAIL_DOCK_PAD}
     >
+      <ModuleSection label="Status">
+        <ListCard>
+          <ListRow
+            title={plan.name}
+            subtitle={statusLine}
+            last
+          />
+        </ListCard>
+      </ModuleSection>
+
       <ModuleSection label="Your usage">
         <ListCard>
           <MeterRow title="Things" meter={meters.assets} colors={colors} />
@@ -96,7 +120,7 @@ export default function PlanSettingsScreen() {
       </ModuleSection>
 
       <ModuleSection label="Plans">
-        {PLANS.map((p) => {
+        {PLANS.filter((p) => p.id !== 'trial').map((p) => {
           const current = p.id === planId;
           return (
             <Pressable
@@ -105,15 +129,17 @@ export default function PlanSettingsScreen() {
               style={[
                 styles.plan,
                 {
-                  backgroundColor: colors.white,
-                  borderColor: current ? colors.forest : colors.line,
+                  backgroundColor: colors.surface,
+                  borderColor: current ? colors.accent : colors.line,
                   borderWidth: current ? 1.5 : StyleSheet.hairlineWidth,
                 },
               ]}
             >
               <View style={styles.planTop}>
                 <Text variant="headline">{p.name}</Text>
-                <Text style={[styles.price, { color: colors.forest }]}>{p.price}</Text>
+                <Text style={[styles.price, { color: colors.accent }]}>
+                  {p.price}
+                </Text>
               </View>
               {p.perks.map((perk) => (
                 <Text key={perk} variant="caption" style={styles.perk}>
@@ -121,30 +147,95 @@ export default function PlanSettingsScreen() {
                 </Text>
               ))}
               {current ? (
-                <Text style={[styles.current, { color: colors.forest }]}>Current</Text>
+                <Text style={[styles.current, { color: colors.accent }]}>
+                  Current
+                </Text>
               ) : (
-                <Text style={[styles.cta, { color: colors.slate }]}>Preview this plan</Text>
+                <Text style={[styles.cta, { color: colors.mute }]}>
+                  {p.id === 'family' && planId === 'pro'
+                    ? 'Upgrade'
+                    : 'Select'}
+                </Text>
               )}
             </Pressable>
           );
         })}
       </ModuleSection>
 
-      <ModuleSection label="Billing">
+      <ModuleSection label="Family invites">
         <ListCard>
           <ListRow
-            title="Payment method"
-            subtitle="Sign in with Apple + App Store trial after DUNS / Developer account"
-            meta="Later"
-          />
-          <ListRow
-            title="What we meter"
-            subtitle="Talk per login (not Things). Cloud photos later. Family is extra logins, not extra modules."
-            meta="—"
+            title="Sharing & invites"
+            subtitle="Invite logins or join with a code"
+            onPress={() => router.push('/settings/sharing' as Href)}
             last
           />
         </ListCard>
       </ModuleSection>
+
+      <ModuleSection label="Billing">
+        <ListCard>
+          <ListRow
+            title="Restore purchases"
+            subtitle={
+              billingReady
+                ? 'Re-link an existing App Store subscription'
+                : 'Needs native iOS build + RevenueCat key'
+            }
+            onPress={() => {
+              void (async () => {
+                const result = await restore();
+                if (result.ok) {
+                  await refresh();
+                  Alert.alert('Restored', 'Your subscription is active on this device.');
+                  return;
+                }
+                Alert.alert('Restore', result.error || 'Nothing to restore.');
+              })();
+            }}
+          />
+          <ListRow
+            title="App Store billing"
+            subtitle={
+              billingReady
+                ? 'RevenueCat connected'
+                : 'Add EXPO_PUBLIC_REVENUECAT_IOS_KEY and use a native build'
+            }
+            meta={billingReady ? 'On' : '—'}
+            last
+          />
+        </ListCard>
+      </ModuleSection>
+
+      {__DEV__ ? (
+        <ModuleSection label="Dev">
+          <ListCard>
+            <ListRow
+              title="Restart trial"
+              subtitle="Resets 14-day clock"
+              onPress={() => void selectPlan('trial')}
+            />
+            <ListRow
+              title="Expire trial now"
+              subtitle="Jump to paywall"
+              onPress={() => {
+                void (async () => {
+                  const { savePlanPrefs } = await import('@/lib/planLimits');
+                  await savePlanPrefs({
+                    planId: 'trial',
+                    trialStartedAt: new Date(
+                      Date.now() - 20 * 86400000
+                    ).toISOString(),
+                  });
+                  await refresh();
+                  router.replace('/paywall' as Href);
+                })();
+              }}
+              last
+            />
+          </ListCard>
+        </ModuleSection>
+      ) : null}
     </ModuleScreen>
   );
 }
@@ -157,7 +248,7 @@ function MeterRow({
 }: {
   title: string;
   meter: { label: string; ratio: number; over: boolean };
-  colors: { line: string; forest: string; coral: string; mute: string };
+  colors: { line: string; accent: string; coral: string; mute: string };
   last?: boolean;
 }) {
   return (
@@ -187,7 +278,7 @@ function MeterRow({
             styles.fill,
             {
               width: `${Math.round(meter.ratio * 100)}%`,
-              backgroundColor: meter.over ? colors.coral : colors.forest,
+              backgroundColor: meter.over ? colors.coral : colors.accent,
             },
           ]}
         />

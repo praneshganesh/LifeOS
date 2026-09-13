@@ -43,7 +43,6 @@ export default function ClassesScreen() {
   return (
     <ModuleScreen
       title="Classes"
-      subtitle="Session packs — how many are left, and until when."
       defaultOrigin="things"
       right={
         <Pressable

@@ -126,7 +126,7 @@ export const ICON_MAP: Record<string, LucideIcon> = {
 
 export type Icon3DName = keyof typeof ICON_MAP;
 
-type Tone = 'soft' | 'forest' | 'plain';
+type Tone = 'soft' | 'forest' | 'plain' | 'ghost';
 
 export function AppIcon({
   name,
@@ -145,10 +145,15 @@ export function AppIcon({
   const bg =
     tone === 'forest'
       ? colors.accent
-      : tone === 'plain'
+      : tone === 'plain' || tone === 'ghost'
         ? 'transparent'
         : colors.surfaceSoft;
-  const fg = tone === 'forest' ? colors.accentOn : colors.accent;
+  const fg =
+    tone === 'forest'
+      ? colors.accentOn
+      : tone === 'ghost'
+        ? '#FFFFFF'
+        : colors.accent;
 
   return (
     <View

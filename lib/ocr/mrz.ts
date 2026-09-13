@@ -320,6 +320,13 @@ export function extractDocumentFieldHints(text: string): DocumentFieldHints | nu
     const lic = extractLicenceNumber(text);
     if (lic) hints.documentNumber = lic;
   }
+  if (kind === 'passport') {
+    // Printed "Passport No." when MRZ failed but Latin text is readable.
+    const passNo = text.match(
+      /(?:passport\s*(?:no\.?|number|#)|رقم\s*الجواز)\s*[:：]?\s*([A-Z0-9][A-Z0-9\-]{4,15})/i
+    );
+    if (passNo?.[1]) hints.documentNumber = passNo[1].toUpperCase();
+  }
 
   // ID Number: / License No.: / Name: — labels as printed on UAE cards
   const nameLine = text.match(
@@ -335,15 +342,18 @@ export function extractDocumentFieldHints(text: string): DocumentFieldHints | nu
     }
   }
 
+  // UAE cards put Arabic between the English label and the value — allow
+  // non-digit noise so "Expiry Date / تاريخ الانتهاء\n26/08/2024" still matches.
+  // Prefer "Expiry Date" over bare "expiry" so Issuing Date is not stolen.
   const expiry = text.match(
-    /(?:expir(?:y|es|ation)\s*date|expir(?:y|es|ation)|valid\s*(?:until|thru|to)|تاريخ\s*الانتهاء)\s*[:：]?\s*(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})/i
+    /(?:expir(?:y|es|ation)\s*date|valid\s*(?:until|thru|to)|تاريخ\s*الانتهاء)[^\d]{0,48}?(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})/i
   );
   if (expiry?.[1]) {
     hints.expiryDate = normalizeLooseDate(expiry[1]);
   }
 
   const dob = text.match(
-    /(?:date\s*of\s*birth|d\.?o\.?b\.?|birth|تاريخ\s*الميلاد)\s*[:：]?\s*(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})/i
+    /(?:date\s*of\s*birth|d\.?o\.?b\.?|تاريخ\s*الميلاد)[^\d]{0,48}?(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})/i
   );
   if (dob?.[1]) {
     hints.dateOfBirth = normalizeLooseDate(dob[1]);

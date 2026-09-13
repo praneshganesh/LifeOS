@@ -34,6 +34,13 @@ export interface ModuleScreenProps {
   onBack?: () => void;
   /** Fallback URL if router.canGoBack() is false. */
   backFallbackHref?: Href;
+  /**
+   * Lifestyle detail: identity lives in a dotted hero below chrome.
+   * When set, the chrome title/subtitle are hidden (back label stays).
+   */
+  hero?: ReactNode;
+  /** Extra bottom scroll pad for the floating dock. Defaults to 108. */
+  bottomExtra?: number;
 }
 
 /**
@@ -51,6 +58,8 @@ export function ModuleScreen({
   backLabel: backLabelProp,
   onBack: onBackProp,
   backFallbackHref: backFallbackHrefProp,
+  hero,
+  bottomExtra = 108,
 }: ModuleScreenProps) {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
@@ -62,6 +71,7 @@ export function ModuleScreen({
     backFallbackHref: backFallbackHrefProp,
     onBack: onBackProp,
   });
+  const lifestyle = Boolean(hero);
 
   useFocusEffect(
     useCallback(() => {
@@ -77,46 +87,60 @@ export function ModuleScreen({
           {
             paddingTop: Math.max(insets.top, 12),
             borderBottomColor: colors.line,
+            borderBottomWidth: lifestyle ? 0 : StyleSheet.hairlineWidth,
+            paddingBottom: lifestyle ? spacing.xs : spacing.sm,
           },
         ]}
       >
-        {showBack ? (
-          <Pressable
-            onPress={handleBack}
-            style={({ pressed }) => [
-              styles.backBtn,
-              pressed && styles.backBtnPressed,
-            ]}
-            hitSlop={12}
-            accessibilityRole="button"
-            accessibilityLabel={backLabel ? `Go back to ${backLabel}` : 'Go back'}
-          >
-            <ChevronLeft size={22} color={colors.ink} strokeWidth={2.2} />
-            <Text style={[styles.backLabel, { color: colors.ink }]}>{backLabel}</Text>
-          </Pressable>
-        ) : (
-          <View style={styles.backSpacer} />
-        )}
-
-        <View style={styles.header}>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text variant="title">{title}</Text>
-            {subtitle ? (
-              <Text variant="body" style={styles.lead}>
-                {subtitle}
-              </Text>
-            ) : null}
-          </View>
-          {right}
+        <View
+          style={[
+            styles.topRow,
+            lifestyle && { marginBottom: spacing.xs },
+          ]}
+        >
+          {showBack ? (
+            <Pressable
+              onPress={handleBack}
+              style={({ pressed }) => [
+                styles.backBtn,
+                { marginBottom: 0 },
+                pressed && styles.backBtnPressed,
+              ]}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel={backLabel ? `Go back to ${backLabel}` : 'Go back'}
+            >
+              <ChevronLeft size={22} color={colors.ink} strokeWidth={2.2} />
+              <Text style={[styles.backLabel, { color: colors.ink }]}>{backLabel}</Text>
+            </Pressable>
+          ) : (
+            <View style={styles.backSpacer} />
+          )}
+          {lifestyle && right ? <View style={styles.topRight}>{right}</View> : null}
         </View>
+
+        {!lifestyle ? (
+          <View style={styles.header}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text variant="title">{title}</Text>
+              {subtitle ? (
+                <Text variant="caption" style={styles.lead} numberOfLines={1}>
+                  {subtitle}
+                </Text>
+              ) : null}
+            </View>
+            {right}
+          </View>
+        ) : null}
       </View>
 
       <KeyboardFormScroll
         ref={scrollRef}
         contentContainerStyle={[styles.content, contentStyle]}
-        bottomExtra={108}
+        bottomExtra={bottomExtra}
         keyboardShouldPersistTaps="always"
       >
+        {hero}
         {children}
       </KeyboardFormScroll>
     </Screen>
@@ -171,8 +195,8 @@ function makeStyles() {
       alignItems: 'center',
       alignSelf: 'flex-start',
       gap: 2,
-      paddingVertical: 2,
-      marginBottom: spacing.xs,
+      paddingVertical: 4,
+      marginBottom: spacing.md,
       marginLeft: -8,
       borderRadius: radius.sm,
     },
@@ -187,17 +211,29 @@ function makeStyles() {
     backSpacer: {
       height: 8,
     },
+    topRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: spacing.md,
+    },
+    topRight: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
     header: {
       flexDirection: 'row',
       alignItems: 'flex-start',
       gap: spacing.md,
+      marginTop: 2,
     },
     lead: {
-      marginTop: 2,
+      marginTop: 4,
     },
     content: {
       paddingHorizontal: spacing.lg,
-      paddingTop: spacing.md,
+      paddingTop: spacing.sm,
     },
   });
 }

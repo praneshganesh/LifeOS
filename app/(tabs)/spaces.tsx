@@ -1,45 +1,38 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   View,
+  type LayoutChangeEvent,
 } from 'react-native';
 import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import { DotField, hubCardBg, isNearGray, type DotTone } from '@/components/ui/DotField';
 import { Screen } from '@/components/ui/Screen';
 import { HomeHeader } from '@/components/HomeHeader';
 import { saveHomeSurface } from '@/lib/homeSurface';
 import { Text } from '@/components/ui/Text';
-import { Card } from '@/components/ui/Card';
-import { ListCard, ListRow } from '@/components/ui/ListKit';
-import { AppIcon, Icon3DBadge, type Icon3DName } from '@/components/ui/Icon3D';
-import { useSpaces } from '@/lib/SpacesContext';
+import { AppIcon, type Icon3DName } from '@/components/ui/Icon3D';
 import { useInventory } from '@/lib/InventoryContext';
 import { useExpenses } from '@/lib/ExpensesContext';
 import { useHabits } from '@/lib/HabitsContext';
 import { useClasses } from '@/lib/ClassesContext';
-import { useHousehold } from '@/lib/HouseholdContext';
-import { useLastDone } from '@/lib/LastDoneContext';
 import { useSubscriptions } from '@/lib/SubscriptionsContext';
+import { useHousehold } from '@/lib/HouseholdContext';
+import { openAttentionQueue } from '@/lib/attention';
+import { useAttentionDismissals } from '@/lib/attentionDismiss';
+import { useLastDone } from '@/lib/LastDoneContext';
 import {
   captureHref,
   type CaptureContextKind,
 } from '@/lib/captureContext';
-import {
-  isDocumentItem,
-  isInsuranceItem,
-  isPurchaseItem,
-  isVehicleItem,
-  spaceIdByKind,
-} from '@/lib/moduleFilters';
 import { loadLocalProfile } from '@/lib/profile';
 import { selfAvatarInitial } from '@/lib/people';
 import { moduleHref } from '@/lib/moduleNav';
 import { blurActiveElement } from '@/lib/a11y';
-import { fonts, radius, shadows, spacing } from '@/constants/theme';
+import { fonts, radius, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
 
 type AddItem = {
@@ -49,118 +42,187 @@ type AddItem = {
   href: Href;
 };
 
-type AddGroup = {
+type HubCard = {
   title: string;
-  hint: string;
-  items: AddItem[];
-};
-
-type ModuleRow = {
-  title: string;
-  subtitle: string;
   icon: Icon3DName;
   href: string;
-  count?: number;
+  count: number;
+  dots: DotTone;
 };
 
+/**
+ * Life tab = module hub. Soft tinted cards with a tight dotted fade.
+ */
 export default function SpacesScreen() {
-  const { colors } = useTheme();
+  const { colors, resolved } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { spaces } = useSpaces();
   const { items } = useInventory();
   const { expenses } = useExpenses();
   const { habits } = useHabits();
   const { packs: classPacks } = useClasses();
-  const { members } = useHousehold();
-  const { items: lastDoneItems } = useLastDone();
   const { subscriptions } = useSubscriptions();
-  const scrollRef = useRef<ScrollView>(null);
+  const { members } = useHousehold();
+  const { items: lastDone } = useLastDone();
+  const { isDismissed } = useAttentionDismissals();
   const [addOpen, setAddOpen] = useState(false);
   const [profileName, setProfileName] = useState('');
+  const [gridH, setGridH] = useState(0);
   const profileLetter = selfAvatarInitial(profileName, members);
+  const dockClearance = Math.max(insets.bottom, 10) + 96;
+  const rowGap = spacing.md;
+  const rowH =
+    gridH > 0 ? Math.max(120, (gridH - rowGap * 2) / 3) : undefined;
 
-  const addGroups = useMemo((): AddGroup[] => {
-    const spaceIdFor = (kind: 'home' | 'vehicle' | 'documents' | 'family') =>
-      spaces.find((s) => s.kind === kind)?.id;
+  function onGridLayout(e: LayoutChangeEvent) {
+    const next = e.nativeEvent.layout.height;
+    if (Math.abs(next - gridH) > 1) setGridH(next);
+  }
 
+  const taskCount = useMemo(
+    () =>
+      openAttentionQueue(items, lastDone, subscriptions, classPacks).filter(
+        (a) => !isDismissed(a.id)
+      ).length,
+    [items, lastDone, subscriptions, classPacks, isDismissed]
+  );
+
+  const light = resolved === 'light';
+  // Muted fallbacks for ink/mono — distinct hues, low candy.
+  const hub: HubCard[] = [
+    {
+      title: 'Things',
+      icon: 'package',
+      href: '/things',
+      count: items.length,
+      dots: {
+        bg: hubCardBg(colors.accent, light, '#6A7D5C'),
+        dot: isNearGray(colors.accent) ? '#6A7D5C' : colors.accent,
+      },
+    },
+    {
+      title: 'Expenses',
+      icon: 'wallet',
+      href: '/expenses',
+      count: expenses.length,
+      dots: {
+        bg: hubCardBg(colors.amber, light, '#A8884A'),
+        dot: colors.amber,
+      },
+    },
+    {
+      title: 'Subscriptions',
+      icon: 'credit',
+      href: '/subscriptions',
+      count: subscriptions.length,
+      dots: {
+        bg: hubCardBg(colors.violet, light, '#7A6E8E'),
+        dot: isNearGray(colors.violet) ? '#7A6E8E' : colors.violet,
+      },
+    },
+    {
+      title: 'Classes',
+      icon: 'today',
+      href: '/classes',
+      count: classPacks.length,
+      dots: {
+        bg: hubCardBg(colors.sky, light, '#5E7A8C'),
+        dot: isNearGray(colors.sky) ? '#5E7A8C' : colors.sky,
+      },
+    },
+    {
+      title: 'Habits',
+      icon: 'check',
+      href: '/habits',
+      count: habits.length,
+      dots: {
+        bg: hubCardBg(colors.coral, light, '#A66A5C'),
+        dot: colors.coral,
+      },
+    },
+    {
+      title: 'Tasks',
+      icon: 'tasks',
+      href: '/tasks',
+      count: taskCount,
+      dots: {
+        bg: hubCardBg('#5A7D76', light, '#5A7D76'),
+        dot: '#5A7D76',
+      },
+    },
+  ];
+
+  const rows: HubCard[][] = [
+    hub.slice(0, 2),
+    hub.slice(2, 4),
+    hub.slice(4, 6),
+  ];
+
+  const addGroups = useMemo(() => {
     const capture = (
       title: string,
       subtitle: string,
       icon: Icon3DName,
-      kind: CaptureContextKind,
-      spaceKind?: 'home' | 'vehicle' | 'documents' | 'family'
+      kind: CaptureContextKind
     ): AddItem => ({
       title,
       subtitle,
       icon,
-      href: captureHref({
-        kind,
-        spaceId: spaceKind ? spaceIdFor(spaceKind) : undefined,
-      }),
+      href: captureHref({ kind }),
     });
 
     return [
       {
         title: 'Capture',
-        hint: 'Photograph into inventory — vehicles, docs, and most Things.',
+        hint: 'Photo into inventory',
         items: [
           capture('Thing', 'Anything you own', 'camera', 'general'),
-          capture('Vehicle', 'Car, bike, registration', 'car', 'vehicle', 'vehicle'),
-          capture('Document', 'Passport, ID, legal', 'folder', 'documents', 'documents'),
+          capture('Vehicle', 'Car, bike, registration', 'car', 'vehicle'),
+          capture('Document', 'Passport, ID, legal', 'folder', 'documents'),
           capture('Purchase', 'Receipt or new buy', 'package', 'purchase'),
-          capture('Warranty', 'Card or coverage paper', 'receipt', 'warranty'),
-          capture('Insurance', 'Policy or card', 'shield', 'insurance'),
         ],
       },
       {
         title: 'Create',
-        hint: 'Forms — not a photo.',
+        hint: 'Without a photo',
         items: [
-          {
-            title: 'Space',
-            subtitle: 'Home, place, or group',
-            icon: 'house',
-            href: '/space/create' as Href,
-          },
           {
             title: 'Expense',
             subtitle: 'Log spend',
-            icon: 'wallet',
+            icon: 'wallet' as Icon3DName,
             href: '/expenses/create' as Href,
           },
           {
             title: 'Subscription',
             subtitle: 'Recurring bill',
-            icon: 'credit',
+            icon: 'credit' as Icon3DName,
             href: '/subscriptions/create' as Href,
           },
           {
             title: 'Habit',
             subtitle: 'Track a streak',
-            icon: 'check',
+            icon: 'check' as Icon3DName,
             href: '/habits/create' as Href,
           },
           {
             title: 'Class pack',
-            subtitle: '24 sessions in a window',
-            icon: 'today',
+            subtitle: 'Sessions in a window',
+            icon: 'today' as Icon3DName,
             href: '/classes/create' as Href,
           },
           {
             title: 'Person',
-            subtitle: 'Family or household',
-            icon: 'family',
+            subtitle: 'Add in Household',
+            icon: 'family' as Icon3DName,
             href: '/family/create' as Href,
           },
         ],
       },
     ];
-  }, [spaces]);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
-      scrollRef.current?.scrollTo({ y: 0, animated: false });
       setAddOpen(false);
       void saveHomeSurface('things');
       void loadLocalProfile().then((p) => setProfileName(p.displayName));
@@ -179,69 +241,8 @@ export default function SpacesScreen() {
   function pickAdd(href: Href) {
     blurActiveElement();
     setAddOpen(false);
-    // Let the sheet unmount before stack push (same pattern as Talk overlay).
     setTimeout(() => router.push(href), 40);
   }
-
-  const docCount = useMemo(() => {
-    const documentsSpaceId = spaceIdByKind(spaces, 'documents');
-    return items.filter((i) => isDocumentItem(i, documentsSpaceId)).length;
-  }, [items, spaces]);
-  const vehicleCount = useMemo(() => {
-    const vehicleSpaceId = spaceIdByKind(spaces, 'vehicle');
-    return items.filter((i) => isVehicleItem(i, vehicleSpaceId)).length;
-  }, [items, spaces]);
-  const purchaseCount = useMemo(
-    () => items.filter(isPurchaseItem).length,
-    [items]
-  );
-  const insuranceCount = useMemo(
-    () => items.filter(isInsuranceItem).length,
-    [items]
-  );
-
-  const groups: { title: string; rows: ModuleRow[] }[] = [
-    {
-      title: 'Money',
-      rows: [
-        { title: 'Expenses', subtitle: 'Spend & categories', icon: 'wallet', href: '/expenses', count: expenses.length },
-        { title: 'Subscriptions', subtitle: 'Recurring spend', icon: 'credit', href: '/subscriptions', count: subscriptions.length },
-        { title: 'Purchases', subtitle: 'Receipts & returns', icon: 'package', href: '/purchases', count: purchaseCount },
-        { title: 'Insurance', subtitle: 'Policies & renewals', icon: 'shield', href: '/insurance', count: insuranceCount },
-        { title: 'Warranties', subtitle: 'Coverage & expiry', icon: 'receipt', href: '/warranties' },
-      ],
-    },
-    {
-      title: 'Routines',
-      rows: [
-        { title: 'Habits', subtitle: 'Streaks & check-ins', icon: 'check', href: '/habits', count: habits.length },
-        { title: 'Classes', subtitle: 'Packs & remaining sessions', icon: 'today', href: '/classes', count: classPacks.length },
-      ],
-    },
-    {
-      title: 'Records',
-      rows: [
-        { title: 'Documents', subtitle: 'Identity & legal', icon: 'folder', href: '/documents', count: docCount },
-        { title: 'Vehicles', subtitle: 'Service & renewals', icon: 'car', href: '/vehicles', count: vehicleCount },
-        {
-          title: 'Maintenance',
-          subtitle: 'Service due on Things',
-          icon: 'tools',
-          href: '/maintenance',
-          count: lastDoneItems.length,
-        },
-        { title: 'Household', subtitle: 'People & pets', icon: 'family', href: '/family', count: members.length },
-      ],
-    },
-    {
-      title: 'More',
-      rows: [
-        { title: 'Tasks', subtitle: 'Due soon queue', icon: 'tasks', href: '/tasks' },
-        { title: 'Reports', subtitle: 'Counts, spend & renewals', icon: 'chart', href: '/reports' },
-        { title: 'Notifications', subtitle: 'Inbox', icon: 'bell', href: '/notifications' },
-      ],
-    },
-  ];
 
   return (
     <Screen>
@@ -250,76 +251,55 @@ export default function SpacesScreen() {
         avatarLetter={profileLetter}
         onAdd={openAdd}
       />
-      <ScrollView
-        ref={scrollRef}
-        contentContainerStyle={[
-          styles.content,
-          { paddingBottom: insets.bottom + 100 },
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
-        <Text variant="body" style={styles.lead}>
-          Spaces, money, routines, records — everything you track.
-        </Text>
-
-        <Text style={[styles.sectionTitle, { marginTop: spacing.lg, color: colors.ink }]}>Spaces</Text>
-        <View style={styles.grid}>
-          {spaces.map((space, index) => {
-            const count = items.filter((i) => i.spaceId === space.id).length;
-            return (
-              <Animated.View
-                key={space.id}
-                entering={FadeInDown.delay(40 + index * 30).springify().damping(18)}
-                style={styles.gridItem}
-              >
-                <Card
-                  style={styles.card}
-                  onPress={() => router.push(moduleHref(`/space/${space.id}`, 'things'))}
-                >
-                  <View style={styles.cardTop}>
-                    <Icon3DBadge name={space.icon} size={48} />
-                    {count > 0 ? (
-                      <View style={[styles.countPill, { backgroundColor: colors.accentSoft }]}>
-                        <Text style={[styles.countPillText, { color: colors.accent }]}>{count}</Text>
+      <View style={[styles.body, { paddingBottom: dockClearance }]}>
+        <View style={styles.grid} onLayout={onGridLayout}>
+          {rows.map((row, rowIndex) => (
+            <View
+              key={`row-${rowIndex}`}
+              style={[styles.gridRow, rowH != null && { height: rowH }]}
+            >
+              {row.map((card) => (
+                <View key={card.href} style={styles.gridItem}>
+                  <Pressable
+                    onPress={() => router.push(moduleHref(card.href, 'things'))}
+                    style={({ pressed }) => [
+                      styles.cardShell,
+                      { borderColor: colors.line },
+                      pressed && { opacity: 0.92, transform: [{ scale: 0.985 }] },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={card.title}
+                  >
+                    <DotField tone={card.dots} />
+                    <View style={styles.cardFill}>
+                      <View style={styles.cardTop}>
+                        <AppIcon name={card.icon} size={48} tone="soft" />
+                        {card.count > 0 ? (
+                          <View
+                            style={[
+                              styles.countPill,
+                              { backgroundColor: colors.surface },
+                            ]}
+                          >
+                            <Text
+                              style={[styles.countPillText, { color: colors.ink }]}
+                            >
+                              {card.count}
+                            </Text>
+                          </View>
+                        ) : null}
                       </View>
-                    ) : null}
-                  </View>
-                  <Text variant="headline" style={{ marginTop: spacing.sm }}>
-                    {space.name}
-                  </Text>
-                  <Text variant="caption" style={{ marginTop: 2 }} numberOfLines={1}>
-                    {space.meta}
-                  </Text>
-                </Card>
-              </Animated.View>
-            );
-          })}
-        </View>
-
-        {groups.map((group, groupIndex) => (
-          <Animated.View
-            key={group.title}
-            entering={FadeInDown.delay(120 + groupIndex * 50).springify().damping(18)}
-          >
-            <Text style={[styles.sectionTitle, { marginTop: spacing.xxl, color: colors.ink }]}>
-              {group.title}
-            </Text>
-            <ListCard>
-              {group.rows.map((row, rowIndex) => (
-                <ListRow
-                  key={row.href}
-                  icon={row.icon}
-                  title={row.title}
-                  subtitle={row.subtitle}
-                  meta={row.count ? String(row.count) : undefined}
-                  last={rowIndex === group.rows.length - 1}
-                  onPress={() => router.push(moduleHref(row.href, 'things'))}
-                />
+                      <Text style={[styles.cardTitle, { color: colors.ink }]}>
+                        {card.title}
+                      </Text>
+                    </View>
+                  </Pressable>
+                </View>
               ))}
-            </ListCard>
-          </Animated.View>
-        ))}
-      </ScrollView>
+            </View>
+          ))}
+        </View>
+      </View>
 
       <Modal
         visible={addOpen}
@@ -327,7 +307,10 @@ export default function SpacesScreen() {
         animationType="fade"
         onRequestClose={closeAdd}
       >
-        <Pressable style={[styles.sheetScrim, { backgroundColor: colors.overlay }]} onPress={closeAdd}>
+        <Pressable
+          style={[styles.sheetScrim, { backgroundColor: colors.overlay }]}
+          onPress={closeAdd}
+        >
           <Pressable
             style={[
               styles.sheet,
@@ -349,7 +332,9 @@ export default function SpacesScreen() {
             >
               {addGroups.map((group) => (
                 <View key={group.title} style={styles.sheetGroup}>
-                  <Text style={[styles.sheetGroupTitle, { color: colors.ink }]}>{group.title}</Text>
+                  <Text style={[styles.sheetGroupTitle, { color: colors.ink }]}>
+                    {group.title}
+                  </Text>
                   <Text variant="caption" style={styles.sheetGroupHint}>
                     {group.hint}
                   </Text>
@@ -396,31 +381,36 @@ export default function SpacesScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: {
+  body: {
+    flex: 1,
     paddingHorizontal: spacing.lg,
-  },
-  lead: {
-    marginTop: 2,
-    marginBottom: spacing.sm,
-  },
-  sectionTitle: {
-    fontFamily: fonts.sansSemi,
-    fontSize: 19,
-    lineHeight: 24,
-    letterSpacing: -0.3,
-    marginBottom: spacing.md,
+    paddingTop: spacing.sm,
   },
   grid: {
+    flex: 1,
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  gridRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: spacing.md,
   },
   gridItem: {
-    width: '47.8%',
+    flex: 1,
+    height: '100%',
   },
-  card: {
-    minHeight: 132,
-    padding: spacing.md,
+  cardShell: {
+    flex: 1,
+    height: '100%',
+    borderRadius: radius.xl,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  cardFill: {
+    flex: 1,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    justifyContent: 'space-between',
   },
   cardTop: {
     flexDirection: 'row',
@@ -428,16 +418,21 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   countPill: {
-    minWidth: 26,
-    height: 22,
-    paddingHorizontal: 7,
-    borderRadius: radius.full,
+    minWidth: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 9,
   },
   countPillText: {
     fontFamily: fonts.sansSemi,
-    fontSize: 16,
+    fontSize: 13,
+  },
+  cardTitle: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 20,
+    letterSpacing: -0.3,
   },
   sheetScrim: {
     flex: 1,
@@ -446,8 +441,8 @@ const styles = StyleSheet.create({
   sheet: {
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
+    paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
-    ...shadows.float,
   },
   sheetHandle: {
     alignSelf: 'center',
@@ -459,20 +454,14 @@ const styles = StyleSheet.create({
   sheetTitle: {
     fontFamily: fonts.sansSemi,
     fontSize: 20,
-    lineHeight: 24,
-    letterSpacing: -0.3,
     marginBottom: spacing.md,
-    paddingHorizontal: spacing.lg,
   },
   sheetGroup: {
-    paddingHorizontal: spacing.lg,
     marginBottom: spacing.lg,
   },
   sheetGroupTitle: {
     fontFamily: fonts.sansSemi,
-    fontSize: 16,
-    lineHeight: 20,
-    letterSpacing: -0.2,
+    fontSize: 15,
   },
   sheetGroupHint: {
     marginTop: 2,
@@ -482,14 +471,13 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
-    ...shadows.soft,
   },
   sheetRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    gap: 12,
     paddingHorizontal: spacing.md,
-    paddingVertical: 12,
+    paddingVertical: spacing.md,
   },
   sheetRowBorder: {
     borderBottomWidth: StyleSheet.hairlineWidth,

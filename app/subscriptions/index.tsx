@@ -44,7 +44,6 @@ export default function SubscriptionsScreen() {
   return (
     <ModuleScreen
       title="Subscriptions"
-      subtitle="Your recurring spend."
       defaultOrigin="things"
       right={
         <Pressable

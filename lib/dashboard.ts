@@ -17,13 +17,13 @@ export type DashRow = {
   icon: Icon3DName;
 };
 
+/** @deprecated Prefer DashRow on Today — kept for older test helpers. */
 export type ChecklistRow = {
   id: string;
   title: string;
   done: boolean;
   habitId?: string;
   href?: string;
-  /** Right-side hint: streak for done habits, owner name otherwise. */
   meta?: string;
 };
 
@@ -33,9 +33,15 @@ export type DashboardModel = {
   habitsOpen: number;
   /** Habits already checked in today — so a productive day shows, not vanishes. */
   habitsDone: number;
+  /** Open habits + attention due today — one list for the Today section. */
   today: DashRow[];
   next: DashRow[];
-  /** One compact list: open habits first, then everything checked off today. */
+  /** Habits / activities already completed today. */
+  doneToday: DashRow[];
+  /**
+   * Legacy compact checklist (open habits then done). Prefer `today` + `doneToday`.
+   * @deprecated
+   */
   checklist: ChecklistRow[];
   featured: DashRow | null;
 };
@@ -95,55 +101,97 @@ export function buildDashboard(input: {
     )
     .map(fromAttention);
 
-  const openHabitRows: ChecklistRow[] = input.habits
-    .filter((h) => !loggedOn(h, todayKey))
-    .map((h) => ({
+  const openHabits = input.habits.filter((h) => !loggedOn(h, todayKey));
+  const doneHabits = input.habits.filter((h) => loggedOn(h, todayKey));
+
+  const openHabitDash: DashRow[] = openHabits.map((h) => ({
+    id: `habit-${h.id}`,
+    title: h.title,
+    subtitle: ownerMeta(h.assignedTo) || 'Habit',
+    urgency: 'soon',
+    href: `/habits/${h.id}`,
+    habitId: h.id,
+    icon: 'sparkles',
+  }));
+
+  const doneHabitDash: DashRow[] = doneHabits.map((h) => {
+    const streak = currentStreak(h);
+    return {
       id: `habit-${h.id}`,
       title: h.title,
-      done: false,
-      habitId: h.id,
+      subtitle:
+        streak >= 2
+          ? `${streak}-day streak`
+          : ownerMeta(h.assignedTo) || 'Habit',
+      urgency: 'ok',
       href: `/habits/${h.id}`,
-      meta: ownerMeta(h.assignedTo),
-    }));
+      habitId: h.id,
+      icon: 'sparkles',
+    };
+  });
 
-  const doneHabitRows: ChecklistRow[] = input.habits
-    .filter((h) => loggedOn(h, todayKey))
-    .map((h) => {
-      const streak = currentStreak(h);
-      return {
-        id: `habit-${h.id}`,
-        title: h.title,
-        done: true,
-        href: `/habits/${h.id}`,
-        meta: streak >= 2 ? `${streak}d` : ownerMeta(h.assignedTo),
-      };
-    });
-
-  const activityDoneRows: ChecklistRow[] = input.lastDone
+  const activityDoneDash: DashRow[] = input.lastDone
     .filter((i) => i.logs?.[0]?.doneAt?.slice(0, 10) === todayKey)
     .map((i) => ({
-      id: `ld-${i.id}`,
+      id: `ld-done-${i.id}`,
       title: i.label,
-      done: true,
+      subtitle: ownerMeta(i.assignedTo) || 'Done today',
+      urgency: 'ok' as const,
       href: `/last-done/${i.id}`,
-      meta: ownerMeta(i.assignedTo),
+      lastDoneId: i.id,
+      icon: 'tools' as Icon3DName,
     }));
 
-  const checklist = [...openHabitRows, ...doneHabitRows, ...activityDoneRows];
-
-  const today = dedupeRows(todayAtt).slice(0, 8);
+  // Habits first (daily rhythm), then attention due today.
+  const today = dedupeRows([...openHabitDash, ...todayAtt]).slice(0, 12);
   const next = dedupeRows(nextAtt)
     .filter((row) => !today.some((t) => t.id === row.id))
     .slice(0, 8);
+  const doneToday = dedupeRows([...doneHabitDash, ...activityDoneDash]).slice(
+    0,
+    12
+  );
   const featured = today[0] ?? next[0] ?? null;
+
+  // Legacy shape for older tests / callers.
+  const checklist: ChecklistRow[] = [
+    ...openHabitDash.map((r) => ({
+      id: r.id,
+      title: r.title,
+      done: false,
+      habitId: r.habitId,
+      href: r.href,
+      meta: r.subtitle === 'Habit' ? undefined : r.subtitle,
+    })),
+    ...doneHabitDash.map((r) => ({
+      id: r.id,
+      title: r.title,
+      done: true,
+      habitId: r.habitId,
+      href: r.href,
+      meta: r.subtitle.includes('streak')
+        ? r.subtitle.replace('-day streak', 'd')
+        : r.subtitle === 'Habit'
+          ? undefined
+          : r.subtitle,
+    })),
+    ...activityDoneDash.map((r) => ({
+      id: r.id,
+      title: r.title,
+      done: true,
+      href: r.href,
+      meta: r.subtitle === 'Done today' ? undefined : r.subtitle,
+    })),
+  ];
 
   return {
     overdue,
     dueToday,
-    habitsOpen: openHabitRows.length,
-    habitsDone: doneHabitRows.length,
+    habitsOpen: openHabitDash.length,
+    habitsDone: doneHabitDash.length,
     today,
     next,
+    doneToday,
     checklist,
     featured,
   };

@@ -1,3 +1,4 @@
+import { DETAIL_DOCK_PAD } from '@/components/ui/DetailKit';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { ListCard, ListRow } from '@/components/ui/ListKit';
 import { Text } from '@/components/ui/Text';
@@ -7,9 +8,9 @@ export default function PrivacySettingsScreen() {
   return (
     <ModuleScreen
       title="Privacy"
-      subtitle="Your data, your cloud. Never sold, never shared."
       backLabel="Settings"
       backFallbackHref="/settings"
+      bottomExtra={DETAIL_DOCK_PAD}
     >
       <Text variant="body" style={{ marginBottom: spacing.lg }}>
         Saavi stores your inventory, family, spend, habits, and documents

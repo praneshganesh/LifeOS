@@ -348,7 +348,6 @@ export default function LastDoneModal() {
     return (
       <ModuleScreen
         title="Set a reminder"
-        subtitle="Name it, pick a future date — we’ll nudge you then."
         defaultOrigin={defaultOrigin}
       >
         <View style={[styles.composer, { marginBottom: spacing.md }]}>
@@ -473,11 +472,6 @@ export default function LastDoneModal() {
   return (
     <ModuleScreen
       title="Just did something?"
-      subtitle={
-        linkedThing
-          ? `Logging for ${linkedThing.name}. Type once — next time it’s here to tap.`
-          : 'Type once — next time it’s here to tap.'
-      }
       defaultOrigin={defaultOrigin}
     >
       {linkedThing ? (
@@ -869,7 +863,7 @@ export default function LastDoneModal() {
             Nothing here yet
           </Text>
           <Text variant="caption" style={styles.emptyHint}>
-            AC filter, car service, Emirates ID — type above to start.
+            Type above to start.
           </Text>
         </View>
       ) : null}

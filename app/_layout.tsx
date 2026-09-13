@@ -14,10 +14,12 @@ import {
 import { fonts } from '@/constants/theme';
 import { BrandSplash } from '@/components/BrandSplash';
 import { OnboardingGate } from '@/components/OnboardingGate';
+import { PlanGate } from '@/components/PlanGate';
 import { AppLockGate } from '@/components/AppLockGate';
 import { NotificationDeepLinkHost } from '@/components/NotificationDeepLinkHost';
 import { ThemeProvider, useTheme } from '@/lib/ThemeContext';
 import { CloudGate } from '@/lib/cloud/CloudGate';
+import { PlanProvider } from '@/lib/PlanContext';
 import { LastDoneProvider } from '@/lib/LastDoneContext';
 import { InventoryProvider } from '@/lib/InventoryContext';
 import { SpacesProvider } from '@/lib/SpacesContext';
@@ -76,6 +78,9 @@ function RootNavigation({
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+        <Stack.Screen name="paywall" options={{ headerShown: false }} />
+        <Stack.Screen name="invite/index" options={{ headerShown: false }} />
+        <Stack.Screen name="invite/[code]" options={{ headerShown: false }} />
         <Stack.Screen name="asset/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="asset/edit/[id]" options={{ title: 'Edit', headerBackTitle: 'Cancel' }} />
         <Stack.Screen name="space" options={{ headerShown: false }} />
@@ -113,6 +118,7 @@ function RootNavigation({
         <Stack.Screen name="tasks/index" options={{ headerShown: false }} />
         <Stack.Screen name="notifications/index" options={{ headerShown: false }} />
         <Stack.Screen name="reports/index" options={{ headerShown: false }} />
+        <Stack.Screen name="things/index" options={{ headerShown: false }} />
       </Stack>
       {!showBrandSplash ? <TalkOverlayHost /> : null}
       {showBrandSplash ? <BrandSplash onFinished={onBrandSplashFinished} /> : null}
@@ -149,6 +155,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#0D0D0F' }}>
       <ThemeProvider>
         <CloudGate>
+        <PlanProvider>
         <LastDoneProvider>
           <InventoryProvider>
             <SpacesProvider>
@@ -162,10 +169,12 @@ export default function RootLayout() {
                             <CurrencyProvider>
                             <AppLockGate>
                               <OnboardingGate>
+                                <PlanGate>
                                 <RootNavigation
                                   showBrandSplash={showBrandSplash}
                                   onBrandSplashFinished={finishBrandSplash}
                                 />
+                                </PlanGate>
                               </OnboardingGate>
                             </AppLockGate>
                             </CurrencyProvider>
@@ -179,6 +188,7 @@ export default function RootLayout() {
             </SpacesProvider>
           </InventoryProvider>
         </LastDoneProvider>
+        </PlanProvider>
         </CloudGate>
       </ThemeProvider>
     </GestureHandlerRootView>

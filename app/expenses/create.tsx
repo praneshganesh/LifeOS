@@ -1,15 +1,17 @@
 import { useTheme } from '@/lib/ThemeContext';
 import { useMemo, useEffect, useState } from 'react';
-import {
-  Alert,
-  Pressable,
-  StyleSheet,
-  TextInput,
-  View,
-} from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { Screen } from '@/components/ui/Screen';
 import { KeyboardFormScroll } from '@/components/ui/KeyboardFormScroll';
+import {
+  DetailChip,
+  DetailChipRow,
+  DetailField,
+  DetailPrimaryButton,
+  DetailSection,
+  DETAIL_DOCK_PAD,
+} from '@/components/ui/DetailKit';
 import { Text } from '@/components/ui/Text';
 import { DateField } from '@/components/ui/DateField';
 import { useExpenses } from '@/lib/ExpensesContext';
@@ -22,7 +24,7 @@ import {
   type ExpenseCategory,
 } from '@/lib/expenses';
 import { localDayKey } from '@/lib/dates';
-import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
+import { type ThemeColors, spacing } from '@/constants/theme';
 
 export default function ExpenseFormScreen() {
   const { colors } = useTheme();
@@ -36,6 +38,7 @@ export default function ExpenseFormScreen() {
   const existing = editId ? getById(editId) : undefined;
   const editing = Boolean(existing);
   const currency = existing?.currency || defaultCurrency;
+  const accent = colors.forest;
 
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
@@ -124,141 +127,75 @@ export default function ExpenseFormScreen() {
   return (
     <Screen>
       <Stack.Screen options={{ title: editing ? 'Edit expense' : 'Add expense' }} />
-      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={40}>
-          <Text style={styles.label}>What for</Text>
-          <TextInput
+      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={DETAIL_DOCK_PAD}>
+        <DetailSection label="What for">
+          <DetailField
             value={title}
             onChangeText={setTitle}
             placeholder="e.g. Groceries"
-            placeholderTextColor={colors.faint}
-            style={styles.input}
             autoFocus={!editing}
           />
+        </DetailSection>
 
-          <Text style={styles.label}>Amount ({currency})</Text>
-          <TextInput
+        <DetailSection label={`Amount (${currency})`}>
+          <DetailField
             value={amount}
             onChangeText={(t) => setAmount(sanitizeAmountInput(t))}
             placeholder="0.00"
-            placeholderTextColor={colors.faint}
-            style={styles.input}
             keyboardType="decimal-pad"
           />
+        </DetailSection>
 
-          <Text style={styles.label}>Merchant (optional)</Text>
-          <TextInput
+        <DetailSection label="Merchant">
+          <DetailField
             value={merchant}
             onChangeText={setMerchant}
             placeholder="e.g. Carrefour"
-            placeholderTextColor={colors.faint}
-            style={styles.input}
           />
+        </DetailSection>
 
-          <Text style={styles.label}>Date</Text>
+        <DetailSection label="Date">
           <DateField value={date} onChange={setDate} />
+        </DetailSection>
 
-          <Text style={styles.label}>Note (optional)</Text>
-          <TextInput
+        <DetailSection label="Note">
+          <DetailField
             value={note}
             onChangeText={setNote}
             placeholder="e.g. Split with Maya"
-            placeholderTextColor={colors.faint}
-            style={styles.input}
           />
+        </DetailSection>
 
-          <Text style={styles.label}>Category</Text>
-          <View style={styles.chips}>
-            {EXPENSE_CATEGORIES.map((c) => {
-              const on = category === c.id;
-              return (
-                <Pressable
-                  key={c.id}
-                  onPress={() => setCategory(c.id)}
-                  style={[styles.chip, on && styles.chipOn]}
-                >
-                  <Text style={[styles.chipText, on && styles.chipTextOn]}>{c.label}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
+        <DetailSection label="Category">
+          <DetailChipRow>
+            {EXPENSE_CATEGORIES.map((c) => (
+              <DetailChip
+                key={c.id}
+                label={c.label}
+                selected={category === c.id}
+                onPress={() => setCategory(c.id)}
+                accent={accent}
+              />
+            ))}
+          </DetailChipRow>
+        </DetailSection>
 
-          <Pressable
-            onPress={() => void save()}
-            disabled={!canSave || saving}
-            style={[styles.save, (!canSave || saving) && styles.saveDisabled]}
-          >
-            <Text style={styles.saveText}>
-              {saving ? 'Saving…' : editing ? 'Save changes' : 'Save expense'}
-            </Text>
-          </Pressable>
-        </KeyboardFormScroll>
+        <DetailPrimaryButton
+          label={saving ? 'Saving…' : editing ? 'Save changes' : 'Save expense'}
+          accent={accent}
+          disabled={!canSave || saving}
+          onPress={() => void save()}
+        />
+      </KeyboardFormScroll>
     </Screen>
   );
 }
 
-function makeStyles(colors: ThemeColors) {
+function makeStyles(_colors: ThemeColors) {
   return StyleSheet.create({
-  content: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xs,
-  },
-  label: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    color: colors.mute,
-    marginBottom: spacing.sm,
-    marginTop: spacing.md,
-  },
-  input: {
-    backgroundColor: colors.white,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 14,
-    fontFamily: fonts.sans,
-    fontSize: 16,
-    color: colors.ink,
-  },
-  chips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: radius.md,
-    backgroundColor: colors.white,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-  },
-  chipOn: {
-    backgroundColor: colors.forestSoft,
-    borderColor: colors.forest,
-  },
-  chipText: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    color: colors.ink,
-  },
-  chipTextOn: {
-    color: colors.forest,
-  },
-  save: {
-    marginTop: spacing.xl,
-    backgroundColor: colors.forest,
-    borderRadius: radius.md,
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  saveDisabled: {
-    opacity: 0.45,
-  },
-  saveText: {
-    fontFamily: fonts.sansSemi,
-    fontSize: 16,
-    color: colors.forestOn,
-  },
-});
+    content: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.xs,
+    },
+  });
 }

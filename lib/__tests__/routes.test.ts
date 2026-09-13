@@ -161,6 +161,25 @@ describe('reminder speech', () => {
     assert.equal(parseReminderFromUtterance(utterance)?.label, 'Stretch');
   });
 
+  it('drops leading for from reminder titles', () => {
+    assert.equal(
+      reminderLabelFromUtterance(
+        'Set a reminder for PE uniform every Tuesday and Friday'
+      ),
+      'PE uniform'
+    );
+    assert.equal(
+      reminderLabelFromUtterance(
+        'Remind me for PE uniform in the morning every Tuesday and Friday'
+      ),
+      'PE uniform in the morning'
+    );
+    assert.equal(
+      reminderLabelFromUtterance('Can you set a reminder for school bag'),
+      'School bag'
+    );
+  });
+
   it('parses end after N weeks, months, or until a month', () => {
     const wed = new Date(2026, 8, 9, 12, 0, 0);
     const weeks = parseRecurringWeekdayReminder(

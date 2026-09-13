@@ -59,5 +59,6 @@ export function normalizeInventoryItem(raw: unknown): InventoryItem | null {
       typeof r.createdAt === 'string' && r.createdAt
         ? r.createdAt
         : new Date().toISOString(),
+    updatedAt: typeof r.updatedAt === 'string' ? r.updatedAt : undefined,
   };
 }

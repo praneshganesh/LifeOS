@@ -1,4 +1,5 @@
 import { localDayKey } from '@/lib/dates';
+import { newUuid } from '@/lib/ids';
 
 export type RemindUnit = 'days' | 'months' | 'weekdays';
 
@@ -48,6 +49,8 @@ export type LastDoneItem = {
    * rolls remindAt forward from the new done date.
    */
   remindInterval?: RemindInterval;
+  /** Last local mutation time — the last-write-wins clock for row sync. */
+  updatedAt?: string;
 };
 
 export type LogDoneInput = {
@@ -355,6 +358,7 @@ export function normalizeItem(raw: unknown): LastDoneItem | null {
     item.assignedTo = r.assignedTo.trim();
   }
   if (typeof r.remindAt === 'string') item.remindAt = r.remindAt;
+  if (typeof r.updatedAt === 'string') item.updatedAt = r.updatedAt;
   if (typeof r.notes === 'string' && r.notes.trim()) {
     item.notes = r.notes.trim();
   }
@@ -549,7 +553,7 @@ export function createLastDoneItem(
 ): LastDoneItem {
   const createdAt = new Date().toISOString();
   const item: LastDoneItem = {
-    id: `ld-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    id: newUuid(),
     label: normalizeLabel(label),
     createdAt,
     logs: opts.doneAt === null ? [] : [createLogEntry(opts.doneAt ?? new Date())],

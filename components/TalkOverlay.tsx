@@ -61,21 +61,21 @@ import {
   loadTalkVoicePrefs,
   saveTalkVoicePrefs,
 } from '@/lib/talkVoicePrefs';
+import { mergeFinalSpeechPart } from '@/lib/speechAccumulate';
 import { fonts, radius, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
 
 type Phase = 'idle' | 'listening' | 'thinking' | 'reply';
 
+/** Pause after last speech before we send to AI — slow reminders need room to breathe. */
+const SPEECH_COMMIT_MS = 1800;
+
 const isExpoGo = Constants.appOwnership === 'expo';
 
 function ListeningAura({
   active,
-  outer,
-  inner,
 }: {
   active: boolean;
-  outer: string;
-  inner: string;
 }) {
   const pulse = useSharedValue(0);
   const pulseLate = useSharedValue(0);
@@ -89,57 +89,60 @@ function ListeningAura({
       return;
     }
     pulse.value = withRepeat(
-      withTiming(1, { duration: 2000, easing: Easing.out(Easing.ease) }),
+      withTiming(1, { duration: 2800, easing: Easing.out(Easing.ease) }),
       -1,
       false
     );
     const t = setTimeout(() => {
       pulseLate.value = withRepeat(
-        withTiming(1, { duration: 2000, easing: Easing.out(Easing.ease) }),
+        withTiming(1, { duration: 2800, easing: Easing.out(Easing.ease) }),
         -1,
         false
       );
-    }, 700);
+    }, 900);
     return () => clearTimeout(t);
   }, [active, pulse, pulseLate]);
 
   const outerStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 0.7 + pulse.value * 0.55 }],
-    opacity: (1 - pulse.value) * 0.4,
+    transform: [{ scale: 0.85 + pulse.value * 0.45 }],
+    opacity: (1 - pulse.value) * 0.28,
   }));
 
   const innerStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 0.75 + pulseLate.value * 0.4 }],
-    opacity: (1 - pulseLate.value) * 0.5,
+    transform: [{ scale: 0.9 + pulseLate.value * 0.32 }],
+    opacity: (1 - pulseLate.value) * 0.22,
   }));
 
   if (!active) return null;
 
   return (
     <>
-      <Animated.View
-        style={[styles.ring, styles.ringOuter, { backgroundColor: outer }, outerStyle]}
-      />
-      <Animated.View
-        style={[styles.ring, styles.ringInner, { backgroundColor: inner }, innerStyle]}
-      />
+      <Animated.View style={[styles.ring, styles.ringOuter, outerStyle]} />
+      <Animated.View style={[styles.ring, styles.ringInner, innerStyle]} />
     </>
   );
 }
 
-function AnimatedListeningOrb({ busy }: { busy: boolean }) {
+/** Soft ChatGPT-like listening orb — no mic glyph while live. */
+function AnimatedListeningOrb({
+  busy,
+  live,
+}: {
+  busy: boolean;
+  live: boolean;
+}) {
   const { colors } = useTheme();
   const spin = useSharedValue(0);
   const breathe = useSharedValue(0);
 
   useEffect(() => {
     spin.value = withRepeat(
-      withTiming(1, { duration: 7000, easing: Easing.linear }),
+      withTiming(1, { duration: live ? 9000 : 7000, easing: Easing.linear }),
       -1,
       false
     );
     breathe.value = withRepeat(
-      withTiming(1, { duration: 1600, easing: Easing.inOut(Easing.ease) }),
+      withTiming(1, { duration: live ? 2200 : 1600, easing: Easing.inOut(Easing.ease) }),
       -1,
       true
     );
@@ -147,31 +150,41 @@ function AnimatedListeningOrb({ busy }: { busy: boolean }) {
       cancelAnimation(spin);
       cancelAnimation(breathe);
     };
-  }, [spin, breathe]);
+  }, [spin, breathe, live]);
 
   const spinStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${spin.value * 360}deg` }],
   }));
 
   const breatheStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 + breathe.value * 0.06 }],
+    transform: [{ scale: 1 + breathe.value * (live ? 0.08 : 0.04) }],
   }));
 
   return (
-    <Animated.View style={[styles.orbClip, breatheStyle]}>
+    <Animated.View style={[styles.orbClip, live && styles.orbClipLive, breatheStyle]}>
       <Animated.View style={[styles.gradientSpin, spinStyle]}>
         <LinearGradient
-          colors={[...colors.listenGradient]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
+          colors={
+            live
+              ? [colors.listenGradient[0]!, colors.listenGradient[2]!, colors.listenGradient[1]!, colors.listenGradient[0]!]
+              : [...colors.listenGradient]
+          }
+          start={{ x: 0.15, y: 0.1 }}
+          end={{ x: 0.9, y: 0.95 }}
           style={StyleSheet.absoluteFill}
         />
       </Animated.View>
+      {/* Soft vignette so the orb reads as a glow, not a hard disc */}
+      <LinearGradient
+        colors={['transparent', 'rgba(0,0,0,0.22)']}
+        style={styles.orbVignette}
+        pointerEvents="none"
+      />
       <View style={styles.orbFace} pointerEvents="none">
         {busy ? (
-          <ActivityIndicator color={colors.onInk} />
-        ) : (
-          <Mic size={32} color={colors.onInk} strokeWidth={2} />
+          <ActivityIndicator color="#FFFFFF" />
+        ) : live ? null : (
+          <Mic size={30} color="#FFFFFF" strokeWidth={2} />
         )}
       </View>
     </Animated.View>
@@ -371,12 +384,16 @@ export function TalkOrb() {
     [goToTalkFocus]
   );
   const transcriptRef = useRef('');
+  /** Final ASR segments for continuous / slow dictation. */
+  const finalPartsRef = useRef<string[]>([]);
   const handledRef = useRef(false);
   const resumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const commitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const processUtteranceRef = useRef<(utterance: string) => Promise<void>>(
     async () => undefined
   );
   const startListenRef = useRef<() => Promise<void>>(async () => undefined);
+  const continueListenRef = useRef<() => Promise<void>>(async () => undefined);
 
   const stopRecognition = useCallback(() => {
     try {
@@ -397,11 +414,55 @@ export function TalkOrb() {
     }
   }, []);
 
+  const clearCommitTimer = useCallback(() => {
+    if (commitTimerRef.current) {
+      clearTimeout(commitTimerRef.current);
+      commitTimerRef.current = null;
+    }
+  }, []);
+
+  /** Wait for a real pause before sending to AI — slow reminders often pause mid-sentence. */
+  const scheduleCommit = useCallback(() => {
+    clearCommitTimer();
+    commitTimerRef.current = setTimeout(() => {
+      commitTimerRef.current = null;
+      const text = transcriptRef.current.trim();
+      if (!text) return;
+      if (!openRef.current || !sessionActiveRef.current) return;
+      if (handledRef.current || phaseRef.current === 'thinking') return;
+      void processUtteranceRef.current(text);
+    }, SPEECH_COMMIT_MS);
+  }, [clearCommitTimer]);
+
+  const mergeSpeechChunk = useCallback((chunk: string, isFinal: boolean) => {
+    const text = chunk.trim();
+    if (!text) return;
+    if (isFinal) {
+      finalPartsRef.current = mergeFinalSpeechPart(finalPartsRef.current, text);
+      transcriptRef.current = finalPartsRef.current.join(' ').trim();
+    } else {
+      const base = finalPartsRef.current.join(' ').trim();
+      // Prefer the longer live string when the engine re-sends the whole phrase.
+      if (!base) {
+        transcriptRef.current = text;
+      } else if (text.startsWith(base) || base.startsWith(text)) {
+        transcriptRef.current = text.length >= base.length ? text : base;
+      } else {
+        transcriptRef.current = `${base} ${text}`.trim();
+      }
+    }
+    setHeard(transcriptRef.current);
+  }, []);
+
   /** After a reply: speak it (if enabled), then resume continuous listen. */
   const afterReply = useCallback(
     (spoken: string, resumeMs = 900) => {
       clearResumeTimer();
+      let resumed = false;
       const resume = () => {
+        if (resumed) return;
+        resumed = true;
+        clearResumeTimer();
         if (sessionActiveRef.current && openRef.current) {
           void startListenRef.current();
         }
@@ -411,14 +472,26 @@ export function TalkOrb() {
         return;
       }
       stopSpeech();
-      Speech.speak(spoken.trim(), {
-        language: 'en-US',
-        rate: 1.0,
-        pitch: 1.0,
-        onDone: resume,
-        onStopped: resume,
-        onError: resume,
-      });
+      // Web (and some native paths) never fire Speech onDone/onError — always
+      // schedule a fallback so Talk keeps listening without another mic tap.
+      const wordCount = spoken.trim().split(/\s+/).filter(Boolean).length;
+      const estimateMs = Math.min(
+        14000,
+        Math.max(resumeMs + 600, Math.round(wordCount * 340) + 700)
+      );
+      resumeTimerRef.current = setTimeout(resume, estimateMs);
+      try {
+        Speech.speak(spoken.trim(), {
+          language: 'en-US',
+          rate: 1.0,
+          pitch: 1.0,
+          onDone: resume,
+          onStopped: resume,
+          onError: resume,
+        });
+      } catch {
+        resume();
+      }
     },
     [clearResumeTimer, stopSpeech]
   );
@@ -426,6 +499,7 @@ export function TalkOrb() {
   const failListen = useCallback(
     (message: string, opts?: { terminal?: boolean }) => {
       if (handledRef.current || phaseRef.current === 'thinking') return;
+      clearCommitTimer();
       stopRecognition();
       setPhase('idle');
       setError(message);
@@ -446,7 +520,7 @@ export function TalkOrb() {
         }, 900);
       }
     },
-    [clearResumeTimer, stopRecognition]
+    [clearResumeTimer, clearCommitTimer, stopRecognition]
   );
 
   const processUtterance = useCallback(
@@ -458,6 +532,7 @@ export function TalkOrb() {
       }
       if (handledRef.current || phaseRef.current === 'thinking') return;
       handledRef.current = true;
+      clearCommitTimer();
       stopRecognition();
 
       setHeard(text);
@@ -756,6 +831,7 @@ export function TalkOrb() {
       failListen,
       stopRecognition,
       clearResumeTimer,
+      clearCommitTimer,
       afterReply,
       closeTalk,
       goToItem,
@@ -772,6 +848,8 @@ export function TalkOrb() {
     if (!sessionActiveRef.current || !openRef.current) return;
     blurActiveElement();
     handledRef.current = false;
+    clearCommitTimer();
+    finalPartsRef.current = [];
     transcriptRef.current = '';
     setHeard('');
     setError('');
@@ -809,33 +887,74 @@ export function TalkOrb() {
       ExpoSpeechRecognitionModule.start({
         lang: 'en-US',
         interimResults: true,
-        continuous: false,
+        // Keep listening through mid-sentence pauses (long reminders / Talk).
+        continuous: true,
         requiresOnDeviceRecognition: false,
         addsPunctuation: false,
+        iosTaskHint: 'dictation',
+        androidIntentOptions: {
+          // Default OS silence cutoffs are ~1–3s and chop slow speech.
+          EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS: 8000,
+          EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS: 4000,
+        },
         contextualStrings: [...new Set([...fromInventory, ...fromExpenses])].slice(0, 40),
       });
     } catch {
       failListen('Couldn’t start listening — retrying…');
     }
-  }, [failListen, stopSpeech]);
+  }, [clearCommitTimer, failListen, stopSpeech]);
   startListenRef.current = startListen;
+
+  /** Restart the mic for the same turn — keeps transcript so slow speech can continue. */
+  const continueListen = useCallback(async () => {
+    if (!sessionActiveRef.current || !openRef.current) return;
+    if (handledRef.current || phaseRef.current === 'thinking') return;
+    if (isExpoGo) return;
+    try {
+      const available = ExpoSpeechRecognitionModule.isRecognitionAvailable();
+      if (!available) return;
+      setPhase('listening');
+      const fromInventory = inventoryRef.current
+        .flatMap((i) => [i.brand, i.name, i.room, i.purchasedFrom])
+        .filter((s): s is string => Boolean(s && s !== 'Unknown' && s !== '—'));
+      const fromExpenses = expensesRef.current
+        .flatMap((e) => [e.merchant, e.title])
+        .filter((s): s is string => Boolean(s && s !== 'Unknown' && s !== '—'));
+      ExpoSpeechRecognitionModule.start({
+        lang: 'en-US',
+        interimResults: true,
+        continuous: true,
+        requiresOnDeviceRecognition: false,
+        addsPunctuation: false,
+        iosTaskHint: 'dictation',
+        androidIntentOptions: {
+          EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS: 8000,
+          EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS: 4000,
+        },
+        contextualStrings: [...new Set([...fromInventory, ...fromExpenses])].slice(0, 40),
+      });
+    } catch {
+      /* scheduleCommit will still fire with what we have */
+    }
+  }, []);
+  continueListenRef.current = continueListen;
 
   useSpeechRecognitionEvent('result', (event) => {
     if (!openRef.current || !sessionActiveRef.current) return;
+    if (handledRef.current || phaseRef.current === 'thinking') return;
     const transcript = event.results?.[0]?.transcript?.trim();
     if (!transcript) return;
-    transcriptRef.current = transcript;
-    setHeard(transcript);
-    if (event.isFinal) {
-      void processUtteranceRef.current(transcript);
-    }
+    mergeSpeechChunk(transcript, Boolean(event.isFinal));
+    // Never send on the first final — wait for a real pause so slow speech
+    // isn't chopped mid-reminder.
+    scheduleCommit();
   });
 
   useSpeechRecognitionEvent('error', (event) => {
     if (!openRef.current || handledRef.current) return;
     if (event.error === 'aborted') return;
     if (transcriptRef.current) {
-      void processUtteranceRef.current(transcriptRef.current);
+      scheduleCommit();
       return;
     }
     if (event.error === 'not-allowed') {
@@ -854,7 +973,22 @@ export function TalkOrb() {
     if (!openRef.current || handledRef.current) return;
     if (phaseRef.current !== 'listening') return;
     if (transcriptRef.current) {
-      void processUtteranceRef.current(transcriptRef.current);
+      // Engine ended the session — still wait briefly so a restart can append
+      // more speech if the user was only pausing.
+      scheduleCommit();
+      clearResumeTimer();
+      resumeTimerRef.current = setTimeout(() => {
+        if (
+          !sessionActiveRef.current ||
+          !openRef.current ||
+          handledRef.current ||
+          phaseRef.current === 'thinking'
+        ) {
+          return;
+        }
+        // Continue the same turn — don't wipe what we already heard.
+        void continueListenRef.current();
+      }, 350);
       return;
     }
     // Silence — keep the session alive and listen again
@@ -876,6 +1010,8 @@ export function TalkOrb() {
       sessionActiveRef.current = false;
       handledRef.current = false;
       transcriptRef.current = '';
+      finalPartsRef.current = [];
+      clearCommitTimer();
       clearResumeTimer();
       stopSpeech();
       stopRecognition();
@@ -887,13 +1023,15 @@ export function TalkOrb() {
       // Keep focusItemId across Talk sessions — needed for “open the item”
     }
     return () => {
+      clearCommitTimer();
       clearResumeTimer();
       stopSpeech();
     };
-  }, [open, startListen, stopRecognition, clearResumeTimer, stopSpeech]);
+  }, [open, startListen, stopRecognition, clearResumeTimer, clearCommitTimer, stopSpeech]);
 
   function close() {
     sessionActiveRef.current = false;
+    clearCommitTimer();
     clearResumeTimer();
     stopSpeech();
     stopRecognition();
@@ -910,6 +1048,7 @@ export function TalkOrb() {
   function onOrbPress() {
     if (phase === 'listening') {
       if (transcriptRef.current) {
+        clearCommitTimer();
         void processUtterance(transcriptRef.current);
       }
       // else keep listening — no need to stop the session
@@ -938,33 +1077,37 @@ export function TalkOrb() {
       statusBarTranslucent
     >
       <View style={styles.orbRoot}>
-        <View style={styles.orbDim} />
+        <LinearGradient
+          colors={['#0A0A0C', '#111114', '#0A0A0C']}
+          style={StyleSheet.absoluteFill}
+        />
+        {/* Soft bottom ambient — Claude-like listening glow */}
+        {orbLive ? (
+          <LinearGradient
+            colors={['transparent', 'rgba(120,160,255,0.14)', 'rgba(180,200,255,0.08)']}
+            style={styles.bottomGlow}
+            pointerEvents="none"
+          />
+        ) : null}
 
         <View
-          style={[styles.closeBar, { top: insets.top + 14 }]}
+          style={[styles.closeBar, { top: insets.top + 12 }]}
           pointerEvents="box-none"
         >
           <Pressable
             onPress={() => void toggleSpeakReplies()}
-            style={[styles.voiceBtn, { backgroundColor: colors.surface }]}
+            style={styles.iconBtn}
             accessibilityLabel={
               speakReplies ? 'Mute spoken replies' : 'Unmute spoken replies'
             }
           >
             {speakReplies ? (
-              <Volume2 size={18} color={colors.ink} strokeWidth={2.4} />
+              <Volume2 size={20} color="rgba(255,255,255,0.85)" strokeWidth={2.2} />
             ) : (
-              <VolumeX size={18} color={colors.mute} strokeWidth={2.4} />
+              <VolumeX size={20} color="rgba(255,255,255,0.45)" strokeWidth={2.2} />
             )}
           </Pressable>
-          <Pressable
-            onPress={close}
-            style={[styles.closeBtn, { backgroundColor: colors.surface }]}
-            accessibilityLabel="Close Talk"
-          >
-            <X size={18} color={colors.ink} strokeWidth={2.4} />
-            <Text style={[styles.closeBtnText, { color: colors.ink }]}>Close</Text>
-          </Pressable>
+          <View style={{ flex: 1 }} />
         </View>
 
         {apiDown ? (
@@ -973,13 +1116,13 @@ export function TalkOrb() {
               styles.apiBanner,
               {
                 top: insets.top + 58,
-                backgroundColor: colors.amberSoft,
-                borderColor: colors.amber,
+                backgroundColor: 'rgba(246,199,122,0.16)',
+                borderColor: 'rgba(246,199,122,0.35)',
               },
             ]}
             pointerEvents="none"
           >
-            <Text style={[styles.apiBannerText, { color: colors.ink }]}>
+            <Text style={[styles.apiBannerText, { color: '#F6E7C5' }]}>
               Chat service offline — Capture and basic Talk still work.
             </Text>
           </View>
@@ -987,62 +1130,72 @@ export function TalkOrb() {
 
         <View style={styles.orbStage} pointerEvents="box-none">
           <View style={styles.orbCenter}>
-            <Text style={styles.statusLabel}>
-              {phase === 'listening'
-                ? 'Listening — keep talking'
-                : phase === 'thinking'
-                  ? 'Thinking…'
-                  : phase === 'reply'
-                    ? 'Listening again soon…'
-                    : 'Talk'}
-            </Text>
-
-            {heard ? <Text style={styles.heard}>“{heard}”</Text> : null}
+            {/* Live transcript sits above the orb — quiet, not quoted */}
+            <View style={styles.transcriptSlot}>
+              {heard && (phase === 'listening' || phase === 'thinking') ? (
+                <Text style={styles.heard} numberOfLines={5}>
+                  {heard}
+                </Text>
+              ) : null}
+              {!heard && phase === 'listening' ? (
+                <Text style={styles.statusQuiet}>Listening</Text>
+              ) : null}
+              {phase === 'thinking' && !heard ? (
+                <Text style={styles.statusQuiet}>Thinking</Text>
+              ) : null}
+              {phase === 'idle' && !reply ? (
+                <Text style={styles.statusQuiet}>Tap to talk</Text>
+              ) : null}
+            </View>
 
             <View style={styles.orbWrap}>
-              <ListeningAura
-                active={orbLive}
-                outer={colors.accentSoft}
-                inner={colors.amberSoft}
-              />
+              <ListeningAura active={orbLive} />
               <Pressable
                 onPress={onOrbPress}
                 style={styles.orbHit}
-                accessibilityLabel="Talk"
+                accessibilityLabel={
+                  phase === 'listening' ? 'Send what you said' : 'Talk'
+                }
               >
-                {orbLive ? (
-                  <AnimatedListeningOrb busy={false} />
-                ) : (
-                  <View
-                    style={[
-                      styles.orb,
-                      { backgroundColor: colors.accent },
-                      orbBusy && { backgroundColor: colors.accentStrong },
-                    ]}
-                  >
-                    {orbBusy ? (
-                      <ActivityIndicator color={colors.accentOn} />
-                    ) : (
-                      <Mic size={32} color={colors.accentOn} strokeWidth={2} />
-                    )}
-                  </View>
-                )}
+                <AnimatedListeningOrb busy={orbBusy} live={orbLive} />
               </Pressable>
             </View>
 
             <View style={styles.replySlot}>
-              {reply ? (
-                <View style={styles.replyBubble}>
-                  <Text style={styles.reply}>{reply}</Text>
-                </View>
+              {reply && phase !== 'listening' ? (
+                <Text style={styles.reply} numberOfLines={8}>
+                  {reply}
+                </Text>
               ) : null}
-              {error ? (
-                <View style={styles.errorBubble}>
-                  <Text style={styles.error}>{error}</Text>
-                </View>
-              ) : null}
+              {error ? <Text style={styles.error}>{error}</Text> : null}
             </View>
           </View>
+        </View>
+
+        <View
+          style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 16) + 8 }]}
+        >
+          <Pressable
+            onPress={onOrbPress}
+            style={[
+              styles.bottomMic,
+              orbLive && { backgroundColor: '#FFFFFF' },
+            ]}
+            accessibilityLabel={phase === 'listening' ? 'Finish speaking' : 'Start talking'}
+          >
+            <Mic
+              size={22}
+              color={orbLive ? '#0A0A0C' : 'rgba(255,255,255,0.92)'}
+              strokeWidth={2.2}
+            />
+          </Pressable>
+          <Pressable
+            onPress={close}
+            style={styles.bottomClose}
+            accessibilityLabel="Close Talk"
+          >
+            <X size={22} color="#0A0A0C" strokeWidth={2.4} />
+          </Pressable>
         </View>
       </View>
     </Modal>
@@ -1196,27 +1349,30 @@ const styles = StyleSheet.create({
   },
   orbRoot: {
     flex: 1,
+    backgroundColor: '#0A0A0C',
   },
-  orbDim: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(30, 24, 18, 0.74)',
-  },
-  closeBar: {
+  bottomGlow: {
     position: 'absolute',
     left: 0,
     right: 0,
+    bottom: 0,
+    height: 180,
+  },
+  closeBar: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
     zIndex: 3,
   },
-  voiceBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: radius.full,
+  iconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
   apiBanner: {
     position: 'absolute',
@@ -1230,94 +1386,70 @@ const styles = StyleSheet.create({
   },
   apiBannerText: {
     fontFamily: fonts.sans,
-    fontSize: 16,
+    fontSize: 15,
     textAlign: 'center',
-  },
-  closeBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: radius.full,
-  },
-  closeBtnText: {
-    fontFamily: fonts.sansSemi,
-    fontSize: 16,
   },
   orbStage: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: spacing.xl,
+    paddingBottom: 88,
   },
   orbCenter: {
     alignItems: 'center',
     width: '100%',
-    maxWidth: 340,
+    maxWidth: 360,
   },
-  statusLabel: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.75)',
-    marginBottom: spacing.md,
-    textAlign: 'center',
+  transcriptSlot: {
+    minHeight: 96,
     width: '100%',
+    justifyContent: 'flex-end',
+    marginBottom: spacing.lg,
+    paddingHorizontal: 8,
+  },
+  statusQuiet: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 17,
+    letterSpacing: -0.2,
+    color: 'rgba(255,255,255,0.45)',
+    textAlign: 'center',
   },
   heard: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 18,
-    lineHeight: 26,
-    color: '#FFFFFF',
+    fontFamily: fonts.sans,
+    fontSize: 20,
+    lineHeight: 28,
+    letterSpacing: -0.3,
+    color: 'rgba(255,255,255,0.78)',
     textAlign: 'center',
-    marginBottom: spacing.md,
-    width: '100%',
   },
   replySlot: {
     marginTop: spacing.xl,
-    minHeight: 88,
+    minHeight: 72,
     width: '100%',
     alignItems: 'center',
     justifyContent: 'flex-start',
-  },
-  replyBubble: {
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
-    width: '100%',
+    paddingHorizontal: 4,
   },
   reply: {
     fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    lineHeight: 24,
-    color: '#FFFFFF',
+    fontSize: 18,
+    lineHeight: 26,
+    letterSpacing: -0.2,
+    color: 'rgba(255,255,255,0.92)',
     textAlign: 'center',
-    width: '100%',
-  },
-  errorBubble: {
-    backgroundColor: 'rgba(246, 199, 122, 0.12)',
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: 'rgba(246, 199, 122, 0.25)',
-    marginTop: spacing.sm,
-    width: '100%',
   },
   error: {
     fontFamily: fonts.sans,
     fontSize: 15,
-    color: '#F6C77A',
+    lineHeight: 21,
+    color: 'rgba(246, 199, 122, 0.9)',
     textAlign: 'center',
-    width: '100%',
+    marginTop: 8,
   },
   orbWrap: {
-    width: 160,
-    height: 160,
+    width: 220,
+    height: 220,
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'center',
@@ -1325,43 +1457,72 @@ const styles = StyleSheet.create({
   ring: {
     position: 'absolute',
     borderRadius: 999,
+    backgroundColor: 'rgba(140,170,255,0.35)',
   },
   ringOuter: {
-    width: 150,
-    height: 150,
+    width: 210,
+    height: 210,
   },
   ringInner: {
-    width: 118,
-    height: 118,
+    width: 168,
+    height: 168,
   },
   orbHit: {
     zIndex: 2,
   },
-  orb: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   orbClip: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
+    width: 112,
+    height: 112,
+    borderRadius: 56,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
   },
+  orbClipLive: {
+    width: 148,
+    height: 148,
+    borderRadius: 74,
+  },
   gradientSpin: {
     position: 'absolute',
-    width: 140,
-    height: 140,
-    left: -28,
-    top: -28,
+    width: 220,
+    height: 220,
+    left: -36,
+    top: -36,
+  },
+  orbVignette: {
+    ...StyleSheet.absoluteFill,
   },
   orbFace: {
     ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  bottomBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 18,
+    paddingTop: 12,
+  },
+  bottomMic: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.14)',
+  },
+  bottomClose: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
   },
 });

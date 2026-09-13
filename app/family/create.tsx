@@ -1,27 +1,31 @@
 import { useState } from 'react';
 import {
   Alert,
-  Pressable,
   StyleSheet,
-  TextInput,
-  View,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Screen } from '@/components/ui/Screen';
 import { KeyboardFormScroll } from '@/components/ui/KeyboardFormScroll';
-import { Text } from '@/components/ui/Text';
+import {
+  DetailChip,
+  DetailChipRow,
+  DetailField,
+  DetailPrimaryButton,
+  DetailSection,
+  DETAIL_DOCK_PAD,
+} from '@/components/ui/DetailKit';
 import { useHousehold } from '@/lib/HouseholdContext';
 import type { HouseholdRole } from '@/lib/household';
 import { messageForPlanLimit } from '@/lib/planLimits';
 import { useToast } from '@/lib/ToastContext';
-import { fonts, radius, spacing } from '@/constants/theme';
+import { spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
 import { noFocusRing } from '@/lib/a11y';
 
-const ROLES: { id: HouseholdRole; label: string; hint: string }[] = [
-  { id: 'adult', label: 'Adult', hint: 'You, partner, roommate' },
-  { id: 'child', label: 'Child', hint: 'Kids' },
-  { id: 'pet', label: 'Pet', hint: 'Dogs, cats…' },
+const ROLES: { id: HouseholdRole; label: string }[] = [
+  { id: 'adult', label: 'Adult' },
+  { id: 'child', label: 'Child' },
+  { id: 'pet', label: 'Pet' },
 ];
 
 const NAME_FIELD = {
@@ -41,7 +45,7 @@ export default function NewFamilyMemberScreen() {
   const [relation, setRelation] = useState('');
   const [role, setRole] = useState<HouseholdRole>('adult');
   const [saving, setSaving] = useState(false);
-  const [focus, setFocus] = useState<'name' | 'relation' | null>(null);
+  const accent = colors.amber;
 
   async function save() {
     const trimmed = name.trim();
@@ -62,93 +66,55 @@ export default function NewFamilyMemberScreen() {
     }
   }
 
-  const field = (key: 'name' | 'relation') => ({
-    backgroundColor: colors.surface,
-    borderColor: focus === key ? colors.ink : colors.line,
-    color: colors.ink,
-    ...noFocusRing,
-  });
-
   return (
     <Screen>
       <Stack.Screen options={{ title: 'Add person' }} />
-      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={108}>
-          <Text style={[styles.label, { color: colors.mute }]}>Name</Text>
-          <TextInput
+      <KeyboardFormScroll
+        contentContainerStyle={styles.content}
+        bottomExtra={DETAIL_DOCK_PAD}
+      >
+        <DetailSection label="Name">
+          <DetailField
             value={name}
             onChangeText={setName}
             placeholder="e.g. Ananya"
-            placeholderTextColor={colors.faint}
-            style={[styles.input, field('name')]}
             autoFocus
-            onFocus={() => setFocus('name')}
-            onBlur={() => setFocus(null)}
+            style={noFocusRing}
             {...NAME_FIELD}
           />
+        </DetailSection>
 
-          <Text style={[styles.label, { color: colors.mute }]}>Relation</Text>
-          <TextInput
+        <DetailSection label="Relation">
+          <DetailField
             value={relation}
             onChangeText={setRelation}
             placeholder="e.g. Partner, Son, You"
-            placeholderTextColor={colors.faint}
-            style={[styles.input, field('relation')]}
-            onFocus={() => setFocus('relation')}
-            onBlur={() => setFocus(null)}
+            style={noFocusRing}
             {...NAME_FIELD}
           />
+        </DetailSection>
 
-          <Text style={[styles.label, { color: colors.mute }]}>Type</Text>
-          <View style={styles.roleRow}>
-            {ROLES.map((r) => {
-              const on = role === r.id;
-              return (
-                <Pressable
-                  key={r.id}
-                  onPress={() => setRole(r.id)}
-                  style={[
-                    styles.roleChip,
-                    {
-                      backgroundColor: on ? colors.ink : colors.surface,
-                      borderColor: on ? colors.ink : colors.line,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.roleLabel,
-                      { color: on ? colors.onInk : colors.ink },
-                    ]}
-                  >
-                    {r.label}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.roleHint,
-                      { color: on ? colors.onInk : colors.mute, opacity: on ? 0.7 : 1 },
-                    ]}
-                  >
-                    {r.hint}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+        <DetailSection label="Type">
+          <DetailChipRow>
+            {ROLES.map((r) => (
+              <DetailChip
+                key={r.id}
+                label={r.label}
+                selected={role === r.id}
+                onPress={() => setRole(r.id)}
+                accent={accent}
+              />
+            ))}
+          </DetailChipRow>
+        </DetailSection>
 
-          <Pressable
-            onPress={() => void save()}
-            disabled={!name.trim() || saving}
-            style={[
-              styles.save,
-              { backgroundColor: colors.ink },
-              (!name.trim() || saving) && styles.saveDisabled,
-            ]}
-          >
-            <Text style={[styles.saveText, { color: colors.onInk }]}>
-              {saving ? 'Saving…' : 'Save'}
-            </Text>
-          </Pressable>
-        </KeyboardFormScroll>
+        <DetailPrimaryButton
+          label={saving ? 'Saving…' : 'Save'}
+          accent={accent}
+          disabled={!name.trim() || saving}
+          onPress={() => void save()}
+        />
+      </KeyboardFormScroll>
     </Screen>
   );
 }
@@ -157,49 +123,5 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.xs,
-  },
-  label: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    marginBottom: spacing.sm,
-    marginTop: spacing.md,
-  },
-  input: {
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 14,
-    fontFamily: fonts.sans,
-    fontSize: 16,
-  },
-  roleRow: {
-    gap: spacing.sm,
-  },
-  roleChip: {
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: spacing.md,
-  },
-  roleLabel: {
-    fontFamily: fonts.sansSemi,
-    fontSize: 16,
-  },
-  roleHint: {
-    fontFamily: fonts.sans,
-    fontSize: 16,
-    marginTop: 2,
-  },
-  save: {
-    marginTop: spacing.xl,
-    borderRadius: radius.md,
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  saveDisabled: {
-    opacity: 0.45,
-  },
-  saveText: {
-    fontFamily: fonts.sansSemi,
-    fontSize: 16,
   },
 });

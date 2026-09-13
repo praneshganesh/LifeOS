@@ -72,9 +72,11 @@ export function ListRow({
         ) : null}
       </View>
       {meta ? (
-        <Text style={[styles.meta, { color: colors.mute }]} numberOfLines={1}>
-          {meta}
-        </Text>
+        <View style={[styles.metaPill, { backgroundColor: colors.surfaceSoft }]}>
+          <Text style={[styles.meta, { color: colors.mute }]} numberOfLines={1}>
+            {meta}
+          </Text>
+        </View>
       ) : null}
       {onPress && !onDismiss ? (
         <ChevronRight size={16} color={colors.faint} strokeWidth={1.8} />
@@ -194,12 +196,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 20,
   },
+  metaPill: {
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: radius.full,
+    flexShrink: 0,
+    maxWidth: 110,
+  },
   meta: {
     fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    maxWidth: 150,
-    textAlign: 'right',
-    flexShrink: 0,
+    fontSize: 12,
   },
   dismissBtn: {
     width: 28,
@@ -239,6 +245,6 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 16,
+    fontSize: 13,
   },
 });

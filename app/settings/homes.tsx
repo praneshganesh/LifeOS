@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useTheme } from '@/lib/ThemeContext';
 import { useRouter, type Href } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
+import { DETAIL_DOCK_PAD } from '@/components/ui/DetailKit';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { ListCard, ListRow } from '@/components/ui/ListKit';
 import { Text } from '@/components/ui/Text';
@@ -33,9 +34,9 @@ export default function HomesSettingsScreen() {
   return (
     <ModuleScreen
       title="Homes & defaults"
-      subtitle="Your places and household currency."
       backLabel="Settings"
       backFallbackHref="/settings"
+      bottomExtra={DETAIL_DOCK_PAD}
     >
       <ModuleSection label="Homes" count={homes.length}>
         <ListCard>

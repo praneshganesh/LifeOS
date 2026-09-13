@@ -13,6 +13,11 @@ import { Screen } from '@/components/ui/Screen';
 import { KeyboardFormScroll } from '@/components/ui/KeyboardFormScroll';
 import { Text } from '@/components/ui/Text';
 import { OptionalDateField } from '@/components/ui/DateField';
+import {
+  DETAIL_DOCK_PAD,
+  DetailPrimaryButton,
+  DetailRemoveButton,
+} from '@/components/ui/DetailKit';
 import { PersonChips } from '@/components/PersonChips';
 import { useHousehold } from '@/lib/HouseholdContext';
 import { useInventory } from '@/lib/InventoryContext';
@@ -22,7 +27,7 @@ import { parseDateInput } from '@/lib/lastDone';
 import { useLastDone } from '@/lib/LastDoneContext';
 import { defaultDocumentReminder } from '@/lib/documentReminders';
 import { useToast } from '@/lib/ToastContext';
-import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
+import { type ThemeColors, fonts, radius, spacing } from '@/constants/theme';
 
 export default function EditAssetScreen() {
   const { colors } = useTheme();
@@ -198,14 +203,12 @@ export default function EditAssetScreen() {
   return (
     <Screen>
       <Stack.Screen options={{ title: 'Edit item' }} />
-      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={40}>
+      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={DETAIL_DOCK_PAD}>
           <Field label="Name" value={name} onChangeText={setName} />
           <Field label="Brand" value={brand} onChangeText={setBrand} />
           <Field label="Category" value={category} onChangeText={setCategory} />
 
-          <Text variant="caption" style={styles.fieldLabel}>
-            Space
-          </Text>
+          <Text style={styles.fieldLabel}>Space</Text>
           <View style={styles.chipRow}>
             {spaces.map((s) => {
               const on = s.id === spaceId;
@@ -227,9 +230,7 @@ export default function EditAssetScreen() {
             })}
           </View>
 
-          <Text variant="caption" style={styles.fieldLabel}>
-            Room / location
-          </Text>
+          <Text style={styles.fieldLabel}>Room / location</Text>
           {spaceRooms.length ? (
             <View style={styles.chipRow}>
               {spaceRooms.map((r) => {
@@ -266,9 +267,7 @@ export default function EditAssetScreen() {
               <Field label="Full name" value={fullName} onChangeText={setFullName} />
               <Field label="Nationality" value={nationality} onChangeText={setNationality} />
               <View style={styles.field}>
-                <Text variant="caption" style={styles.fieldLabel}>
-                  Date of birth
-                </Text>
+                <Text style={styles.fieldLabel}>Date of birth</Text>
                 <OptionalDateField
                   value={parseDateInput(dateOfBirth) ? dateOfBirth : ''}
                   onChange={setDateOfBirth}
@@ -276,9 +275,7 @@ export default function EditAssetScreen() {
                 />
               </View>
               <View style={styles.field}>
-                <Text variant="caption" style={styles.fieldLabel}>
-                  Expiry
-                </Text>
+                <Text style={styles.fieldLabel}>Expiry</Text>
                 <OptionalDateField
                   value={parseDateInput(expiryDate) ? expiryDate : ''}
                   onChange={setExpiryDate}
@@ -302,9 +299,7 @@ export default function EditAssetScreen() {
                 placeholder="Amazon, Sharaf DG…"
               />
               <View style={styles.field}>
-                <Text variant="caption" style={styles.fieldLabel}>
-                  Purchased on
-                </Text>
+                <Text style={styles.fieldLabel}>Purchased on</Text>
                 <OptionalDateField
                   value={parseDateInput(purchaseDate) ? purchaseDate : ''}
                   onChange={setPurchaseDate}
@@ -312,9 +307,7 @@ export default function EditAssetScreen() {
                 />
               </View>
               <View style={styles.field}>
-                <Text variant="caption" style={styles.fieldLabel}>
-                  Warranty until
-                </Text>
+                <Text style={styles.fieldLabel}>Warranty until</Text>
                 <OptionalDateField
                   value={parseDateInput(warrantyExpiry) ? warrantyExpiry : ''}
                   onChange={setWarrantyExpiry}
@@ -334,16 +327,13 @@ export default function EditAssetScreen() {
 
           <Field label="Notes" value={insight} onChangeText={setInsight} multiline />
 
-          <Pressable
-            onPress={save}
-            style={({ pressed }) => [styles.save, pressed && { opacity: 0.9 }]}
-          >
-            <Text style={styles.saveText}>Save changes</Text>
-          </Pressable>
+          <DetailPrimaryButton
+            label="Save changes"
+            onPress={() => void save()}
+            accent={colors.accent}
+          />
 
-          <Pressable onPress={confirmDelete} style={styles.deleteBtn}>
-            <Text style={styles.deleteText}>Delete item</Text>
-          </Pressable>
+          <DetailRemoveButton onPress={confirmDelete} />
         </KeyboardFormScroll>
     </Screen>
   );
@@ -370,9 +360,7 @@ function Field({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.field}>
-      <Text variant="caption" style={styles.fieldLabel}>
-        {label}
-      </Text>
+      <Text style={styles.fieldLabel}>{label}</Text>
       <TextInput
         value={value}
         onChangeText={onChangeText}
@@ -408,16 +396,20 @@ function makeStyles(colors: ThemeColors) {
     marginBottom: spacing.md,
   },
   fieldLabel: {
-    marginBottom: 6,
+    marginBottom: 8,
+    fontFamily: fonts.sansMedium,
+    fontSize: 13,
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
     color: colors.mute,
   },
   input: {
-    backgroundColor: colors.white,
-    borderRadius: radius.sm,
+    backgroundColor: colors.surfaceSoft,
+    borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
+    borderColor: 'transparent',
     paddingHorizontal: spacing.md,
-    paddingVertical: 12,
+    paddingVertical: 14,
     fontFamily: fonts.sans,
     fontSize: 16,
     color: colors.ink,
@@ -434,46 +426,24 @@ function makeStyles(colors: ThemeColors) {
   },
   chip: {
     borderRadius: radius.full,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: colors.white,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.lineStrong,
   },
   chipOn: {
-    backgroundColor: colors.forest,
-    borderColor: colors.forest,
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
   },
   chipText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    color: colors.slate,
+    fontSize: 14,
+    letterSpacing: -0.2,
+    color: colors.ink,
   },
   chipTextOn: {
-    color: colors.forestOn,
-  },
-  save: {
-    marginTop: spacing.lg,
-    height: 50,
-    borderRadius: radius.sm,
-    backgroundColor: colors.forest,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  saveText: {
-    fontFamily: fonts.sansSemi,
-    fontSize: 16,
-    color: colors.forestOn,
-  },
-  deleteBtn: {
-    marginTop: spacing.lg,
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-  },
-  deleteText: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    color: colors.coral,
+    color: colors.pure,
   },
 });
 }

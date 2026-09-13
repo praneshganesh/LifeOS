@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { useFocusEffect, useRouter, type Href } from 'expo-router';
+import { DETAIL_DOCK_PAD } from '@/components/ui/DetailKit';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { ListCard, ListRow } from '@/components/ui/ListKit';
 import { useSpaces } from '@/lib/SpacesContext';
@@ -48,8 +49,8 @@ export default function SettingsScreen() {
   return (
     <ModuleScreen
       title="Settings"
-      subtitle="Privacy, security, notifications, and data."
       defaultOrigin="profile"
+      bottomExtra={DETAIL_DOCK_PAD}
     >
       <ModuleSection label="Account">
         <ListCard>
@@ -58,6 +59,12 @@ export default function SettingsScreen() {
             title="Profile"
             subtitle={displayName}
             onPress={() => router.push(moduleHref('/profile', 'settings'))}
+          />
+          <ListRow
+            icon="family"
+            title="Household"
+            subtitle={`${members.length} ${members.length === 1 ? 'person' : 'people'}`}
+            onPress={() => router.push(moduleHref('/family', 'settings'))}
           />
           <ListRow
             icon="credit"

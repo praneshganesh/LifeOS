@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, View } from 'react-native';
+import { DETAIL_DOCK_PAD } from '@/components/ui/DetailKit';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { Text } from '@/components/ui/Text';
 import { useTheme } from '@/lib/ThemeContext';
@@ -8,7 +9,6 @@ import {
   fonts,
   radius,
   spacing,
-  type ThemeFamily,
   type ThemeMode,
 } from '@/constants/theme';
 
@@ -18,22 +18,15 @@ const MODES: { id: ThemeMode; title: string }[] = [
   { id: 'system', title: 'System' },
 ];
 
-const FAMILY_LABEL: Record<ThemeFamily, string> = {
-  ink: 'Ink',
-  earth: 'Earth',
-  ocean: 'Ocean',
-  clay: 'Clay',
-};
-
 export default function AppearanceSettingsScreen() {
   const { family, mode, colors, setFamily, setMode, resolved } = useTheme();
 
   return (
     <ModuleScreen
       title="Appearance"
-      subtitle={`${FAMILY_LABEL[family]} · ${resolved} · Figtree.`}
       backLabel="Settings"
       backFallbackHref="/settings"
+      bottomExtra={DETAIL_DOCK_PAD}
     >
       <ModuleSection label="Palette">
         <View style={styles.grid}>

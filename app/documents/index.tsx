@@ -62,7 +62,6 @@ export default function DocumentsScreen() {
   return (
     <ModuleScreen
       title="Documents"
-      subtitle="Identity, property, medical, legal — on your device."
       defaultOrigin="things"
       right={
         <CaptureContextButton
@@ -84,7 +83,7 @@ export default function DocumentsScreen() {
         {list.length === 0 ? (
           <View style={{ paddingVertical: 12 }}>
             <Text variant="body" style={{ color: colors.mute }}>
-              No documents yet. Use + → Capture → Document, or photograph a passport.
+              No documents yet.
             </Text>
           </View>
         ) : (

@@ -4,20 +4,53 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Redirect, Stack, useFocusEffect, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, Pencil, Plus } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, Plus } from 'lucide-react-native';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { Card } from '@/components/ui/Card';
 import { Icon3DBadge } from '@/components/ui/Icon3D';
+import {
+  DETAIL_DOCK_PAD,
+  DetailEditButton,
+  DetailHero,
+  DetailSection,
+} from '@/components/ui/DetailKit';
 import { SwipeableThingRow } from '@/components/SwipeableThingRow';
 import { useInventory } from '@/lib/InventoryContext';
 import { useSpaces } from '@/lib/SpacesContext';
 import { inventoryToAsset } from '@/lib/mergeAssets';
 import { confirmDelete } from '@/lib/confirmDelete';
-import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
+import { type ThemeColors, fonts, radius, shadows, spacing } from '@/constants/theme';
 import { blurActiveElement } from '@/lib/a11y';
 import { captureHref, kindFromSpace, rememberCaptureContext } from '@/lib/captureContext';
 import { useModuleBack } from '@/lib/useModuleBack';
+import type { Space } from '@/lib/spacesDefaults';
+
+function accentForSpaceKind(kind: Space['kind'], colors: ThemeColors) {
+  switch (kind) {
+    case 'vehicle':
+      return { accent: colors.sky, vivid: colors.sky };
+    case 'documents':
+      return { accent: colors.violet, vivid: colors.violet };
+    case 'family':
+      return { accent: colors.amber, vivid: colors.amber };
+    default:
+      return { accent: colors.accent, vivid: colors.forest };
+  }
+}
+
+function kindLabel(kind: Space['kind']) {
+  switch (kind) {
+    case 'vehicle':
+      return 'Vehicles';
+    case 'documents':
+      return 'Documents';
+    case 'family':
+      return 'Family';
+    default:
+      return 'Home';
+  }
+}
 
 export default function SpaceDetailScreen() {
   const { colors } = useTheme();
@@ -84,6 +117,8 @@ export default function SpaceDetailScreen() {
     );
   }
 
+  const { accent, vivid } = accentForSpaceKind(space.kind, colors);
+
   return (
     <Screen>
       <Stack.Screen options={{ headerShown: false }} />
@@ -93,7 +128,7 @@ export default function SpaceDetailScreen() {
           styles.content,
           {
             paddingTop: Math.max(insets.top, 12) + spacing.xs,
-            paddingBottom: insets.bottom + 40,
+            paddingBottom: insets.bottom + DETAIL_DOCK_PAD,
           },
         ]}
         showsVerticalScrollIndicator={false}
@@ -112,21 +147,14 @@ export default function SpaceDetailScreen() {
             <ChevronLeft size={20} color={colors.ink} strokeWidth={2.4} />
             <Text style={styles.backLabel}>{backLabel}</Text>
           </Pressable>
-        </View>
-
-        <View style={styles.headerRow}>
-          <Icon3DBadge name={space.icon} size={64} />
           <View style={styles.headerActions}>
-            <Pressable
+            <DetailEditButton
+              accent={accent}
               onPress={() => {
                 blurActiveElement();
                 router.push(`/space/edit/${space.id}` as Href);
               }}
-              style={({ pressed }) => [styles.editBtn, pressed && { opacity: 0.9 }]}
-              accessibilityLabel={`Edit ${space.name}`}
-            >
-              <Pencil size={16} color={colors.forest} strokeWidth={2.2} />
-            </Pressable>
+            />
             <Pressable
               onPress={() => {
                 blurActiveElement();
@@ -134,19 +162,25 @@ export default function SpaceDetailScreen() {
                   captureHref({ kind: captureKind, spaceId: space.id })
                 );
               }}
-              style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.9 }]}
+              style={({ pressed }) => [
+                styles.addBtn,
+                { backgroundColor: accent },
+                pressed && { opacity: 0.9 },
+              ]}
               accessibilityLabel={`Capture for ${space.name}`}
             >
-              <Plus size={18} color={colors.forestOn} strokeWidth={2.2} />
+              <Plus size={18} color={colors.pure} strokeWidth={2.2} />
             </Pressable>
           </View>
         </View>
-        <Text variant="title" style={{ marginTop: spacing.md }}>
-          {space.name}
-        </Text>
-        <Text variant="body" style={{ marginTop: 6, marginBottom: spacing.xl }}>
-          {space.meta} · {spaceAssets.length} items
-        </Text>
+
+        <DetailHero
+          eyebrow={kindLabel(space.kind)}
+          title={space.name}
+          subtitle={`${space.meta} · ${spaceAssets.length} items`}
+          accent={accent}
+          vividFallback={vivid}
+        />
 
         {space.kind === 'family' ? (
           <Pressable
@@ -154,23 +188,16 @@ export default function SpaceDetailScreen() {
               blurActiveElement();
               router.push('/family' as Href);
             }}
-            style={[styles.hint, { marginTop: -spacing.md }]}
+            style={({ pressed }) => [styles.householdLink, pressed && { opacity: 0.8 }]}
+            accessibilityLabel="Open Household"
           >
-            <Text variant="body">
-              This space holds the family’s belongings — kids’ stuff, pet gear,
-              shared items you capture.
-            </Text>
-            <Text variant="bodyMedium" style={{ color: colors.forest, marginTop: 6 }}>
-              Managing people or pets? Open Household →
-            </Text>
+            <Text style={[styles.householdLinkText, { color: accent }]}>Household</Text>
+            <ChevronRight size={16} color={accent} strokeWidth={2.2} />
           </Pressable>
         ) : null}
 
         {spaceRooms.length > 0 ? (
-          <>
-            <Text variant="label" style={styles.label}>
-              Rooms
-            </Text>
+          <DetailSection label="Rooms">
             <View style={styles.roomGrid}>
               {spaceRooms.map((room) => (
                 <Card
@@ -194,45 +221,49 @@ export default function SpaceDetailScreen() {
                 </Card>
               ))}
             </View>
-          </>
+          </DetailSection>
         ) : null}
 
-        <Text variant="label" style={styles.label}>
-          Things here
-        </Text>
-        {spaceAssets.length === 0 ? (
-          <Pressable
-            onPress={() => {
-              blurActiveElement();
-              router.push(
-                captureHref({ kind: captureKind, spaceId: space.id })
-              );
-            }}
-            style={styles.empty}
-          >
-            <Text variant="headline">Nothing here yet</Text>
-            <Text variant="caption" style={{ marginTop: 4 }}>
-              Capture something for {space.name}
-            </Text>
-          </Pressable>
-        ) : (
-          <View>
-            {spaceAssets.map((asset) => (
-              <SwipeableThingRow
-                key={asset.id}
-                name={asset.name}
-                icon={asset.icon}
-                subtitle={[asset.brand, asset.room].filter(Boolean).join(' · ')}
-                onPress={() => router.push(`/asset/${asset.id}`)}
-                onDelete={
-                  getById(asset.id)
-                    ? () => void onDeleteThing(asset.id, asset.name)
-                    : undefined
-                }
-              />
-            ))}
-          </View>
-        )}
+        <DetailSection label="Things here">
+          {spaceAssets.length === 0 ? (
+            <Pressable
+              onPress={() => {
+                blurActiveElement();
+                router.push(
+                  captureHref({ kind: captureKind, spaceId: space.id })
+                );
+              }}
+              style={styles.empty}
+            >
+              <Text variant="headline">Nothing here yet</Text>
+              <Text variant="caption" style={{ marginTop: 4 }}>
+                Tap + to capture
+              </Text>
+            </Pressable>
+          ) : (
+            <View>
+              {spaceAssets.map((asset) => (
+                <SwipeableThingRow
+                  key={asset.id}
+                  name={asset.name}
+                  icon={asset.icon}
+                  subtitle={[asset.brand, asset.room].filter(Boolean).join(' · ')}
+                  onPress={() => router.push(`/asset/${asset.id}`)}
+                  onEdit={
+                    getById(asset.id)
+                      ? () => router.push(`/asset/edit/${asset.id}`)
+                      : undefined
+                  }
+                  onDelete={
+                    getById(asset.id)
+                      ? () => void onDeleteThing(asset.id, asset.name)
+                      : undefined
+                  }
+                />
+              ))}
+            </View>
+          )}
+        </DetailSection>
       </ScrollView>
     </Screen>
   );
@@ -247,6 +278,7 @@ function makeStyles(colors: ThemeColors) {
   topNav: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: spacing.sm,
     marginLeft: -6,
   },
@@ -272,59 +304,53 @@ function makeStyles(colors: ThemeColors) {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-  },
   headerActions: {
     flexDirection: 'row',
     gap: 8,
+    alignItems: 'center',
   },
-  editBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: colors.white,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
+  softIconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.surfaceSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
   addBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: colors.forest,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  label: {
-    marginBottom: spacing.sm,
-    color: colors.mute,
+    ...shadows.soft,
   },
   roomGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.md,
-    marginBottom: spacing.xl,
   },
   roomCard: {
     width: '47.8%',
     paddingVertical: spacing.lg,
   },
   empty: {
-    backgroundColor: colors.surfaceTint,
+    backgroundColor: colors.surfaceSoft,
     borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.forestSoft,
     padding: spacing.lg,
   },
-  hint: {
-    backgroundColor: colors.surfaceSoft,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginBottom: spacing.xl,
+  householdLink: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    marginTop: -spacing.sm,
+    marginBottom: spacing.md,
+    paddingVertical: 4,
+  },
+  householdLinkText: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 15,
   },
 });
 }

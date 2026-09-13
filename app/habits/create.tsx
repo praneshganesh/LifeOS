@@ -3,21 +3,28 @@ import { useMemo, useState } from 'react';
 import {
   Pressable,
   StyleSheet,
-  TextInput,
   View,
 } from 'react-native';
 import { Stack, useRouter, type Href } from 'expo-router';
 import { Check } from 'lucide-react-native';
 import { Screen } from '@/components/ui/Screen';
 import { KeyboardFormScroll } from '@/components/ui/KeyboardFormScroll';
+import {
+  DetailChip,
+  DetailChipRow,
+  DetailField,
+  DetailPrimaryButton,
+  DetailSection,
+  DETAIL_DOCK_PAD,
+} from '@/components/ui/DetailKit';
 import { Text } from '@/components/ui/Text';
 import { useHabits } from '@/lib/HabitsContext';
 import { useToast } from '@/lib/ToastContext';
 import { useInventory } from '@/lib/InventoryContext';
 import { useHousehold } from '@/lib/HouseholdContext';
 import { PersonChips } from '@/components/PersonChips';
-import { categorizeHabit, dayKey } from '@/lib/habits';
-import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
+import { dayKey } from '@/lib/habits';
+import { type ThemeColors, fonts, radius, spacing } from '@/constants/theme';
 
 export default function CreateHabitScreen() {
   const { colors } = useTheme();
@@ -34,8 +41,8 @@ export default function CreateHabitScreen() {
   const [doneToday, setDoneToday] = useState(true);
   const [saving, setSaving] = useState(false);
   const person = members.find((m) => m.id === personId);
+  const accent = colors.forest;
 
-  const preview = title.trim() ? categorizeHabit(title, why) : null;
   const linkables = useMemo(
     () =>
       items
@@ -74,214 +81,128 @@ export default function CreateHabitScreen() {
   return (
     <Screen>
       <Stack.Screen options={{ title: 'New habit' }} />
-      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={40}>
-          <Text style={styles.label}>Habit</Text>
-          <TextInput
+      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={DETAIL_DOCK_PAD}>
+        <DetailSection label="Habit">
+          <DetailField
             value={title}
             onChangeText={setTitle}
             placeholder="e.g. Walk, Gym, Read"
-            placeholderTextColor={colors.faint}
-            style={styles.input}
             autoFocus
           />
+        </DetailSection>
 
-          <Text style={styles.label}>Why (optional)</Text>
-          <TextInput
+        <DetailSection label="Why">
+          <DetailField
             value={why}
             onChangeText={setWhy}
             placeholder="e.g. Clear my head after work"
-            placeholderTextColor={colors.faint}
-            style={styles.input}
           />
+        </DetailSection>
 
-          {preview ? (
-            <Text style={styles.preview}>
-              Category → {preview.emoji} {preview.name}
-            </Text>
-          ) : null}
-
+        <View style={styles.whoBlock}>
           <PersonChips
             members={members}
             personId={personId}
             onChange={setPersonId}
             noneLabel="No one"
           />
+        </View>
 
-          <Pressable
-            onPress={() => setDoneToday((v) => !v)}
-            style={[styles.doneRow, doneToday && styles.doneRowOn]}
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: doneToday }}
+        <Pressable
+          onPress={() => setDoneToday((v) => !v)}
+          style={[
+            styles.doneRow,
+            {
+              backgroundColor: doneToday ? colors.forestSoft : colors.surfaceSoft,
+              borderColor: doneToday ? accent : colors.lineStrong,
+            },
+          ]}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: doneToday }}
+        >
+          <View
+            style={[
+              styles.doneBox,
+              {
+                borderColor: doneToday ? accent : colors.lineStrong,
+                backgroundColor: doneToday ? accent : colors.surface,
+              },
+            ]}
           >
-            <View style={[styles.doneBox, doneToday && styles.doneBoxOn]}>
-              {doneToday ? (
-                <Check size={14} color={colors.forestOn} strokeWidth={3} />
-              ) : null}
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.doneTitle}>I already did this today</Text>
-              <Text variant="caption">Logs today as the first check-in.</Text>
-            </View>
-          </Pressable>
-
-          {linkables.length ? (
-            <>
-              <Text style={styles.label}>About a Thing? (optional)</Text>
-              <Text variant="caption" style={styles.hint}>
-                Only for habits tied to something you own — e.g. Service the AC. Skip for Walk.
-              </Text>
-              <View style={styles.chips}>
-                <Pressable
-                  onPress={() => setLinkId(null)}
-                  style={[styles.chip, !linkId && styles.chipOn]}
-                >
-                  <Text style={[styles.chipText, !linkId && styles.chipTextOn]}>
-                    None
-                  </Text>
-                </Pressable>
-                {linkables.map((item) => {
-                  const on = linkId === item.id;
-                  return (
-                    <Pressable
-                      key={item.id}
-                      onPress={() => setLinkId(item.id)}
-                      style={[styles.chip, on && styles.chipOn]}
-                    >
-                      <Text
-                        style={[styles.chipText, on && styles.chipTextOn]}
-                        numberOfLines={1}
-                      >
-                        {item.name}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </>
-          ) : null}
-
-          <Pressable
-            onPress={() => void save()}
-            disabled={!title.trim() || saving}
-            style={[styles.save, (!title.trim() || saving) && styles.saveDisabled]}
-          >
-            <Text style={styles.saveText}>
-              {saving ? 'Saving…' : doneToday ? 'Save & log today' : 'Save habit'}
+            {doneToday ? (
+              <Check size={14} color={colors.forestOn} strokeWidth={3} />
+            ) : null}
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.doneTitle, { color: colors.ink }]}>
+              I already did this today
             </Text>
-          </Pressable>
-        </KeyboardFormScroll>
+          </View>
+        </Pressable>
+
+        {linkables.length ? (
+          <DetailSection label="About a Thing?">
+            <DetailChipRow>
+              <DetailChip
+                label="None"
+                selected={!linkId}
+                onPress={() => setLinkId(null)}
+                accent={accent}
+              />
+              {linkables.map((item) => (
+                <DetailChip
+                  key={item.id}
+                  label={item.name}
+                  selected={linkId === item.id}
+                  onPress={() => setLinkId(item.id)}
+                  accent={accent}
+                />
+              ))}
+            </DetailChipRow>
+          </DetailSection>
+        ) : null}
+
+        <DetailPrimaryButton
+          label={saving ? 'Saving…' : doneToday ? 'Save & log today' : 'Save habit'}
+          accent={accent}
+          disabled={!title.trim() || saving}
+          onPress={() => void save()}
+        />
+      </KeyboardFormScroll>
     </Screen>
   );
 }
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
-  content: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xs,
-  },
-  label: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    color: colors.mute,
-    marginBottom: spacing.sm,
-    marginTop: spacing.md,
-  },
-  hint: {
-    marginTop: -4,
-    marginBottom: spacing.sm,
-  },
-  input: {
-    backgroundColor: colors.white,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 14,
-    fontFamily: fonts.sans,
-    fontSize: 16,
-    color: colors.ink,
-  },
-  preview: {
-    marginTop: spacing.md,
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    color: colors.forest,
-  },
-  chips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: radius.md,
-    backgroundColor: colors.white,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    maxWidth: '100%',
-  },
-  chipOn: {
-    backgroundColor: colors.forestSoft,
-    borderColor: colors.forest,
-  },
-  chipText: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    color: colors.ink,
-  },
-  chipTextOn: {
-    color: colors.forest,
-  },
-  doneRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    marginTop: spacing.lg,
-    padding: spacing.md,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    backgroundColor: colors.white,
-  },
-  doneRowOn: {
-    borderColor: colors.forest,
-    backgroundColor: colors.forestSoft,
-  },
-  doneBox: {
-    width: 24,
-    height: 24,
-    borderRadius: 8,
-    borderWidth: 1.5,
-    borderColor: colors.line,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.white,
-  },
-  doneBoxOn: {
-    backgroundColor: colors.forest,
-    borderColor: colors.forest,
-  },
-  doneTitle: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    color: colors.ink,
-  },
-  save: {
-    marginTop: spacing.xl,
-    backgroundColor: colors.forest,
-    borderRadius: radius.md,
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  saveDisabled: {
-    opacity: 0.45,
-  },
-  saveText: {
-    fontFamily: fonts.sansSemi,
-    fontSize: 16,
-    color: colors.forestOn,
-  },
-});
+    content: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.xs,
+    },
+    whoBlock: {
+      marginBottom: spacing.sm,
+    },
+    doneRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      marginTop: spacing.sm,
+      marginBottom: spacing.lg,
+      padding: spacing.md,
+      borderRadius: radius.md,
+      borderWidth: 1.5,
+    },
+    doneBox: {
+      width: 24,
+      height: 24,
+      borderRadius: 8,
+      borderWidth: 1.5,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    doneTitle: {
+      fontFamily: fonts.sansMedium,
+      fontSize: 16,
+    },
+  });
 }

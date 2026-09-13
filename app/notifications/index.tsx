@@ -81,7 +81,6 @@ export default function NotificationsScreen() {
   return (
     <ModuleScreen
       title="Notifications"
-      subtitle="Due soon from maintenance, warranties, docs, and renewals."
       defaultOrigin="things"
     >
       <StatStrip

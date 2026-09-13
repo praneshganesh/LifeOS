@@ -35,7 +35,6 @@ export default function ExpensesScreen() {
   return (
     <ModuleScreen
       title="Expenses"
-      subtitle="Your spending, logged from receipts and Talk."
       defaultOrigin="things"
       right={
         <Pressable
@@ -85,7 +84,7 @@ export default function ExpensesScreen() {
       <ModuleSection label="Recent" count={expenses.length}>
         {expenses.length === 0 ? (
           <Text variant="body" style={{ color: colors.mute }}>
-            No expenses yet. Add a coffee run, or Capture a receipt later.
+            No expenses yet.
           </Text>
         ) : (
           <ListCard>

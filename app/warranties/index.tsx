@@ -66,7 +66,6 @@ export default function WarrantiesScreen() {
   return (
     <ModuleScreen
       title="Warranties"
-      subtitle="From your Things — coverage, what’s expiring, and what’s missing."
       defaultOrigin="things"
       right={<CaptureContextButton kind="warranty" label="Capture warranty" />}
     >

@@ -343,13 +343,16 @@ export function parseReminderFromUtterance(text) {
   if (!text?.trim()) return undefined;
   let s = text.trim();
   s = s.replace(
-    /^(please\s+)?(log|set|add|create)\s+(a\s+)?reminder\s+(to\s+|for\s+)?/i,
+    /^[\s\S]*?\b(?:please\s+)?(?:log|set|add|create)\s+(?:a\s+)?reminder\s+(?:to\s+|for\s+)?/i,
     ''
   );
-  s = s.replace(/^remind\s+me\s+(to\s+|about\s+|that\s+)?/i, '');
+  s = s.replace(
+    /^[\s\S]*?\bremind\s+me\s+(?:to\s+|about\s+|that\s+|for\s+)?/i,
+    ''
+  );
   s = stripReminderDatePhrases(s);
-  s = s.replace(/^to\s+/i, '').trim();
-  if (s.length < 3) return { label: 'Reminder' };
+  s = finalizeReminderLabel(s);
+  if (s.length < 3 || /^reminder$/i.test(s)) return { label: 'Reminder' };
 
   const splitOn = [
     /\s+(it's|its|it is)\s+/i,
@@ -360,26 +363,37 @@ export function parseReminderFromUtterance(text) {
   for (const pat of splitOn) {
     const m = s.match(pat);
     if (m?.index != null && m.index >= 3) {
-      const label = s.slice(0, m.index).trim();
-      const notes = s.slice(m.index).trim();
+      const label = finalizeReminderLabel(s.slice(0, m.index));
+      const notesRaw = s.slice(m.index).trim();
+      const notes = notesRaw
+        ? notesRaw.charAt(0).toUpperCase() + notesRaw.slice(1)
+        : undefined;
       if (label.length >= 3) {
-        return {
-          label: label.charAt(0).toUpperCase() + label.slice(1),
-          notes: notes ? notes.charAt(0).toUpperCase() + notes.slice(1) : undefined,
-        };
+        return { label, notes };
       }
     }
   }
 
-  const label = s.charAt(0).toUpperCase() + s.slice(1);
+  const label = s;
   if (label.length > 56) {
-    const cut = label.slice(0, 56).replace(/\s+\S*$/, '').trim();
+    const cut = finalizeReminderLabel(label.slice(0, 56).replace(/\s+\S*$/, ''));
     const rest = label.slice(cut.length).trim();
     if (cut.length >= 3) {
       return { label: cut, notes: rest || undefined };
     }
   }
   return { label };
+}
+
+/** Drop leftover command glue so titles aren't "For PE uniform…". */
+export function finalizeReminderLabel(raw) {
+  let s = String(raw || '')
+    .trim()
+    .replace(/\s+/g, ' ');
+  s = s.replace(/^(?:for|to|about|regarding)\s+/i, '');
+  s = s.replace(/[.,;:!?]+$/g, '').trim();
+  if (!s) return 'Reminder';
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 export function reminderLabelFromUtterance(text) {
@@ -397,13 +411,18 @@ function passportId(inventorySummary, text) {
   return hit?.id;
 }
 
-export function ensureReminderActions(actions, lastUserText, inventorySummary) {
+export function ensureReminderActions(
+  actions,
+  lastUserText,
+  inventorySummary,
+  from = new Date()
+) {
   const list = (Array.isArray(actions) ? actions : []).filter(
     (a) => a && a.type && a.type !== 'none'
   );
   const types = new Set(list.map((a) => a.type));
-  const recurring = parseRecurringWeekdayReminder(lastUserText);
-  const remindAt = remindAtFromUtterance(lastUserText);
+  const recurring = parseRecurringWeekdayReminder(lastUserText, from);
+  const remindAt = remindAtFromUtterance(lastUserText, from);
   const parsed = parseReminderFromUtterance(lastUserText);
   const label = parsed?.label || 'Reminder';
   const inventoryItemId = passportId(inventorySummary, lastUserText);
@@ -432,7 +451,9 @@ export function ensureReminderActions(actions, lastUserText, inventorySummary) {
     if (!next.remindInterval && recurring?.remindInterval) {
       next.remindInterval = recurring.remindInterval;
     }
-    if (!next.label) next.label = label;
+    const parsedLabel =
+      parsed?.label && parsed.label !== 'Reminder' ? parsed.label : null;
+    next.label = finalizeReminderLabel(parsedLabel || next.label || label);
     if (!next.note && parsed?.notes) next.note = parsed.notes;
     if (!next.inventoryItemId && inventoryItemId) next.inventoryItemId = inventoryItemId;
     return next;

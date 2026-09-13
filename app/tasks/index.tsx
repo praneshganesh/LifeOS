@@ -9,7 +9,7 @@ import { useInventory } from '@/lib/InventoryContext';
 import { useLastDone } from '@/lib/LastDoneContext';
 import { useSubscriptions } from '@/lib/SubscriptionsContext';
 import { useClasses } from '@/lib/ClassesContext';
-import { buildAttentionItems } from '@/lib/attention';
+import { openAttentionQueue } from '@/lib/attention';
 import { useAttentionDismissals } from '@/lib/attentionDismiss';
 import { moduleHrefPreserveFrom } from '@/lib/moduleNav';
 import { blurActiveElement } from '@/lib/a11y';
@@ -39,9 +39,8 @@ export default function TasksScreen() {
 
   const queue = useMemo(
     () =>
-      buildAttentionItems(items, lastDone, subscriptions, classPacks).filter(
-        (a) =>
-          (a.urgency === 'urgent' || a.urgency === 'soon') && !isDismissed(a.id)
+      openAttentionQueue(items, lastDone, subscriptions, classPacks).filter(
+        (a) => !isDismissed(a.id)
       ),
     [items, lastDone, subscriptions, classPacks, isDismissed]
   );
@@ -63,7 +62,6 @@ export default function TasksScreen() {
   return (
     <ModuleScreen
       title="Tasks & reminders"
-      subtitle="Due soon from warranties, docs, renewals, and reminders."
       defaultOrigin="today"
       right={
         <Pressable
@@ -88,7 +86,7 @@ export default function TasksScreen() {
         {list.length === 0 ? (
           <View style={{ paddingVertical: 12 }}>
             <Text variant="body" style={{ color: colors.mute }}>
-              Nothing queued. Tap Add to set a reminder, or add warranty / renewal dates on Things.
+              Nothing queued.
             </Text>
             <Pressable
               onPress={openAddReminder}

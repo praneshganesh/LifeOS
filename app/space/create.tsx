@@ -4,24 +4,30 @@ import {
   Alert,
   Pressable,
   StyleSheet,
-  TextInput,
   View,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Screen } from '@/components/ui/Screen';
 import { KeyboardFormScroll } from '@/components/ui/KeyboardFormScroll';
-import { Text } from '@/components/ui/Text';
+import {
+  DetailChip,
+  DetailChipRow,
+  DetailField,
+  DetailPrimaryButton,
+  DetailSection,
+  DETAIL_DOCK_PAD,
+} from '@/components/ui/DetailKit';
 import { Icon3DBadge, type Icon3DName } from '@/components/ui/Icon3D';
 import { useSpaces, type SpaceKind } from '@/lib/SpacesContext';
 import { messageForPlanLimit } from '@/lib/planLimits';
 import { useToast } from '@/lib/ToastContext';
-import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
+import { type ThemeColors, radius, spacing } from '@/constants/theme';
 
-const KINDS: { id: SpaceKind; label: string; icon: Icon3DName; hint: string }[] = [
-  { id: 'home', label: 'Home', icon: 'house', hint: 'House or apartment' },
-  { id: 'vehicle', label: 'Vehicles', icon: 'car', hint: 'Cars & bikes' },
-  { id: 'documents', label: 'Documents', icon: 'folder', hint: 'IDs & legal' },
-  { id: 'family', label: 'Family', icon: 'family', hint: 'People & pets' },
+const KINDS: { id: SpaceKind; label: string; icon: Icon3DName }[] = [
+  { id: 'home', label: 'Home', icon: 'house' },
+  { id: 'vehicle', label: 'Vehicles', icon: 'car' },
+  { id: 'documents', label: 'Documents', icon: 'folder' },
+  { id: 'family', label: 'Family', icon: 'family' },
 ];
 
 const HOME_ICONS: Icon3DName[] = ['house', 'holiday', 'building'];
@@ -37,6 +43,7 @@ export default function NewSpaceScreen() {
   const [kind, setKind] = useState<SpaceKind>('home');
   const [icon, setIcon] = useState<Icon3DName>('house');
   const [saving, setSaving] = useState(false);
+  const accent = colors.forest;
 
   async function save() {
     const trimmed = name.trim();
@@ -62,169 +69,88 @@ export default function NewSpaceScreen() {
   return (
     <Screen>
       <Stack.Screen options={{ title: 'New space' }} />
-      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={40}>
-          <Text style={styles.label}>Name</Text>
-          <TextInput
+      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={DETAIL_DOCK_PAD}>
+        <DetailSection label="Name">
+          <DetailField
             value={name}
             onChangeText={setName}
             placeholder="e.g. Downtown apartment"
-            placeholderTextColor={colors.faint}
-            style={styles.input}
             autoFocus
           />
+        </DetailSection>
 
-          <Text style={styles.label}>Location or note</Text>
-          <TextInput
+        <DetailSection label="Location or note">
+          <DetailField
             value={meta}
             onChangeText={setMeta}
             placeholder="e.g. Marina · Floor 12"
-            placeholderTextColor={colors.faint}
-            style={styles.input}
           />
+        </DetailSection>
 
-          <Text style={styles.label}>Type</Text>
-          <View style={styles.kindGrid}>
-            {KINDS.map((k) => {
-              const selected = kind === k.id;
-              return (
+        <DetailSection label="Type">
+          <DetailChipRow>
+            {KINDS.map((k) => (
+              <DetailChip
+                key={k.id}
+                label={k.label}
+                selected={kind === k.id}
+                onPress={() => {
+                  setKind(k.id);
+                  setIcon(k.icon);
+                }}
+                accent={accent}
+              />
+            ))}
+          </DetailChipRow>
+        </DetailSection>
+
+        {kind === 'home' ? (
+          <DetailSection label="Icon">
+            <View style={styles.iconRow}>
+              {HOME_ICONS.map((ic) => (
                 <Pressable
-                  key={k.id}
-                  onPress={() => {
-                    setKind(k.id);
-                    setIcon(k.icon);
-                  }}
-                  style={[styles.kindCard, selected && styles.kindCardOn]}
+                  key={ic}
+                  onPress={() => setIcon(ic)}
+                  style={[
+                    styles.iconPick,
+                    {
+                      backgroundColor: colors.surfaceSoft,
+                      borderColor: icon === ic ? accent : 'transparent',
+                    },
+                  ]}
                 >
-                  <Icon3DBadge name={k.icon} size={40} />
-                  <Text style={styles.kindTitle}>{k.label}</Text>
-                  <Text style={styles.kindHint}>{k.hint}</Text>
+                  <Icon3DBadge name={ic} size={44} />
                 </Pressable>
-              );
-            })}
-          </View>
+              ))}
+            </View>
+          </DetailSection>
+        ) : null}
 
-          {kind === 'home' ? (
-            <>
-              <Text style={styles.label}>Icon</Text>
-              <View style={styles.iconRow}>
-                {HOME_ICONS.map((ic) => (
-                  <Pressable
-                    key={ic}
-                    onPress={() => setIcon(ic)}
-                    style={[styles.iconPick, icon === ic && styles.iconPickOn]}
-                  >
-                    <Icon3DBadge name={ic} size={44} />
-                  </Pressable>
-                ))}
-              </View>
-              <Text style={styles.hint}>
-                Homes get Living Room, Kitchen, and Bedroom to start — you can add more later.
-              </Text>
-            </>
-          ) : null}
-
-          <Pressable
-            onPress={() => void save()}
-            disabled={!name.trim() || saving}
-            style={({ pressed }) => [
-              styles.save,
-              (!name.trim() || saving) && { opacity: 0.45 },
-              pressed && { opacity: 0.9 },
-            ]}
-          >
-            <Text style={styles.saveText}>{saving ? 'Creating…' : 'Create space'}</Text>
-          </Pressable>
-        </KeyboardFormScroll>
+        <DetailPrimaryButton
+          label={saving ? 'Creating…' : 'Create space'}
+          accent={accent}
+          disabled={!name.trim() || saving}
+          onPress={() => void save()}
+        />
+      </KeyboardFormScroll>
     </Screen>
   );
 }
 
-function makeStyles(colors: ThemeColors) {
+function makeStyles(_colors: ThemeColors) {
   return StyleSheet.create({
-  content: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
-  },
-  label: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    color: colors.mute,
-    marginBottom: 8,
-    marginTop: spacing.md,
-  },
-  input: {
-    fontFamily: fonts.sans,
-    fontSize: 16,
-    color: colors.ink,
-    backgroundColor: colors.white,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 14,
-  },
-  kindGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  kindCard: {
-    width: '48%',
-    backgroundColor: colors.white,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    padding: spacing.md,
-  },
-  kindCardOn: {
-    borderColor: colors.forest,
-    backgroundColor: colors.surfaceSoft,
-  },
-  kindTitle: {
-    marginTop: 8,
-    fontFamily: fonts.sansSemi,
-    fontSize: 16,
-    color: colors.ink,
-  },
-  kindHint: {
-    marginTop: 2,
-    fontFamily: fonts.sans,
-    fontSize: 16,
-    color: colors.mute,
-  },
-  iconRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  iconPick: {
-    padding: 6,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    backgroundColor: colors.white,
-  },
-  iconPickOn: {
-    borderColor: colors.forest,
-    backgroundColor: colors.surfaceSoft,
-  },
-  hint: {
-    marginTop: spacing.md,
-    fontFamily: fonts.sans,
-    fontSize: 16,
-    lineHeight: 18,
-    color: colors.mute,
-  },
-  save: {
-    marginTop: spacing.xl,
-    backgroundColor: colors.forest,
-    borderRadius: radius.full,
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  saveText: {
-    fontFamily: fonts.sansSemi,
-    fontSize: 16,
-    color: colors.forestOn,
-  },
-});
+    content: {
+      paddingHorizontal: spacing.xl,
+      paddingTop: spacing.md,
+    },
+    iconRow: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+    },
+    iconPick: {
+      padding: 6,
+      borderRadius: radius.md,
+      borderWidth: 1.5,
+    },
+  });
 }

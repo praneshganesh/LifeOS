@@ -1,6 +1,7 @@
 import { useTheme } from '@/lib/ThemeContext';
 import { useMemo, useEffect, useState } from 'react';
 import { Platform, StyleSheet, Switch, View } from 'react-native';
+import { DETAIL_DOCK_PAD } from '@/components/ui/DetailKit';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { ListCard } from '@/components/ui/ListKit';
 import { Text } from '@/components/ui/Text';
@@ -101,9 +102,9 @@ export default function NotificationPrefsScreen() {
   return (
     <ModuleScreen
       title="Notification preferences"
-      subtitle="Reminders scheduled on this phone — push coming later."
       backLabel="Settings"
       backFallbackHref="/settings"
+      bottomExtra={DETAIL_DOCK_PAD}
     >
       <ModuleSection label="Delivery">
         <ListCard>

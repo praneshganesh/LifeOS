@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import { DETAIL_DOCK_PAD } from '@/components/ui/DetailKit';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { ListCard, ListRow } from '@/components/ui/ListKit';
 import { Text } from '@/components/ui/Text';
@@ -16,9 +17,9 @@ export default function AboutSettingsScreen() {
   return (
     <ModuleScreen
       title="About Saavi"
-      subtitle="The key to your home life."
       backLabel="Settings"
       backFallbackHref="/settings"
+      bottomExtra={DETAIL_DOCK_PAD}
     >
       <Text variant="body" style={{ marginBottom: spacing.lg }}>
         Life administration — homes, assets, warranties, documents, and family —

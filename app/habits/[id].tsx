@@ -1,9 +1,20 @@
 import { useTheme } from '@/lib/ThemeContext';
 import { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Switch, Pressable, View, TextInput } from 'react-native';
+import { StyleSheet, Switch, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { ModuleScreen } from '@/components/ui/ModuleScreen';
-import { ListCard, ListRow } from '@/components/ui/ListKit';
+import {
+  DetailChip,
+  DetailChipRow,
+  DetailFact,
+  DetailFacts,
+  DetailField,
+  DetailHero,
+  DetailPrimaryButton,
+  DetailRemoveButton,
+  DetailSection,
+  DETAIL_DOCK_PAD,
+} from '@/components/ui/DetailKit';
 import { Text } from '@/components/ui/Text';
 import { HabitCard } from '@/components/HabitCard';
 import { useHabits } from '@/lib/HabitsContext';
@@ -12,17 +23,17 @@ import { useLastDone } from '@/lib/LastDoneContext';
 import { useHousehold } from '@/lib/HouseholdContext';
 import { PersonChips } from '@/components/PersonChips';
 import {
-  HABIT_CATEGORIES,
   categorizeHabit,
   completionRate,
   currentStreak,
   dayKey,
   loggedOn,
+  paintHabitCategory,
   shouldSyncLastDone,
 } from '@/lib/habits';
 import { confirmDelete } from '@/lib/confirmDelete';
 import { useToast } from '@/lib/ToastContext';
-import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
+import { type ThemeColors, fonts, radius, spacing } from '@/constants/theme';
 import CreateHabitScreen from './create';
 
 export default function HabitDetailScreen() {
@@ -100,6 +111,26 @@ export default function HabitDetailScreen() {
     else router.replace('/habits' as Href);
   }
 
+  function onSave() {
+    if (!habit || !title.trim() || savingDetails) return;
+    setSavingDetails(true);
+    const nextTitle = title.trim();
+    const nextWhy = why.trim() || undefined;
+    const nextCat = categorizeHabit(nextTitle, nextWhy);
+    void updateHabit(habit.id, {
+      title: nextTitle,
+      why: nextWhy,
+      categoryId: nextCat.id,
+    })
+      .then(() => {
+        showToast('Habit saved');
+        if (router.canGoBack()) router.back();
+        else router.replace('/habits' as Href);
+      })
+      .catch(saveFailed)
+      .finally(() => setSavingDetails(false));
+  }
+
   if (!habit) {
     return (
       <ModuleScreen
@@ -112,18 +143,37 @@ export default function HabitDetailScreen() {
     );
   }
 
-  const cat = HABIT_CATEGORIES[habit.categoryId];
+  const cat = paintHabitCategory(habit.categoryId, colors);
+  const accent = cat.color;
   const streak = currentStreak(habit);
   const rate = completionRate(habit, 30);
 
   return (
     <ModuleScreen
       title={habit.title}
-      subtitle={habit.why || cat.name}
       backLabel="Habits"
       backFallbackHref="/habits"
+      bottomExtra={DETAIL_DOCK_PAD}
+      hero={
+        <DetailHero
+          eyebrow={`${cat.emoji}  ${cat.name}`}
+          accent={accent}
+          vividFallback={accent}
+          editableTitle
+          titleValue={title}
+          onTitleChange={setTitle}
+          titlePlaceholder="Habit name"
+          subtitle={
+            streak
+              ? `${streak}-day streak · ${rate}% last 30 days`
+              : `${rate}% last 30 days`
+          }
+          meta={loggedOn(habit) ? 'Done today' : 'Not today'}
+        />
+      }
     >
       <Stack.Screen options={{ headerShown: false }} />
+
       <HabitCard
         habit={habit}
         interactive
@@ -131,145 +181,97 @@ export default function HabitDetailScreen() {
         onToggleDay={(date) => void onToggleDay(date)}
       />
 
-      <Text variant="headline" style={{ fontSize: 16, marginTop: spacing.md }}>
-        Details
-      </Text>
-      <Text style={styles.fieldLabel}>Name</Text>
-      <TextInput
-        value={title}
-        onChangeText={setTitle}
-        style={styles.input}
-        placeholderTextColor={colors.faint}
-      />
-      <Text style={styles.fieldLabel}>Why (optional)</Text>
-      <TextInput
-        value={why}
-        onChangeText={setWhy}
-        placeholder="e.g. Clear my head"
-        placeholderTextColor={colors.faint}
-        style={styles.input}
-      />
-      <PersonChips
-        members={members}
-        personId={habit.personId ?? null}
-        onChange={(id) => {
-          const m = members.find((x) => x.id === id);
-          void updateHabit(habit.id, {
-            personId: m?.id,
-            assignedTo: m?.name,
-          }).catch(saveFailed);
-        }}
-        noneLabel="No one"
-      />
-      <Pressable
-        onPress={() => {
-          if (!habit || !title.trim() || savingDetails) return;
-          setSavingDetails(true);
-          const nextTitle = title.trim();
-          const nextWhy = why.trim() || undefined;
-          const cat = categorizeHabit(nextTitle, nextWhy);
-          void updateHabit(habit.id, {
-            title: nextTitle,
-            why: nextWhy,
-            categoryId: cat.id,
-          })
-            .then(() => {
-              showToast('Habit saved');
-              if (router.canGoBack()) router.back();
-              else router.replace('/habits' as Href);
-            })
-            .catch(saveFailed)
-            .finally(() => setSavingDetails(false));
-        }}
-        disabled={!title.trim() || savingDetails}
-        style={[styles.saveBtn, (!title.trim() || savingDetails) && { opacity: 0.45 }]}
-      >
-        <Text style={styles.saveBtnText}>
-          {savingDetails ? 'Saving…' : 'Save habit details'}
-        </Text>
-      </Pressable>
+      <DetailSection label="Why">
+        <DetailField
+          value={why}
+          onChangeText={setWhy}
+          placeholder="e.g. Clear my head"
+          accessibilityLabel="Why"
+        />
+      </DetailSection>
 
-      <ListCard style={{ marginTop: spacing.md }}>
-        <ListRow title="Category" meta={`${cat.emoji} ${cat.name}`} />
-        <ListRow title="Streak" meta={streak ? `${streak} days` : '—'} />
-        <ListRow title="Last 30 days" meta={`${rate}%`} />
-        <ListRow
-          title="Today"
-          meta={loggedOn(habit) ? 'Done' : 'Not today'}
+      <DetailSection label="Who">
+        <PersonChips
+          members={members}
+          personId={habit.personId ?? null}
+          onChange={(personId) => {
+            const m = members.find((x) => x.id === personId);
+            void updateHabit(habit.id, {
+              personId: m?.id,
+              assignedTo: m?.name,
+            }).catch(saveFailed);
+          }}
+          noneLabel="No one"
+        />
+      </DetailSection>
+
+      <DetailFacts>
+        <DetailFact label="Category" value={`${cat.emoji} ${cat.name}`} />
+        <DetailFact label="Streak" value={streak ? `${streak} days` : '—'} />
+        <DetailFact label="Last 30 days" value={`${rate}%`} />
+        <DetailFact
+          label="Today"
+          value={loggedOn(habit) ? 'Done' : 'Not today'}
           last={!linked}
         />
         {linked ? (
-          <ListRow
-            icon={linked.icon}
-            title="Linked Thing"
-            subtitle={linked.brand !== '—' ? linked.brand : linked.room}
-            meta="Open"
-            onPress={() => router.push(`/asset/${linked.id}` as Href)}
+          <DetailFact
+            label="Linked Thing"
+            value={linked.name}
             last
           />
         ) : null}
-      </ListCard>
+      </DetailFacts>
+
+      {linked ? (
+        <DetailChip
+          label={`Open ${linked.name}`}
+          accent={accent}
+          onPress={() => router.push(`/asset/${linked.id}` as Href)}
+        />
+      ) : null}
 
       {linkables.length ? (
-        <View style={{ marginTop: spacing.lg }}>
-          <Text variant="headline" style={{ fontSize: 16 }}>
-            About a Thing? (optional)
+        <DetailSection label="About a Thing?" style={{ marginTop: spacing.md }}>
+          <Text variant="caption" style={{ color: colors.mute, marginBottom: 2 }}>
+            Optional — link to something you own.
           </Text>
-          <Text variant="caption" style={{ marginTop: 4, marginBottom: spacing.sm }}>
-            Only if this habit is for something you own — e.g. “Service the AC” → your
-            AC. Personal rhythms like Walk stay as None.
-          </Text>
-          <View style={styles.chips}>
-            <Pressable
+          <DetailChipRow>
+            <DetailChip
+              label="None"
+              selected={!habit.inventoryItemId}
+              accent={accent}
               onPress={() =>
                 void updateHabit(habit.id, {
                   inventoryItemId: undefined,
                   syncLastDone: undefined,
                 }).catch(saveFailed)
               }
-              style={[styles.chip, !habit.inventoryItemId && styles.chipOn]}
-            >
-              <Text
-                style={[
-                  styles.chipText,
-                  !habit.inventoryItemId && styles.chipTextOn,
-                ]}
-              >
-                None
-              </Text>
-            </Pressable>
-            {linkables.map((item) => {
-              const on = habit.inventoryItemId === item.id;
-              return (
-                <Pressable
-                  key={item.id}
-                  onPress={() =>
-                    void updateHabit(habit.id, {
-                      inventoryItemId: item.id,
-                      syncLastDone: habit.syncLastDone ?? true,
-                    }).catch(saveFailed)
-                  }
-                  style={[styles.chip, on && styles.chipOn]}
-                >
-                  <Text
-                    style={[styles.chipText, on && styles.chipTextOn]}
-                    numberOfLines={1}
-                  >
-                    {item.name}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+            />
+            {linkables.map((item) => (
+              <DetailChip
+                key={item.id}
+                label={item.name}
+                selected={habit.inventoryItemId === item.id}
+                accent={accent}
+                onPress={() =>
+                  void updateHabit(habit.id, {
+                    inventoryItemId: item.id,
+                    syncLastDone: habit.syncLastDone ?? true,
+                  }).catch(saveFailed)
+                }
+              />
+            ))}
+          </DetailChipRow>
 
           {habit.inventoryItemId ? (
-            <View style={styles.syncRow}>
+            <View style={[styles.syncRow, { backgroundColor: colors.surfaceSoft }]}>
               <View style={{ flex: 1 }}>
-                <Text variant="headline" style={{ fontSize: 16 }}>
+                <Text style={[styles.syncTitle, { color: colors.ink }]}>
                   Also mark it done on that Thing
                 </Text>
-                <Text variant="caption" style={{ marginTop: 2 }}>
-                  When you check in here, add a Last Done note on the linked Thing.
+                <Text style={[styles.syncCaption, { color: colors.mute }]}>
+                  Also log Last Done on the linked Thing.
                 </Text>
               </View>
               <Switch
@@ -277,100 +279,46 @@ export default function HabitDetailScreen() {
                 onValueChange={(v) =>
                   void updateHabit(habit.id, { syncLastDone: v }).catch(saveFailed)
                 }
-                trackColor={{ false: colors.lineStrong, true: colors.forestBright }}
+                trackColor={{ false: colors.lineStrong, true: accent }}
                 thumbColor={colors.white}
               />
             </View>
           ) : null}
-        </View>
+        </DetailSection>
       ) : null}
 
-      <Pressable onPress={() => void onRemove()} style={styles.remove}>
-        <Text style={styles.removeText}>Delete habit</Text>
-      </Pressable>
+      <DetailPrimaryButton
+        label={savingDetails ? 'Saving…' : 'Save habit'}
+        onPress={onSave}
+        accent={accent}
+        disabled={!title.trim() || savingDetails}
+      />
+
+      <DetailRemoveButton onPress={() => void onRemove()} />
     </ModuleScreen>
   );
 }
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
-  fieldLabel: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    color: colors.mute,
-    marginBottom: 6,
-    marginTop: spacing.sm,
-  },
-  input: {
-    backgroundColor: colors.white,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 12,
-    fontFamily: fonts.sans,
-    fontSize: 16,
-    color: colors.ink,
-  },
-  saveBtn: {
-    marginTop: spacing.md,
-    backgroundColor: colors.forest,
-    borderRadius: radius.md,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  saveBtnText: {
-    fontFamily: fonts.sansSemi,
-    fontSize: 16,
-    color: colors.forestOn,
-  },
-  syncRow: {
-    marginTop: spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    backgroundColor: colors.white,
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 14,
-  },
-  chips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 14,
-    backgroundColor: colors.white,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    maxWidth: '100%',
-  },
-  chipOn: {
-    backgroundColor: colors.forestSoft,
-    borderColor: colors.forest,
-  },
-  chipText: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    color: colors.ink,
-  },
-  chipTextOn: {
-    color: colors.forest,
-  },
-  remove: {
-    marginTop: spacing.xl,
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-  },
-  removeText: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    color: colors.coral,
-  },
-});
+    syncRow: {
+      marginTop: spacing.sm,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      borderRadius: radius.md,
+      paddingHorizontal: spacing.md,
+      paddingVertical: 14,
+    },
+    syncTitle: {
+      fontFamily: fonts.sansMedium,
+      fontSize: 15,
+      letterSpacing: -0.2,
+    },
+    syncCaption: {
+      fontFamily: fonts.sans,
+      fontSize: 13,
+      marginTop: 2,
+    },
+  });
 }

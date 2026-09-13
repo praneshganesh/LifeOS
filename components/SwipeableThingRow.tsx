@@ -7,14 +7,15 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
-import { Trash2 } from 'lucide-react-native';
+import { Pencil, Trash2 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Icon3DBadge, type Icon3DName } from '@/components/ui/Icon3D';
 import { fonts, radius, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
 import { blurActiveElement } from '@/lib/a11y';
 
-const ACTION_W = 88;
+const EDIT_W = 72;
+const DELETE_W = 80;
 const SPRING = { damping: 18, stiffness: 220, overshootClamping: true } as const;
 
 type Props = {
@@ -22,7 +23,9 @@ type Props = {
   subtitle?: string;
   icon: Icon3DName;
   onPress: () => void;
-  /** When set, swipe left reveals Delete (user-owned items only). */
+  /** Swipe left reveals Edit (user-owned items). */
+  onEdit?: () => void;
+  /** Swipe left reveals Delete (user-owned items). */
   onDelete?: () => void;
 };
 
@@ -68,15 +71,23 @@ function RowFace({
 }
 
 /**
- * Phone-native thing row: tap to open, swipe left to delete when `onDelete` is set.
- * The title stays left-aligned; Delete grows in from the right instead of sliding
- * the text under the card’s left edge.
+ * Phone-native thing row: tap to open, swipe left for Edit / Delete.
  */
-export function SwipeableThingRow({ name, subtitle, icon, onPress, onDelete }: Props) {
+export function SwipeableThingRow({
+  name,
+  subtitle,
+  icon,
+  onPress,
+  onEdit,
+  onDelete,
+}: Props) {
   const { colors } = useTheme();
   const drag = useSharedValue(0);
   const start = useSharedValue(0);
   const [open, setOpen] = useState(false);
+
+  const actionW = (onEdit ? EDIT_W : 0) + (onDelete ? DELETE_W : 0);
+  const canSwipe = actionW > 0;
 
   const close = () => {
     drag.value = withSpring(0, SPRING);
@@ -84,7 +95,7 @@ export function SwipeableThingRow({ name, subtitle, icon, onPress, onDelete }: P
   };
 
   const pan = Gesture.Pan()
-    .enabled(Boolean(onDelete))
+    .enabled(canSwipe)
     .activeOffsetX([-12, 12])
     .failOffsetY([-10, 10])
     .onBegin(() => {
@@ -92,15 +103,15 @@ export function SwipeableThingRow({ name, subtitle, icon, onPress, onDelete }: P
     })
     .onUpdate((e) => {
       const next = start.value + e.translationX;
-      drag.value = Math.min(0, Math.max(-ACTION_W, next));
+      drag.value = Math.min(0, Math.max(-actionW, next));
     })
     .onEnd(() => {
-      const shouldOpen = drag.value < -ACTION_W * 0.45;
-      drag.value = withSpring(shouldOpen ? -ACTION_W : 0, SPRING);
+      const shouldOpen = drag.value < -actionW * 0.45;
+      drag.value = withSpring(shouldOpen ? -actionW : 0, SPRING);
       runOnJS(setOpen)(shouldOpen);
     });
 
-  const deleteClipStyle = useAnimatedStyle(() => ({
+  const actionsClipStyle = useAnimatedStyle(() => ({
     width: -drag.value,
   }));
 
@@ -119,7 +130,7 @@ export function SwipeableThingRow({ name, subtitle, icon, onPress, onDelete }: P
     />
   );
 
-  if (!onDelete) {
+  if (!canSwipe) {
     return (
       <View
         style={[
@@ -142,26 +153,47 @@ export function SwipeableThingRow({ name, subtitle, icon, onPress, onDelete }: P
       >
         <View style={styles.track}>
           <View style={styles.faceWrap}>{face}</View>
-          <Animated.View
-            style={[styles.deleteClip, { backgroundColor: colors.coral }, deleteClipStyle]}
-          >
-            <Pressable
-              onPress={() => {
-                blurActiveElement();
-                close();
-                onDelete();
-              }}
-              style={({ pressed }) => [
-                styles.deleteAction,
-                { backgroundColor: colors.coral },
-                pressed && { opacity: 0.9 },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Delete"
-            >
-              <Trash2 size={20} color={colors.onInk} strokeWidth={2.2} />
-            <Text style={[styles.deleteLabel, { color: colors.onInk }]}>Delete</Text>
-            </Pressable>
+          <Animated.View style={[styles.actionsClip, actionsClipStyle]}>
+            <View style={[styles.actionsRow, { width: actionW }]}>
+              {onEdit ? (
+                <Pressable
+                  onPress={() => {
+                    blurActiveElement();
+                    close();
+                    onEdit();
+                  }}
+                  style={({ pressed }) => [
+                    styles.editAction,
+                    { backgroundColor: colors.forest },
+                    pressed && { opacity: 0.9 },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Edit"
+                >
+                  <Pencil size={18} color={colors.onInk} strokeWidth={2.2} />
+                  <Text style={[styles.actionLabel, { color: colors.onInk }]}>Edit</Text>
+                </Pressable>
+              ) : null}
+              {onDelete ? (
+                <Pressable
+                  onPress={() => {
+                    blurActiveElement();
+                    close();
+                    onDelete();
+                  }}
+                  style={({ pressed }) => [
+                    styles.deleteAction,
+                    { backgroundColor: colors.coral },
+                    pressed && { opacity: 0.9 },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Delete"
+                >
+                  <Trash2 size={18} color={colors.onInk} strokeWidth={2.2} />
+                  <Text style={[styles.actionLabel, { color: colors.onInk }]}>Delete</Text>
+                </Pressable>
+              ) : null}
+            </View>
           </Animated.View>
         </View>
       </View>
@@ -196,18 +228,29 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  deleteClip: {
+  actionsClip: {
     overflow: 'hidden',
   },
-  deleteAction: {
-    width: ACTION_W,
+  actionsRow: {
+    flexDirection: 'row',
+    height: '100%',
+  },
+  editAction: {
+    width: EDIT_W,
     minHeight: 72,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
   },
-  deleteLabel: {
+  deleteAction: {
+    width: DELETE_W,
+    minHeight: 72,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  actionLabel: {
     fontFamily: fonts.sansMedium,
-    fontSize: 16,
+    fontSize: 12,
   },
 });

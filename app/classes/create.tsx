@@ -1,14 +1,17 @@
 import { useTheme } from '@/lib/ThemeContext';
 import { useMemo, useState } from 'react';
-import {
-  Pressable,
-  StyleSheet,
-  TextInput,
-  View,
-} from 'react-native';
+import { StyleSheet } from 'react-native';
 import { Stack, useRouter, type Href } from 'expo-router';
 import { Screen } from '@/components/ui/Screen';
 import { KeyboardFormScroll } from '@/components/ui/KeyboardFormScroll';
+import {
+  DetailChip,
+  DetailChipRow,
+  DetailField,
+  DetailPrimaryButton,
+  DetailSection,
+  DETAIL_DOCK_PAD,
+} from '@/components/ui/DetailKit';
 import { Text } from '@/components/ui/Text';
 import { DateField } from '@/components/ui/DateField';
 import { PersonChips } from '@/components/PersonChips';
@@ -22,7 +25,7 @@ import {
   SCHEDULE_DAYS,
   type ScheduleDay,
 } from '@/lib/classes';
-import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
+import { type ThemeColors, fonts, spacing } from '@/constants/theme';
 
 const MONTH_CHIPS = [1, 2, 3, 6] as const;
 
@@ -44,6 +47,7 @@ export default function CreateClassPackScreen() {
     () => selfMember(members)?.id ?? null
   );
   const [saving, setSaving] = useState(false);
+  const accent = colors.sky;
 
   const toggleDay = (dayId: ScheduleDay) => {
     setScheduleDays((prev) =>
@@ -90,90 +94,76 @@ export default function CreateClassPackScreen() {
   return (
     <Screen>
       <Stack.Screen options={{ title: 'New class pack' }} />
-      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={40}>
-          <Text variant="body" style={{ color: colors.mute, marginBottom: spacing.md }}>
-            A finite pack — like 24 skating classes in 3 months — not a daily habit.
-          </Text>
-
-          <Text style={styles.label}>Class</Text>
-          <TextInput
+      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={DETAIL_DOCK_PAD}>
+        <DetailSection label="Class">
+          <DetailField
             value={title}
             onChangeText={setTitle}
             placeholder="e.g. Skating, Piano, Swimming"
-            placeholderTextColor={colors.faint}
-            style={styles.input}
             autoFocus
           />
+        </DetailSection>
 
-          <Text style={styles.label}>How many classes</Text>
-          <TextInput
+        <DetailSection label="How many classes">
+          <DetailField
             value={total}
             onChangeText={(t) => setTotal(sanitizeIntegerInput(t))}
             keyboardType="number-pad"
             placeholder="24"
-            placeholderTextColor={colors.faint}
-            style={styles.input}
           />
+        </DetailSection>
 
-          <Text style={styles.label}>Already completed (optional)</Text>
-          <TextInput
+        <DetailSection label="Already completed">
+          <DetailField
             value={completed}
             onChangeText={(t) => setCompleted(sanitizeIntegerInput(t))}
             keyboardType="number-pad"
             placeholder="0"
-            placeholderTextColor={colors.faint}
-            style={styles.input}
           />
+        </DetailSection>
 
-          <Text style={styles.label}>Schedule days (optional)</Text>
-          <View style={styles.chips}>
-            {SCHEDULE_DAYS.map((day) => {
-              const on = scheduleDays.includes(day.id);
-              return (
-                <Pressable
-                  key={day.id}
-                  onPress={() => toggleDay(day.id)}
-                  style={[styles.chip, on && styles.chipOn]}
-                >
-                  <Text style={[styles.chipText, on && styles.chipTextOn]}>
-                    {day.short}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+        <DetailSection label="Schedule days">
+          <DetailChipRow>
+            {SCHEDULE_DAYS.map((day) => (
+              <DetailChip
+                key={day.id}
+                label={day.short}
+                selected={scheduleDays.includes(day.id)}
+                onPress={() => toggleDay(day.id)}
+                accent={accent}
+              />
+            ))}
+          </DetailChipRow>
+        </DetailSection>
 
-          <Text style={styles.label}>Schedule time (optional)</Text>
-          <TextInput
+        <DetailSection label="Schedule time">
+          <DetailField
             value={scheduleTime}
             onChangeText={setScheduleTime}
             placeholder="e.g. 10:00 AM"
-            placeholderTextColor={colors.faint}
-            style={styles.input}
           />
+        </DetailSection>
 
-          <Text style={styles.label}>Use within</Text>
-          <View style={styles.chips}>
-            {MONTH_CHIPS.map((n) => {
-              const on = months === n;
-              return (
-                <Pressable
-                  key={n}
-                  onPress={() => setMonths(n)}
-                  style={[styles.chip, on && styles.chipOn]}
-                >
-                  <Text style={[styles.chipText, on && styles.chipTextOn]}>
-                    {n} {n === 1 ? 'month' : 'months'}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+        <DetailSection label="Use within">
+          <DetailChipRow>
+            {MONTH_CHIPS.map((n) => (
+              <DetailChip
+                key={n}
+                label={`${n} ${n === 1 ? 'month' : 'months'}`}
+                selected={months === n}
+                onPress={() => setMonths(n)}
+                accent={accent}
+              />
+            ))}
+          </DetailChipRow>
+        </DetailSection>
 
-          <Text style={styles.label}>Starts</Text>
+        <DetailSection label="Starts">
           <DateField value={startsOn} onChange={setStartsOn} />
+        </DetailSection>
 
-          <Text style={styles.preview}>
+        <DetailSection label="Window">
+          <Text style={{ color: accent, fontFamily: fonts.sansMedium, fontSize: 15 }}>
             {totalN} classes until{' '}
             {new Date(`${endsOn}T12:00:00`).toLocaleDateString(undefined, {
               day: 'numeric',
@@ -181,97 +171,31 @@ export default function CreateClassPackScreen() {
               year: 'numeric',
             })}
           </Text>
+        </DetailSection>
 
-          <PersonChips
-            members={members}
-            personId={personId}
-            onChange={setPersonId}
-            noneLabel="Unassigned"
-          />
+        <PersonChips
+          members={members}
+          personId={personId}
+          onChange={setPersonId}
+          noneLabel="Unassigned"
+        />
 
-          <Pressable
-            onPress={() => void save()}
-            disabled={!canSave || saving}
-            style={[styles.save, (!canSave || saving) && styles.saveDisabled]}
-          >
-            <Text style={styles.saveText}>
-              {saving ? 'Saving…' : 'Save class pack'}
-            </Text>
-          </Pressable>
-        </KeyboardFormScroll>
+        <DetailPrimaryButton
+          label={saving ? 'Saving…' : 'Save class pack'}
+          accent={accent}
+          disabled={!canSave || saving}
+          onPress={() => void save()}
+        />
+      </KeyboardFormScroll>
     </Screen>
   );
 }
 
-function makeStyles(colors: ThemeColors) {
+function makeStyles(_colors: ThemeColors) {
   return StyleSheet.create({
-  content: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xs,
-  },
-  label: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    color: colors.mute,
-    marginBottom: spacing.sm,
-    marginTop: spacing.md,
-  },
-  input: {
-    backgroundColor: colors.white,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 14,
-    fontFamily: fonts.sans,
-    fontSize: 16,
-    color: colors.ink,
-  },
-  preview: {
-    marginTop: spacing.md,
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    color: colors.forest,
-  },
-  chips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: radius.md,
-    backgroundColor: colors.white,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-  },
-  chipOn: {
-    backgroundColor: colors.forestSoft,
-    borderColor: colors.forest,
-  },
-  chipText: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
-    color: colors.ink,
-  },
-  chipTextOn: {
-    color: colors.forest,
-  },
-  save: {
-    marginTop: spacing.xl,
-    backgroundColor: colors.forest,
-    borderRadius: radius.md,
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  saveDisabled: {
-    opacity: 0.45,
-  },
-  saveText: {
-    fontFamily: fonts.sansSemi,
-    fontSize: 16,
-    color: colors.forestOn,
-  },
-});
+    content: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.xs,
+    },
+  });
 }

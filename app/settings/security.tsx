@@ -2,6 +2,7 @@ import { useTheme } from '@/lib/ThemeContext';
 import { useMemo, useEffect, useState } from 'react';
 import { Alert, Platform, StyleSheet, Switch, View } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
+import { DETAIL_DOCK_PAD } from '@/components/ui/DetailKit';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { ListCard } from '@/components/ui/ListKit';
 import { Text } from '@/components/ui/Text';
@@ -104,9 +105,9 @@ export default function SecuritySettingsScreen() {
   return (
     <ModuleScreen
       title="Security"
-      subtitle="Biometrics stay on this device — Saavi never sees your Face ID data."
       backLabel="Settings"
       backFallbackHref="/settings"
+      bottomExtra={DETAIL_DOCK_PAD}
     >
       <ModuleSection label="Device">
         <ListCard>

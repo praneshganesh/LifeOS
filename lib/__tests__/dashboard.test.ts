@@ -11,7 +11,7 @@ describe('dashboard', () => {
     assert.equal(givenName(''), '');
   });
 
-  it('puts unchecked habits in the checklist', () => {
+  it('puts unchecked habits in Today', () => {
     const habit = createHabit({ title: 'Walk' });
     const dash = buildDashboard({
       inventory: [],
@@ -22,8 +22,8 @@ describe('dashboard', () => {
       now: new Date(`${dayKey()}T12:00:00`),
     });
     assert.equal(dash.habitsOpen, 1);
-    assert.equal(dash.checklist[0]?.habitId, habit.id);
-    assert.equal(dash.checklist[0]?.done, false);
+    assert.equal(dash.today[0]?.habitId, habit.id);
+    assert.equal(dash.today[0]?.subtitle, 'Habit');
   });
 
   it('shows owner names for others but never for yourself', () => {
@@ -38,10 +38,10 @@ describe('dashboard', () => {
       selfName: 'Pranesh',
       now: new Date(`${dayKey()}T12:00:00`),
     });
-    const ownRow = dash.checklist.find((r) => r.habitId === own.id);
-    const kidsRow = dash.checklist.find((r) => r.habitId === kids.id);
-    assert.equal(ownRow?.meta, undefined);
-    assert.equal(kidsRow?.meta, 'Saara');
+    const ownRow = dash.today.find((r) => r.habitId === own.id);
+    const kidsRow = dash.today.find((r) => r.habitId === kids.id);
+    assert.equal(ownRow?.subtitle, 'Habit');
+    assert.equal(kidsRow?.subtitle, 'Saara');
   });
 
   it('shows scheduled class in due-soon attention items on Friday before Saturday class', () => {

@@ -34,16 +34,45 @@ export function normalizeWarrantyExpiry(raw?: string | null): string | undefined
   return undefined;
 }
 
-/** Pull "warranty until 2028" from the user's sentence when the model omits the field. */
-export function warrantyExpiryFromUtterance(text?: string): string | undefined {
+/**
+ * Pull "warranty until 2028" / "until next December" from the user's sentence.
+ * Deterministic on-device parse — trusted over the model for relative phrases.
+ */
+export function warrantyExpiryFromUtterance(
+  text?: string,
+  from = new Date()
+): string | undefined {
   if (!text?.trim()) return undefined;
   const m =
     text.match(
       /\b(?:warranty|guarantee)\b[\s\S]{0,48}?\b(?:until|till|through|to)\s+(\d{4}(?:-\d{2}-\d{2})?)\b/i
     ) ||
     text.match(/\b(?:until|till|through)\s+(\d{4}(?:-\d{2}-\d{2})?)\b/i);
-  if (!m) return undefined;
-  return normalizeWarrantyExpiry(m[1]);
+  if (m) return normalizeWarrantyExpiry(m[1]);
+
+  // "until (next) december (2027 | next year)" → end of that month
+  const monthPhrase = text.match(
+    new RegExp(
+      `\\b(?:until|till|through|to)\\s+(?:(next)\\s+)?(${MONTHS})(?:\\s+(\\d{4})|\\s+(next\\s+year))?\\b`,
+      'i'
+    )
+  );
+  if (monthPhrase) {
+    const month = monthIndex(monthPhrase[2]);
+    if (month != null) {
+      let year = monthPhrase[3] ? Number(monthPhrase[3]) : from.getFullYear();
+      if (!monthPhrase[3]) {
+        if (monthPhrase[1] || monthPhrase[4]) {
+          // "next december" / "december next year" → next calendar year
+          year = from.getFullYear() + 1;
+        } else if (new Date(year, month + 1, 0) < startOfLocalDay(from)) {
+          year += 1; // bare month already over this year
+        }
+      }
+      return localDayKey(new Date(year, month + 1, 0));
+    }
+  }
+  return undefined;
 }
 
 /** Year-only warranties are stored as YYYY-12-31 — show the year in speech. */
@@ -52,6 +81,35 @@ export function displayWarrantyExpiry(iso?: string | null): string | undefined {
   if (!s || s === '—' || s === '-') return undefined;
   if (/^\d{4}-12-31$/.test(s)) return s.slice(0, 4);
   return s;
+}
+
+const MONTH_SHORT = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+] as const;
+
+/**
+ * Human display date: "2026-12-31" → "Dec 31, 2026" (timezone-safe, no Date
+ * round-trip). Year-end dates (how "until 2027" warranties are stored) can
+ * render as "Dec 2027". Empty / "—" → undefined so callers can hide the row.
+ * Non-ISO strings pass through untouched.
+ */
+export function formatDisplayDate(
+  iso?: string | null,
+  opts: { yearEndAsMonthYear?: boolean } = {}
+): string | undefined {
+  const s = iso?.trim();
+  if (!s || s === '—' || s === '-') return undefined;
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return s;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return s;
+  if (opts.yearEndAsMonthYear && month === 12 && day === 31) {
+    return `Dec ${year}`;
+  }
+  return `${MONTH_SHORT[month - 1]} ${day}, ${year}`;
 }
 
 const WEEKDAYS = [
@@ -359,18 +417,26 @@ export function parseReminderEndsAtFromUtterance(
     }
   }
 
-  // "until December" / "through March" → last day of that month
+  // "until December" / "until next December" / "through March 2027" /
+  // "until December next year" → last day of that month
   const untilMonth = text.match(
-    new RegExp(`\\b(?:until|till|through)\\s+(${MONTHS})(?:\\s+(\\d{4}))?\\b`, 'i')
+    new RegExp(
+      `\\b(?:until|till|through)\\s+(?:(next)\\s+)?(${MONTHS})(?:\\s+(\\d{4})|\\s+(next\\s+year))?\\b`,
+      'i'
+    )
   );
   if (untilMonth) {
-    const month = monthIndex(untilMonth[1]);
+    const month = monthIndex(untilMonth[2]);
     if (month != null) {
-      let year = untilMonth[2] ? Number(untilMonth[2]) : from.getFullYear();
-      // If that month is already over this year, use next year
-      const endOfMonth = new Date(year, month + 1, 0);
-      if (!untilMonth[2] && endOfMonth < startOfLocalDay(from)) {
-        year += 1;
+      let year = untilMonth[3] ? Number(untilMonth[3]) : from.getFullYear();
+      if (!untilMonth[3]) {
+        if (untilMonth[1] || untilMonth[4]) {
+          // "next december" / "december next year" → next calendar year
+          year = from.getFullYear() + 1;
+        } else if (new Date(year, month + 1, 0) < startOfLocalDay(from)) {
+          // Bare month already over this year → the coming one
+          year += 1;
+        }
       }
       return localDayKey(new Date(year, month + 1, 0));
     }
@@ -430,14 +496,18 @@ export function parseReminderFromUtterance(
 ): { label: string; notes?: string } | undefined {
   if (!text?.trim()) return undefined;
   let s = text.trim();
+  // Allow lead-in words: "Can you set a reminder for…"
   s = s.replace(
-    /^(please\s+)?(log|set|add|create)\s+(a\s+)?reminder\s+(to\s+|for\s+)?/i,
+    /^[\s\S]*?\b(?:please\s+)?(?:log|set|add|create)\s+(?:a\s+)?reminder\s+(?:to\s+|for\s+)?/i,
     ''
   );
-  s = s.replace(/^remind\s+me\s+(to\s+|about\s+|that\s+)?/i, '');
+  s = s.replace(
+    /^[\s\S]*?\bremind\s+me\s+(?:to\s+|about\s+|that\s+|for\s+)?/i,
+    ''
+  );
   s = stripReminderDatePhrases(s);
-  s = s.replace(/^to\s+/i, '').trim();
-  if (s.length < 3) return { label: 'Reminder' };
+  s = finalizeReminderLabel(s);
+  if (s.length < 3 || /^reminder$/i.test(s)) return { label: 'Reminder' };
 
   const splitOn = [
     /\s+(it's|its|it is)\s+/i,
@@ -448,26 +518,38 @@ export function parseReminderFromUtterance(
   for (const pat of splitOn) {
     const m = s.match(pat);
     if (m?.index != null && m.index >= 3) {
-      const label = s.slice(0, m.index).trim();
-      const notes = s.slice(m.index).trim();
+      const label = finalizeReminderLabel(s.slice(0, m.index));
+      const notesRaw = s.slice(m.index).trim();
+      const notes = notesRaw
+        ? notesRaw.charAt(0).toUpperCase() + notesRaw.slice(1)
+        : undefined;
       if (label.length >= 3) {
-        return {
-          label: label.charAt(0).toUpperCase() + label.slice(1),
-          notes: notes ? notes.charAt(0).toUpperCase() + notes.slice(1) : undefined,
-        };
+        return { label, notes };
       }
     }
   }
 
-  const label = s.charAt(0).toUpperCase() + s.slice(1);
+  const label = s;
   if (label.length > 56) {
-    const cut = label.slice(0, 56).replace(/\s+\S*$/, '').trim();
+    const cut = finalizeReminderLabel(label.slice(0, 56).replace(/\s+\S*$/, ''));
     const rest = label.slice(cut.length).trim();
     if (cut.length >= 3) {
       return { label: cut, notes: rest || undefined };
     }
   }
   return { label };
+}
+
+/**
+ * Drop leftover command glue so titles aren't "For PE uniform…".
+ * Safe for mid-phrase "for" ("Apply for renewed passport").
+ */
+export function finalizeReminderLabel(raw: string): string {
+  let s = raw.trim().replace(/\s+/g, ' ');
+  s = s.replace(/^(?:for|to|about|regarding)\s+/i, '');
+  s = s.replace(/[.,;:!?]+$/g, '').trim();
+  if (!s) return 'Reminder';
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 export function reminderLabelFromUtterance(text?: string): string | undefined {

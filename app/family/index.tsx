@@ -62,7 +62,6 @@ export default function FamilyScreen() {
   return (
     <ModuleScreen
       title="Household"
-      subtitle="People and pets who own things in Saavi — assign habits, classes, and documents to them."
       defaultOrigin="things"
       right={
         <CaptureContextButton
@@ -126,7 +125,7 @@ export default function FamilyScreen() {
           </ListCard>
         ) : (
           <Text variant="body" style={{ color: colors.mute }}>
-            No one yet. Add yourself and family so Talk can tag things “for Priya” only when that person exists here.
+            No one yet. Tap + to add.
           </Text>
         )}
       </ModuleSection>

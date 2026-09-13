@@ -24,6 +24,9 @@ const UNLIMITED = {
 
 export const TRIAL_DAYS = 14;
 
+/** Family plan includes this many app logins (owner + invitees). */
+export const FAMILY_LOGIN_SEATS = 4;
+
 export const PLANS: PlanDef[] = [
   {
     id: 'trial',
