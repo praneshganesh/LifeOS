@@ -15,7 +15,8 @@ import {
   DetailField,
   DetailPrimaryButton,
   DetailSection,
-  DETAIL_DOCK_PAD,
+  DetailStickyActions,
+  DETAIL_STICKY_PAD,
 } from '@/components/ui/DetailKit';
 import { Text } from '@/components/ui/Text';
 import { useHabits } from '@/lib/HabitsContext';
@@ -81,7 +82,7 @@ export default function CreateHabitScreen() {
   return (
     <Screen>
       <Stack.Screen options={{ title: 'New habit' }} />
-      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={DETAIL_DOCK_PAD}>
+      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={DETAIL_STICKY_PAD}>
         <DetailSection label="Habit">
           <DetailField
             value={title}
@@ -162,13 +163,15 @@ export default function CreateHabitScreen() {
           </DetailSection>
         ) : null}
 
+      </KeyboardFormScroll>
+      <DetailStickyActions>
         <DetailPrimaryButton
           label={saving ? 'Saving…' : doneToday ? 'Save & log today' : 'Save habit'}
           accent={accent}
           disabled={!title.trim() || saving}
           onPress={() => void save()}
         />
-      </KeyboardFormScroll>
+      </DetailStickyActions>
     </Screen>
   );
 }

@@ -1,4 +1,5 @@
 import { useTheme } from '@/lib/ThemeContext';
+import { View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { ModuleScreen } from '@/components/ui/ModuleScreen';
 import {
@@ -6,8 +7,8 @@ import {
   DetailFact,
   DetailFacts,
   DetailHero,
-  DetailRemoveButton,
   DetailSection,
+  DetailTrashButton,
   DETAIL_DOCK_PAD,
 } from '@/components/ui/DetailKit';
 import { Text } from '@/components/ui/Text';
@@ -82,10 +83,13 @@ export default function SubscriptionDetailScreen() {
       backFallbackHref="/subscriptions"
       bottomExtra={DETAIL_DOCK_PAD}
       right={
-        <DetailEditButton
-          accent={colors.forest}
-          onPress={() => router.push(editHref)}
-        />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <DetailTrashButton onPress={() => void onDelete()} />
+          <DetailEditButton
+            accent={colors.forest}
+            onPress={() => router.push(editHref)}
+          />
+        </View>
       }
       hero={
         <DetailHero
@@ -126,8 +130,6 @@ export default function SubscriptionDetailScreen() {
           </Text>
         </DetailSection>
       ) : null}
-
-      <DetailRemoveButton onPress={() => void onDelete()} />
     </ModuleScreen>
   );
 }

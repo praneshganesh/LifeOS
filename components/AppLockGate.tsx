@@ -175,7 +175,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     minWidth: 180,
     height: 52,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.xl,

@@ -118,7 +118,7 @@ export function composeAppliedReply(params: {
     return `Removed ${params.removedClassTitle.trim()}.`;
   }
   if (actions.some((a) => a?.type === 'remove_class_pack')) {
-    return 'Couldn’t remove that class pack — name it first.';
+    return 'Couldn’t remove that class — name it first.';
   }
   if (params.removedLastDoneLabel?.trim()) {
     return `Removed ${params.removedLastDoneLabel.trim()}.`;
@@ -205,7 +205,7 @@ export function composeAppliedReply(params: {
     const total = params.classPackTotal;
     const who = params.assignedTo ? ` for ${params.assignedTo}` : '';
     if (left != null && total != null && total > 0) {
-      return `Logged ${params.classLoggedTitle}${who} · ${total - left} of ${total} used, ${left} left.`;
+      return `Logged ${params.classLoggedTitle}${who} · ${total - left} of ${total} sessions used, ${left} left.`;
     }
     return `Logged ${params.classLoggedTitle}${who}.`;
   }
@@ -220,14 +220,14 @@ export function composeAppliedReply(params: {
       : '';
     return title
       ? `There's no ${title} pack${who} yet. Enroll first, then I can log attendance.`
-      : `There's no class pack to log against yet${who}.`;
+      : `There's no class to log a session against yet${who}.`;
   }
 
   if (
     /^logged\b/i.test(params.modelReply || '') &&
     /\b(class|swimming|skating|lesson|session)\b/i.test(params.modelReply || '')
   ) {
-    return `There's no class pack to log against yet.`;
+    return `There's no class to log a session against yet.`;
   }
 
   if (params.classPackTitle) {
@@ -244,8 +244,8 @@ export function composeAppliedReply(params: {
   }
   if (actions.some((a) => a?.type === 'add_class_pack' || a?.type === 'update_class_pack')) {
     return params.updatedClassPack
-      ? 'Couldn’t update that class pack — name it first.'
-      : 'Couldn’t add that class pack — try again.';
+      ? 'Couldn’t update that class — name it first.'
+      : 'Couldn’t add that class — try again.';
   }
 
   if (params.loggedDoneLabel?.trim()) {

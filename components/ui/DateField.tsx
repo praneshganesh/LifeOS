@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Platform,
   Pressable,
@@ -12,12 +12,17 @@ import DateTimePicker, {
 } from '@react-native-community/datetimepicker';
 import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
+import { FormPill, FormRow } from '@/components/ui/FormKit';
 import { parseDateInput, toDateInputValue } from '@/lib/lastDone';
 import { fonts, radius, shadows, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
 
 const WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'] as const;
 const IS_NATIVE = Platform.OS === 'ios' || Platform.OS === 'android';
+
+/** Apple’s inline calendar is ~320pt wide and won’t stretch on Pro Max / Plus. */
+const IOS_INLINE_CALENDAR_WIDTH = 320;
+const IOS_INLINE_CALENDAR_HEIGHT = 336;
 
 function toDate(value: string): Date {
   return parseDateInput(value) ?? new Date();
@@ -55,6 +60,16 @@ function formatDisplay(value: string): string {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
+  });
+}
+
+function formatPillDisplay(value: string): string {
+  const d = toDate(value || toDateInputValue(new Date()));
+  const thisYear = d.getFullYear() === new Date().getFullYear();
+  return d.toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    ...(thisYear ? {} : { year: 'numeric' }),
   });
 }
 
@@ -106,21 +121,31 @@ function NativeDatePicker({
   maximumDate,
   minimumDate,
   embedded,
+  defaultOpen,
 }: {
   value: string;
   onChange: (yyyyMmDd: string) => void;
   maximumDate?: Date;
   minimumDate?: Date;
   embedded: boolean;
+  defaultOpen?: boolean;
 }) {
   const { colors } = useTheme();
   const resolved = value || toDateInputValue(new Date());
   const selected = toDate(resolved);
-  const [androidOpen, setAndroidOpen] = useState(embedded);
-  const [iosExpanded, setIosExpanded] = useState(embedded);
+  const [androidOpen, setAndroidOpen] = useState(embedded || Boolean(defaultOpen));
+  const [iosExpanded, setIosExpanded] = useState(embedded || Boolean(defaultOpen));
+  const [iosWrapW, setIosWrapW] = useState(0);
 
   const minBound = boundMinimum(minimumDate);
   const maxBound = boundMaximum(maximumDate);
+
+  useEffect(() => {
+    if (defaultOpen) {
+      if (Platform.OS === 'ios') setIosExpanded(true);
+      if (Platform.OS === 'android') setAndroidOpen(true);
+    }
+  }, [defaultOpen]);
 
   function onNativeChange(event: DateTimePickerEvent, date?: Date) {
     if (Platform.OS === 'android') {
@@ -129,17 +154,24 @@ function NativeDatePicker({
     }
     if (!date) return;
     onChange(toDateInputValue(date));
+    if (!embedded && Platform.OS === 'ios') setIosExpanded(false);
   }
 
   if (Platform.OS === 'ios') {
-    // Embedded sheet: full inline calendar. Form fields: compact chip + expand.
     if (embedded || iosExpanded) {
+      const scale =
+        iosWrapW > 0 ? Math.min(1.35, iosWrapW / IOS_INLINE_CALENDAR_WIDTH) : 1;
+      const scaledH = Math.round(IOS_INLINE_CALENDAR_HEIGHT * scale);
       return (
         <View
           style={[
             styles.nativeWrap,
             { backgroundColor: colors.surface, borderColor: colors.line },
           ]}
+          onLayout={(e) => {
+            const w = Math.floor(e.nativeEvent.layout.width);
+            if (w > 0 && w !== iosWrapW) setIosWrapW(w);
+          }}
         >
           {!embedded ? (
             <Pressable
@@ -150,15 +182,32 @@ function NativeDatePicker({
               <Text style={[styles.changeHint, { color: colors.accent }]}>Done</Text>
             </Pressable>
           ) : null}
-          <DateTimePicker
-            value={selected}
-            mode="date"
-            display="inline"
-            onChange={onNativeChange}
-            maximumDate={maxBound}
-            minimumDate={minBound}
-            style={styles.iosInline}
-          />
+          <View style={[styles.iosInlineClip, { height: scaledH }]}>
+            <View
+              style={{
+                width: IOS_INLINE_CALENDAR_WIDTH,
+                height: IOS_INLINE_CALENDAR_HEIGHT,
+                transform: [
+                  { translateX: (IOS_INLINE_CALENDAR_WIDTH * (scale - 1)) / 2 },
+                  { translateY: (IOS_INLINE_CALENDAR_HEIGHT * (scale - 1)) / 2 },
+                  { scale },
+                ],
+              }}
+            >
+              <DateTimePicker
+                value={selected}
+                mode="date"
+                display="inline"
+                onChange={onNativeChange}
+                maximumDate={maxBound}
+                minimumDate={minBound}
+                style={{
+                  width: IOS_INLINE_CALENDAR_WIDTH,
+                  height: IOS_INLINE_CALENDAR_HEIGHT,
+                }}
+              />
+            </View>
+          </View>
         </View>
       );
     }
@@ -186,7 +235,6 @@ function NativeDatePicker({
     );
   }
 
-  // Android: system dialog
   return (
     <View>
       <Pressable
@@ -241,10 +289,12 @@ function WebDatePicker({
   const [view, setView] = useState(
     () => new Date(selected.getFullYear(), selected.getMonth(), 1)
   );
-  const [gridW, setGridW] = useState(0);
+
+  useEffect(() => {
+    if (defaultOpen) setOpen(true);
+  }, [defaultOpen]);
 
   const cells = useMemo(() => buildMonthGrid(view), [view]);
-  const cellSize = gridW > 0 ? Math.floor(gridW / 7) : 0;
 
   function selectDay(day: Date) {
     if (isDisabled(day, minimumDate, maximumDate)) return;
@@ -346,21 +396,10 @@ function WebDatePicker({
             ))}
           </View>
 
-          <View
-            style={styles.grid}
-            onLayout={(e) => {
-              const w = Math.floor(e.nativeEvent.layout.width);
-              if (w > 0 && w !== gridW) setGridW(w);
-            }}
-          >
+          <View style={styles.grid}>
             {cells.map((day, i) => {
               if (!day) {
-                return (
-                  <View
-                    key={`e-${i}`}
-                    style={cellSize > 0 ? { width: cellSize, height: cellSize } : styles.dayCellFallback}
-                  />
-                );
+                return <View key={`e-${i}`} style={styles.dayCell} />;
               }
               const disabled = isDisabled(day, minimumDate, maximumDate);
               const isSelected = sameDay(day, selected);
@@ -374,9 +413,7 @@ function WebDatePicker({
                   accessibilityState={{ disabled, selected: isSelected }}
                   accessibilityLabel={toDateInputValue(day)}
                   style={({ pressed }) => [
-                    cellSize > 0
-                      ? { width: cellSize, height: cellSize }
-                      : styles.dayCellFallback,
+                    styles.dayCell,
                     styles.dayCellInner,
                     isSelected && { backgroundColor: colors.accent },
                     !isSelected && isToday && { borderWidth: 1, borderColor: colors.accentSoft },
@@ -411,6 +448,54 @@ function WebDatePicker({
   );
 }
 
+/**
+ * Calendar-style row: label left, date pill right.
+ * Tap opens the native inline calendar (iOS) or date dialog (Android).
+ */
+export function DatePillRow({
+  label,
+  value,
+  onChange,
+  last,
+  maximumDate,
+  minimumDate,
+}: {
+  label: string;
+  value: string;
+  onChange: (yyyyMmDd: string) => void;
+  last?: boolean;
+  maximumDate?: Date;
+  minimumDate?: Date;
+}) {
+  const [open, setOpen] = useState(false);
+  const display = formatPillDisplay(value);
+  const expanded = open;
+
+  return (
+    <View>
+      <FormRow label={label} last={last && !expanded}>
+        <FormPill
+          label={display}
+          active={expanded}
+          onPress={() => setOpen((v) => !v)}
+        />
+      </FormRow>
+      {expanded ? (
+        <DateField
+          value={value}
+          onChange={(v) => {
+            onChange(v);
+            if (Platform.OS === 'android') setOpen(false);
+          }}
+          maximumDate={maximumDate}
+          minimumDate={minimumDate}
+          embedded
+        />
+      ) : null}
+    </View>
+  );
+}
+
 /** App-styled date field — native system picker on iOS/Android, custom grid on web. */
 export function DateField(props: Props) {
   if (IS_NATIVE) {
@@ -421,7 +506,8 @@ export function DateField(props: Props) {
           onChange={props.onChange}
           maximumDate={props.maximumDate}
           minimumDate={props.minimumDate}
-          embedded={Boolean(props.embedded || props.defaultOpen)}
+          embedded={Boolean(props.embedded)}
+          defaultOpen={Boolean(props.defaultOpen)}
         />
       </View>
     );
@@ -435,9 +521,8 @@ type OptionalProps = Props & {
 };
 
 /**
- * DateField for optional dates: renders an "Add date" affordance when empty
- * and a "Clear" link when set, so junk free-text dates are impossible and
- * "no date" stays representable.
+ * Optional date: empty shows a choose row; tap opens the calendar.
+ * Does not commit until the user picks a day (Cancel discards).
  */
 export function OptionalDateField({
   value,
@@ -447,30 +532,53 @@ export function OptionalDateField({
   ...rest
 }: OptionalProps) {
   const { colors } = useTheme();
-  if (!value) {
+  const [picking, setPicking] = useState(false);
+  const draft = value || toDateInputValue(new Date());
+
+  if (!value && !picking) {
     return (
       <Pressable
-        onPress={() => onChange(toDateInputValue(new Date()))}
+        onPress={() => setPicking(true)}
         style={({ pressed }) => [
           styles.field,
-          styles.addField,
           { borderColor: colors.lineStrong, backgroundColor: colors.surface },
           pressed && { opacity: 0.9 },
           style,
         ]}
+        accessibilityRole="button"
+        accessibilityLabel={addLabel}
       >
         <View style={[styles.iconWrap, { backgroundColor: colors.accentSoft }]}>
           <Calendar size={16} color={colors.accent} strokeWidth={2.2} />
         </View>
         <Text style={[styles.fieldText, { color: colors.mute }]}>{addLabel}</Text>
+        <Text style={[styles.changeHint, { color: colors.accent }]}>Choose</Text>
       </Pressable>
     );
   }
+
   return (
     <View style={style}>
-      <DateField value={value} onChange={onChange} {...rest} />
-      <Pressable onPress={() => onChange('')} hitSlop={6} style={styles.clearBtn}>
-        <Text style={[styles.clearText, { color: colors.mute }]}>Clear date</Text>
+      <DateField
+        value={draft}
+        defaultOpen={picking && !value}
+        onChange={(v) => {
+          onChange(v);
+          setPicking(false);
+        }}
+        {...rest}
+      />
+      <Pressable
+        onPress={() => {
+          if (value) onChange('');
+          setPicking(false);
+        }}
+        hitSlop={6}
+        style={styles.clearBtn}
+      >
+        <Text style={[styles.clearText, { color: colors.mute }]}>
+          {value ? 'Clear date' : 'Cancel'}
+        </Text>
       </Pressable>
     </View>
   );
@@ -481,8 +589,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    borderRadius: radius.sm,
-    borderWidth: 1,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
     paddingHorizontal: spacing.md,
     paddingVertical: 12,
     minHeight: 48,
@@ -490,7 +598,7 @@ const styles = StyleSheet.create({
   iconWrap: {
     width: 28,
     height: 28,
-    borderRadius: 9,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -502,31 +610,31 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   changeHint: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
+    fontFamily: fonts.sansSemi,
+    fontSize: 15,
   },
   nativeWrap: {
     borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1.5,
     overflow: 'hidden',
-    alignItems: 'center',
+    width: '100%',
   },
   nativeCloseRow: {
     alignSelf: 'flex-end',
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
   },
-  iosInline: {
-    // Inline calendar needs explicit size on iOS or hit targets collapse.
-    alignSelf: 'stretch',
+  iosInlineClip: {
     width: '100%',
-    minHeight: 320,
+    overflow: 'hidden',
   },
   panel: {
     marginTop: 8,
     borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1.5,
     padding: spacing.md,
+    width: '100%',
+    alignSelf: 'stretch',
     ...shadows.soft,
   },
   panelEmbedded: {
@@ -546,12 +654,13 @@ const styles = StyleSheet.create({
   navBtn: {
     width: 32,
     height: 32,
-    borderRadius: 10,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
   weekRow: {
     flexDirection: 'row',
+    width: '100%',
     marginBottom: 4,
   },
   weekday: {
@@ -565,14 +674,14 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     width: '100%',
   },
-  dayCellFallback: {
-    width: '14.2857%',
+  dayCell: {
+    width: '14.285714%',
     aspectRatio: 1,
   },
   dayCellInner: {
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 10,
+    borderRadius: radius.md,
   },
   dayText: {
     fontFamily: fonts.sansMedium,
@@ -587,9 +696,6 @@ const styles = StyleSheet.create({
   footerLink: {
     fontFamily: fonts.sansMedium,
     fontSize: 16,
-  },
-  addField: {
-    borderStyle: 'dashed',
   },
   clearBtn: {
     alignSelf: 'flex-start',

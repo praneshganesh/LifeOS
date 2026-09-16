@@ -1,5 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Alert, ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen } from '@/components/ui/Screen';
@@ -8,11 +15,10 @@ import { usePlan } from '@/lib/PlanContext';
 import { isOnboardingDone } from '@/lib/onboarding';
 import { fonts, radius, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
-import { pickOffer } from '@/lib/billing/revenueCat';
+import { pickOffer, type OfferSummary } from '@/lib/billing/revenueCat';
 
 /**
- * Hard gate when trial ends — pick Pro or Family via RevenueCat.
- * After subscribe: onboarding if needed, else home.
+ * Hard gate when trial ends — Pro / Family via Apple (RevenueCat → StoreKit).
  */
 export default function PaywallScreen() {
   const { colors } = useTheme();
@@ -28,9 +34,17 @@ export default function PaywallScreen() {
     refreshOffers,
   } = usePlan();
   const [busy, setBusy] = useState<'pro' | 'family' | 'restore' | null>(null);
+  const [loadingOffers, setLoadingOffers] = useState(true);
 
   useEffect(() => {
-    void refreshOffers();
+    let live = true;
+    setLoadingOffers(true);
+    void refreshOffers().finally(() => {
+      if (live) setLoadingOffers(false);
+    });
+    return () => {
+      live = false;
+    };
   }, [refreshOffers]);
 
   const proOffer =
@@ -45,6 +59,20 @@ export default function PaywallScreen() {
 
   async function pick(planId: 'pro' | 'family') {
     if (busy) return;
+    if (!billingReady) {
+      Alert.alert(
+        'App Store billing',
+        'Subscriptions are purchased through Apple on a TestFlight or App Store build with RevenueCat connected. This preview can’t charge your Apple ID.'
+      );
+      return;
+    }
+    if (!(planId === 'pro' ? proOffer : familyOffer)) {
+      Alert.alert(
+        'Plans unavailable',
+        'Store products aren’t loaded yet. Check RevenueCat offerings and App Store Connect subscriptions, then try again.'
+      );
+      return;
+    }
     setBusy(planId);
     try {
       await subscribe(planId, 'yearly');
@@ -61,6 +89,13 @@ export default function PaywallScreen() {
 
   async function onRestore() {
     if (busy) return;
+    if (!billingReady) {
+      Alert.alert(
+        'Restore',
+        'Restore works on TestFlight / App Store builds once RevenueCat is connected.'
+      );
+      return;
+    }
     setBusy('restore');
     try {
       const result = await restore();
@@ -78,88 +113,74 @@ export default function PaywallScreen() {
     entitlement.paywallReason === 'trial_ended'
       ? 'Your trial has ended'
       : 'Choose a plan';
-  const subtitle =
-    entitlement.paywallReason === 'trial_ended'
-      ? 'Subscribe to keep your Things, Talk, and household in sync.'
-      : 'Unlock Saavi on this device.';
 
   return (
     <Screen>
-      <View
-        style={[
+      <ScrollView
+        contentContainerStyle={[
           styles.wrap,
           {
             paddingTop: insets.top + spacing.xl,
-            paddingBottom: insets.bottom + spacing.lg,
+            paddingBottom: insets.bottom + spacing.xxl,
           },
         ]}
+        showsVerticalScrollIndicator={false}
       >
-        <Text style={[styles.kicker, { color: colors.mute }]}>Saavi</Text>
+        <Text style={[styles.brand, { color: colors.ink }]}>Saavi</Text>
         <Text style={[styles.title, { color: colors.ink }]}>{title}</Text>
-        <Text style={[styles.sub, { color: colors.mute }]}>{subtitle}</Text>
+        <Text style={[styles.sub, { color: colors.mute }]}>
+          Subscribe with Apple. Cancel anytime in Settings.
+        </Text>
 
-        <Pressable
+        <PlanCard
+          name="Pro"
+          hint="One login · all your devices"
+          offer={proOffer}
+          loading={loadingOffers && billingReady}
+          billingReady={billingReady}
+          selected
+          busy={busy === 'pro'}
           onPress={() => void pick('pro')}
-          disabled={!!busy}
-          style={({ pressed }) => [
-            styles.card,
-            {
-              backgroundColor: colors.surface,
-              borderColor: colors.accent,
-              opacity: pressed || busy === 'pro' ? 0.9 : 1,
-            },
-          ]}
-        >
-          <View style={styles.cardTop}>
-            <Text style={[styles.cardName, { color: colors.ink }]}>Pro</Text>
-            <Text style={[styles.cardPrice, { color: colors.accent }]}>
-              {proOffer?.priceString ?? '—'}
-            </Text>
-          </View>
-          <Text style={[styles.cardHint, { color: colors.mute }]}>
-            One login · your devices · person tags for family
-          </Text>
-          {busy === 'pro' ? (
-            <ActivityIndicator style={{ marginTop: 12 }} color={colors.accent} />
-          ) : null}
-        </Pressable>
-
-        <Pressable
+          colors={colors}
+        />
+        <PlanCard
+          name="Family"
+          hint="Up to 4 logins · invite family"
+          offer={familyOffer}
+          loading={loadingOffers && billingReady}
+          billingReady={billingReady}
+          selected={false}
+          busy={busy === 'family'}
           onPress={() => void pick('family')}
-          disabled={!!busy}
-          style={({ pressed }) => [
-            styles.card,
-            {
-              backgroundColor: colors.surface,
-              borderColor: colors.line,
-              opacity: pressed || busy === 'family' ? 0.9 : 1,
-            },
-          ]}
-        >
-          <View style={styles.cardTop}>
-            <Text style={[styles.cardName, { color: colors.ink }]}>Family</Text>
-            <Text style={[styles.cardPrice, { color: colors.accent }]}>
-              {familyOffer?.priceString ?? '—'}
+          colors={colors}
+        />
+
+        {!billingReady ? (
+          <View
+            style={[
+              styles.banner,
+              { backgroundColor: colors.surfaceSoft, borderColor: colors.line },
+            ]}
+          >
+            <Text style={[styles.bannerTitle, { color: colors.ink }]}>
+              Apple billing not connected on this build
+            </Text>
+            <Text style={[styles.bannerBody, { color: colors.mute }]}>
+              Prices and payment use App Store subscriptions via RevenueCat.
+              Open a TestFlight build that includes your RevenueCat iOS key.
             </Text>
           </View>
-          <Text style={[styles.cardHint, { color: colors.mute }]}>
-            Up to 4 logins · invite spouse / family on iOS & Android
-          </Text>
-          {busy === 'family' ? (
-            <ActivityIndicator style={{ marginTop: 12 }} color={colors.accent} />
-          ) : null}
-        </Pressable>
+        ) : null}
 
         <Pressable onPress={() => void onRestore()} hitSlop={8} style={styles.restore}>
-          <Text style={{ color: colors.mute, fontFamily: fonts.sansMedium }}>
+          <Text style={{ color: colors.mute, fontFamily: fonts.sansMedium, fontSize: 16 }}>
             {busy === 'restore' ? 'Restoring…' : 'Restore purchases'}
           </Text>
         </Pressable>
 
-        <Text style={[styles.legal, { color: colors.faint }]}>
-          {billingReady
-            ? 'Subscriptions renew automatically unless cancelled at least 24 hours before the end of the period. Manage in Apple ID settings.'
-            : 'Store billing needs a native iOS build (TestFlight / dev client). Web uses a local unlock in development only.'}
+        <Text style={[styles.legal, { color: colors.mute }]}>
+          Payment is charged to your Apple ID. Subscriptions renew unless cancelled
+          at least 24 hours before the period ends.
         </Text>
 
         {__DEV__ ? (
@@ -170,37 +191,123 @@ export default function PaywallScreen() {
             hitSlop={8}
             style={styles.dev}
           >
-            <Text style={{ color: colors.faint, fontSize: 13 }}>
-              Dev: restart 14-day trial
+            <Text style={{ color: colors.faint, fontSize: 14 }}>
+              Dev: restart trial
             </Text>
           </Pressable>
         ) : null}
-      </View>
+      </ScrollView>
     </Screen>
+  );
+}
+
+function PlanCard({
+  name,
+  hint,
+  offer,
+  loading,
+  billingReady,
+  selected,
+  busy,
+  onPress,
+  colors,
+}: {
+  name: string;
+  hint: string;
+  offer?: OfferSummary;
+  loading: boolean;
+  billingReady: boolean;
+  selected: boolean;
+  busy: boolean;
+  onPress: () => void;
+  colors: { ink: string; mute: string; accent: string; surface: string; line: string; onInk: string };
+}) {
+  const price = !billingReady
+    ? 'App Store'
+    : loading
+      ? '…'
+      : offer?.priceString || 'Unavailable';
+
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={busy}
+      style={({ pressed }) => [
+        styles.card,
+        {
+          backgroundColor: selected ? colors.ink : colors.surface,
+          borderColor: selected ? colors.ink : colors.line,
+          opacity: pressed || busy ? 0.92 : 1,
+        },
+      ]}
+    >
+      <View style={styles.cardTop}>
+        <Text
+          style={[
+            styles.cardName,
+            { color: selected ? colors.onInk : colors.ink },
+          ]}
+        >
+          {name}
+        </Text>
+        <Text
+          style={[
+            styles.cardPrice,
+            { color: selected ? colors.onInk : colors.ink },
+          ]}
+        >
+          {price}
+        </Text>
+      </View>
+      <Text
+        style={[
+          styles.cardHint,
+          { color: selected ? colors.onInk : colors.mute, opacity: selected ? 0.8 : 1 },
+        ]}
+      >
+        {hint}
+      </Text>
+      {busy ? (
+        <ActivityIndicator
+          style={{ marginTop: 14 }}
+          color={selected ? colors.onInk : colors.accent}
+        />
+      ) : (
+        <Text
+          style={[
+            styles.cardCta,
+            { color: selected ? colors.onInk : colors.accent },
+          ]}
+        >
+          Continue
+        </Text>
+      )}
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: {
-    flex: 1,
     paddingHorizontal: spacing.lg,
+    flexGrow: 1,
   },
-  kicker: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 14,
-    letterSpacing: 0.4,
-    marginBottom: 8,
+  brand: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 18,
+    letterSpacing: -0.3,
+    marginBottom: spacing.md,
   },
   title: {
     fontFamily: fonts.sansSemi,
-    fontSize: 28,
-    letterSpacing: -0.5,
+    fontSize: 32,
+    letterSpacing: -0.6,
+    lineHeight: 38,
   },
   sub: {
     fontFamily: fonts.sans,
-    fontSize: 16,
-    lineHeight: 22,
-    marginTop: 8,
+    fontSize: 17,
+    lineHeight: 24,
+    marginTop: 10,
     marginBottom: spacing.xl,
   },
   card: {
@@ -212,35 +319,61 @@ const styles = StyleSheet.create({
   cardTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'baseline',
+    gap: spacing.md,
   },
   cardName: {
     fontFamily: fonts.sansSemi,
-    fontSize: 20,
+    fontSize: 22,
+    letterSpacing: -0.3,
   },
   cardPrice: {
     fontFamily: fonts.sansSemi,
-    fontSize: 16,
+    fontSize: 18,
+    letterSpacing: -0.2,
   },
   cardHint: {
     fontFamily: fonts.sans,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 15,
+    lineHeight: 21,
     marginTop: 8,
+  },
+  cardCta: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 16,
+    marginTop: 16,
+  },
+  banner: {
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: spacing.md,
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  bannerTitle: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 16,
+    marginBottom: 4,
+  },
+  bannerBody: {
+    fontFamily: fonts.sans,
+    fontSize: 15,
+    lineHeight: 21,
   },
   restore: {
     alignSelf: 'center',
-    marginTop: spacing.sm,
+    marginTop: spacing.lg,
     padding: 8,
   },
   legal: {
     fontFamily: fonts.sans,
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: 14,
+    lineHeight: 20,
     marginTop: spacing.md,
+    textAlign: 'center',
   },
   dev: {
-    marginTop: spacing.lg,
+    marginTop: spacing.xl,
     alignSelf: 'center',
   },
 });

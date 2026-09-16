@@ -32,7 +32,7 @@ function ToggleRow({
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
-    <View style={[styles.row, !last && styles.border, disabled && { opacity: 0.5 }]}>
+    <View style={[styles.row, !last && styles.border, disabled && { opacity: 0.45 }]}>
       <View style={{ flex: 1 }}>
         <Text variant="headline" style={{ fontSize: 16 }}>
           {title}

@@ -1,8 +1,7 @@
 /**
- * LifeOS palettes — Earth, Ocean, Clay × light/dark.
+ * LifeOS theme — Ink light / dark only.
  * Prefer `useTheme().colors` in UI. StyleSheet.create snapshots values at
- * import time, so color tokens used there stay Linen unless applied at render.
- * The default `colors` export stays Earth light for legacy StyleSheet modules.
+ * import time, so color tokens used there stay stale unless applied at render.
  */
 
 export type ThemeFamily = 'earth' | 'ocean' | 'clay' | 'ink';
@@ -481,12 +480,7 @@ export const THEME_FAMILIES: {
   id: ThemeFamily;
   title: string;
   hint: string;
-}[] = [
-  { id: 'ink', title: 'Ink', hint: 'Charcoal & white' },
-  { id: 'earth', title: 'Earth', hint: 'Linen & sage' },
-  { id: 'ocean', title: 'Ocean', hint: 'Mist & teal' },
-  { id: 'clay', title: 'Clay', hint: 'Sand & terracotta' },
-];
+}[] = [{ id: 'ink', title: 'Ink', hint: 'Charcoal & white' }];
 
 export type AppearancePrefs = {
   family: ThemeFamily;
@@ -494,7 +488,7 @@ export type AppearancePrefs = {
 };
 
 /** Bump when the house default changes so we can migrate stored prefs once. */
-export const APPEARANCE_REV = 2;
+export const APPEARANCE_REV = 3;
 
 export const DEFAULT_APPEARANCE: AppearancePrefs = {
   family: 'ink',
@@ -502,39 +496,32 @@ export const DEFAULT_APPEARANCE: AppearancePrefs = {
 };
 
 export function migrateAppearancePrefs(parsed: Record<string, unknown>): AppearancePrefs {
-  let family: ThemeFamily = DEFAULT_APPEARANCE.family;
   let mode: ThemeMode = DEFAULT_APPEARANCE.mode;
 
-  if (isThemeFamily(parsed.family as string) && isThemeMode(parsed.mode as string)) {
-    family = parsed.family as ThemeFamily;
+  if (isThemeMode(parsed.mode as string)) {
     mode = parsed.mode as ThemeMode;
   } else {
     const legacy = parsed.theme;
-    if (legacy === 'hearth') {
-      family = 'earth';
-      mode = 'dark';
-    } else if (legacy === 'system') {
-      family = 'earth';
-      mode = 'system';
-    } else if (legacy === 'ocean' || legacy === 'clay' || legacy === 'earth' || legacy === 'ink') {
-      family = legacy;
+    if (legacy === 'hearth') mode = 'dark';
+    else if (legacy === 'system') mode = 'system';
+    else if (legacy === 'linen') mode = 'light';
+    else if (
+      legacy === 'ocean' ||
+      legacy === 'clay' ||
+      legacy === 'earth' ||
+      legacy === 'ink'
+    ) {
       mode = 'light';
     }
   }
 
-  const rev = typeof parsed.rev === 'number' ? parsed.rev : 1;
-  // Earth was the old default, not a pick. House look is Ink dark.
-  if (rev < APPEARANCE_REV && family === 'earth') {
-    family = 'ink';
-    if (mode === 'light') mode = 'dark';
-  }
-
-  return { family, mode };
+  // Ink is the only palette — force family regardless of stored prefs.
+  return { family: 'ink', mode };
 }
 
-/** Legacy names — Earth light / dark. */
-export const linenColors = earthLight;
-export const hearthColors = earthDark;
+/** Legacy names — kept for older tests / imports. */
+export const linenColors = inkLight;
+export const hearthColors = inkDark;
 
 /** Live palette — ThemeProvider assigns into this so JSX `colors.*` follows the active theme.
  *  StyleSheet.create still snapshots; those modules must call makeStyles(colors). */
@@ -545,7 +532,7 @@ export function applyLivePalette(next: ThemeColors) {
 }
 
 export function isThemeFamily(value: string | undefined): value is ThemeFamily {
-  return value === 'earth' || value === 'ocean' || value === 'clay' || value === 'ink';
+  return value === 'ink' || value === 'earth' || value === 'ocean' || value === 'clay';
 }
 
 export function isThemeMode(value: string | undefined): value is ThemeMode {
@@ -553,12 +540,12 @@ export function isThemeMode(value: string | undefined): value is ThemeMode {
 }
 
 export function resolvePalette(
-  family: ThemeFamily,
+  _family: ThemeFamily,
   mode: ThemeMode,
   systemDark = false
 ): ThemeColors {
   const dark = mode === 'dark' || (mode === 'system' && systemDark);
-  return PALETTES[family][dark ? 'dark' : 'light'];
+  return PALETTES.ink[dark ? 'dark' : 'light'];
 }
 
 export function paletteFor(
@@ -566,10 +553,10 @@ export function paletteFor(
   systemDark?: boolean,
   mode: ThemeMode = 'light'
 ): ThemeColors {
-  if (theme === 'linen') return earthLight;
-  if (theme === 'hearth') return earthDark;
-  if (theme === 'system') return systemDark ? earthDark : earthLight;
-  return resolvePalette(theme, mode, systemDark);
+  if (theme === 'linen') return inkLight;
+  if (theme === 'hearth') return inkDark;
+  if (theme === 'system') return systemDark ? inkDark : inkLight;
+  return resolvePalette('ink', mode, systemDark);
 }
 
 /** WCAG contrast ratio for #RRGGBB. Returns 0 for non-hex. */
@@ -605,10 +592,12 @@ export const spacing = {
 } as const;
 
 export const radius = {
-  sm: 10,
-  md: 14,
-  lg: 18,
-  xl: 24,
+  /** Max corner radius for surfaces, fields, buttons, and tappable chips. */
+  sm: 4,
+  md: 5,
+  lg: 5,
+  xl: 5,
+  /** Fully rounded — only for non-interactive pills / badges. */
   full: 999,
 } as const;
 

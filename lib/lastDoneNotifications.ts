@@ -5,6 +5,7 @@ import {
   formatInterval,
   listWeekdayOccurrences,
   reminderSeriesEnded,
+  seriesAnchorDate,
 } from '@/lib/lastDone';
 
 const ID_PREFIX = 'lifeos-ld-';
@@ -129,7 +130,7 @@ export async function scheduleLastDoneReminder(
   try {
     const { loadNotificationPrefs } = await import('@/lib/notificationPrefs');
     const prefs = await loadNotificationPrefs();
-    if (!prefs.push || !prefs.maintenance) {
+    if (!prefs.push) {
       await cancelLastDoneReminder(item.id);
       return;
     }
@@ -174,7 +175,7 @@ export async function scheduleLastDoneReminder(
           item.remindInterval.weekdays,
           hour,
           minute,
-          new Date(),
+          seriesAnchorDate(item.remindInterval.startsAt),
           item.remindInterval.endsAt,
           48
         );
@@ -289,7 +290,7 @@ export async function syncLastDoneReminders(
         await Notifications.cancelScheduledNotificationAsync(n.identifier);
       }
     }
-    if (!prefs.push || !prefs.maintenance) return;
+    if (!prefs.push) return;
     for (const item of items) {
       if (item.remindAt || item.remindInterval?.unit === 'weekdays') {
         await scheduleLastDoneReminder(item);

@@ -10,9 +10,10 @@ import {
   DetailField,
   DetailHero,
   DetailPrimaryButton,
-  DetailRemoveButton,
+  DetailTrashButton,
   DetailSection,
-  DETAIL_DOCK_PAD,
+  DetailStickyActions,
+  DETAIL_STICKY_PAD,
 } from '@/components/ui/DetailKit';
 import { ListCard, ListRow } from '@/components/ui/ListKit';
 import { Text } from '@/components/ui/Text';
@@ -166,7 +167,18 @@ export default function FamilyMemberScreen() {
       title={member.name}
       backLabel="Household"
       backFallbackHref="/family"
-      bottomExtra={DETAIL_DOCK_PAD}
+      bottomExtra={DETAIL_STICKY_PAD}
+      right={<DetailTrashButton onPress={() => void onRemoveMember()} />}
+      footer={
+        <DetailStickyActions>
+          <DetailPrimaryButton
+            label={saving ? 'Saving…' : 'Save profile'}
+            accent={accent}
+            disabled={!name.trim() || saving}
+            onPress={() => void onSaveProfile()}
+          />
+        </DetailStickyActions>
+      }
       hero={
         <DetailHero
           eyebrow={`${member.avatarLetter} · ${roleLabel}`}
@@ -210,13 +222,6 @@ export default function FamilyMemberScreen() {
           ))}
         </DetailChipRow>
       </DetailSection>
-
-      <DetailPrimaryButton
-        label={saving ? 'Saving…' : 'Save profile'}
-        accent={accent}
-        disabled={!name.trim() || saving}
-        onPress={() => void onSaveProfile()}
-      />
 
       <DetailFacts>
         <DetailFact label="Documents" value={String(docs.length)} />
@@ -273,8 +278,8 @@ export default function FamilyMemberScreen() {
                 title={p.title}
                 subtitle={
                   remainingCount(p) == null
-                    ? `${usedCount(p)} logged`
-                    : `${remainingCount(p)} of ${p.total} left`
+                    ? `${usedCount(p)} session${usedCount(p) === 1 ? '' : 's'} logged`
+                    : `${remainingCount(p)} of ${p.total} sessions left`
                 }
                 meta="Open"
                 onPress={() => router.push(`/classes/${p.id}` as Href)}
@@ -304,8 +309,6 @@ export default function FamilyMemberScreen() {
           Nothing tagged to {member.name} yet.
         </Text>
       )}
-
-      <DetailRemoveButton onPress={() => void onRemoveMember()} />
     </ModuleScreen>
   );
 }

@@ -48,7 +48,13 @@ import { useCurrency } from '@/lib/CurrencyContext';
 import { ChatAgentError, runChatAgent } from '@/lib/chat/agent';
 import { applyChatActions } from '@/lib/chat/applyActions';
 import { composeAppliedReply } from '@/lib/chat/composeReply';
-import { isCloseTalkIntent, resolveLocalIntent } from '@/lib/chat/localIntents';
+import {
+  agendaQueryScope,
+  hrefForAgendaScope,
+  isAgendaQueryIntent,
+  isCloseTalkIntent,
+  resolveLocalIntent,
+} from '@/lib/chat/localIntents';
 import { resolveOpenItemId } from '@/lib/chat/openItem';
 import { hrefForTalkFocus, type TalkFocus } from '@/lib/chat/focus';
 import type { ChatMessage } from '@/lib/chat/types';
@@ -547,6 +553,13 @@ export function TalkOrb() {
         fallbackItemId: newestId,
         focusExpenseId: focusExpenseIdRef.current,
         talkFocus: talkFocusRef.current,
+        reminders: lastDoneRef.current.map((d) => ({
+          label: d.label,
+          remindAt: d.remindAt,
+        })),
+        openHabits: habitsRef.current
+          .filter((h) => !h.doneToday)
+          .map((h) => ({ title: h.title })),
       });
       if (local) {
         console.log('[Talk] local intent', text, local.actions.map((a) => a.type));
@@ -557,6 +570,31 @@ export function TalkOrb() {
           clearResumeTimer();
           stopRecognition();
           setTimeout(() => closeTalk(), 350);
+          return;
+        }
+        if (isAgendaQueryIntent(text)) {
+          const scope = agendaQueryScope(text)!;
+          setReply(local.reply);
+          setPhase('reply');
+          sessionActiveRef.current = false;
+          clearResumeTimer();
+          stopRecognition();
+          stopSpeech();
+          if (speakRepliesRef.current && local.reply.trim()) {
+            try {
+              Speech.speak(local.reply.trim(), {
+                language: 'en-US',
+                rate: 1.0,
+                pitch: 1.0,
+              });
+            } catch {
+              /* ignore */
+            }
+          }
+          setTimeout(() => {
+            closeTalk();
+            router.push(hrefForAgendaScope(scope) as never);
+          }, 500);
           return;
         }
         const applied = await applyChatActions(
@@ -1234,6 +1272,15 @@ export function FloatingNav() {
     pathname.includes('onboarding') ||
     pathname.includes('/create') ||
     pathname.includes('/ask') ||
+    pathname.includes('/edit') ||
+    pathname.includes('/paywall') ||
+    pathname.includes('/settings') ||
+    pathname.includes('/profile') ||
+    pathname.includes('/invite') ||
+    // Detail screens — dock fights sticky actions and form chrome.
+    /\/(last-done|asset|habits|expenses|subscriptions|classes|family|space|room|purchases|documents|vehicles|warranties|insurance|maintenance|notifications|reports)\/[^/]+/.test(
+      pathname
+    ) ||
     open ||
     keyboardOpen
   )
@@ -1379,7 +1426,7 @@ const styles = StyleSheet.create({
     left: 20,
     right: 20,
     zIndex: 4,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderWidth: StyleSheet.hairlineWidth,

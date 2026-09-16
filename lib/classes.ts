@@ -624,9 +624,10 @@ export function paceHint(pack: ClassPack, now = new Date()): string | undefined 
   const remaining = remainingCount(pack);
   if (remaining == null || remaining <= 0) return undefined;
   const days = daysLeftInWindow(pack, now);
-  if (days <= 0) return `${remaining} left — pack window has ended`;
+  if (days <= 0) return `${remaining} session${remaining === 1 ? '' : 's'} left — window has ended`;
   const weeks = days / 7;
   const perWeek = remaining / weeks;
-  if (perWeek <= 1.05) return `${remaining} left · about ${Math.ceil(perWeek)} a week`;
-  return `${remaining} left · about ${perWeek.toFixed(1)} a week to finish`;
+  if (perWeek <= 1.05)
+    return `${remaining} session${remaining === 1 ? '' : 's'} left · about ${Math.ceil(perWeek)} a week`;
+  return `${remaining} sessions left · about ${perWeek.toFixed(1)} a week to finish`;
 }

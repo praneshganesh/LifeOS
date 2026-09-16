@@ -19,7 +19,7 @@ export function ListCard({
         styles.card,
         {
           backgroundColor: colors.surface,
-          borderColor: colors.line,
+          borderColor: colors.lineStrong,
         },
         style,
       ]}
@@ -109,7 +109,7 @@ export function StatStrip({
     <View
       style={[
         styles.stats,
-        { backgroundColor: colors.surface, borderColor: colors.line },
+        { backgroundColor: colors.surface, borderColor: colors.lineStrong },
       ]}
     >
       {items.map((item, i) => (
@@ -151,18 +151,21 @@ export function FilterChips({
           <Pressable
             key={opt.key}
             onPress={() => onChange(opt.key)}
-            style={[
+            style={({ pressed }) => [
               styles.chip,
               {
-                backgroundColor: on ? colors.accent : colors.surface,
-                borderColor: on ? colors.accent : colors.line,
+                backgroundColor: on ? colors.ink : colors.surface,
+                borderColor: on ? colors.ink : colors.lineStrong,
+                opacity: pressed ? 0.9 : 1,
               },
             ]}
+            accessibilityRole="button"
+            accessibilityState={{ selected: on }}
           >
             <Text
               style={[
                 styles.chipText,
-                { color: on ? colors.accentOn : colors.slate },
+                { color: on ? colors.onInk : colors.ink },
               ]}
             >
               {opt.label}
@@ -176,8 +179,8 @@ export function FilterChips({
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
     overflow: 'hidden',
   },
   row: {
@@ -210,14 +213,14 @@ const styles = StyleSheet.create({
   dismissBtn: {
     width: 28,
     height: 28,
-    borderRadius: 14,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
   stats: {
     flexDirection: 'row',
-    borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
     marginBottom: spacing.lg,
   },
   stat: {
@@ -238,13 +241,16 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: radius.full,
-    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    minHeight: 40,
+    justifyContent: 'center',
   },
   chipText: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 13,
+    fontFamily: fonts.sansSemi,
+    fontSize: 15,
+    letterSpacing: -0.2,
   },
 });

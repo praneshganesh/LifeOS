@@ -2,12 +2,14 @@ import { useTheme } from '@/lib/ThemeContext';
 import { useMemo, useEffect, useState } from 'react';
 import { Platform, StyleSheet, Switch, View } from 'react-native';
 import { DETAIL_DOCK_PAD } from '@/components/ui/DetailKit';
-import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
+import { ModuleScreen } from '@/components/ui/ModuleScreen';
 import { ListCard } from '@/components/ui/ListKit';
 import { Text } from '@/components/ui/Text';
+import { TimeField } from '@/components/ui/TimeField';
 import {
   DEFAULT_NOTIFICATION_PREFS,
   loadNotificationPrefs,
+  normalizeQuietHoursTime,
   saveNotificationPrefs,
   type NotificationPrefs,
 } from '@/lib/notificationPrefs';
@@ -17,7 +19,7 @@ import {
   syncLastDoneReminders,
 } from '@/lib/lastDoneNotifications';
 import { useLastDone } from '@/lib/LastDoneContext';
-import { type ThemeColors,  colors, spacing  } from '@/constants/theme';
+import { type ThemeColors, fonts, spacing } from '@/constants/theme';
 
 function ToggleRow({
   title,
@@ -25,20 +27,18 @@ function ToggleRow({
   value,
   onChange,
   last,
-  disabled,
 }: {
   title: string;
   subtitle?: string;
   value: boolean;
   onChange: (v: boolean) => void;
   last?: boolean;
-  disabled?: boolean;
 }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
-    <View style={[styles.row, !last && styles.border, disabled && { opacity: 0.45 }]}>
-      <View style={{ flex: 1 }}>
+    <View style={[styles.row, !last && styles.border]}>
+      <View style={{ flex: 1, paddingRight: spacing.sm }}>
         <Text variant="headline" style={{ fontSize: 16 }}>
           {title}
         </Text>
@@ -51,7 +51,6 @@ function ToggleRow({
       <Switch
         value={value}
         onValueChange={onChange}
-        disabled={disabled}
         trackColor={{ false: colors.lineStrong, true: colors.forestBright }}
         thumbColor={colors.white}
       />
@@ -59,41 +58,61 @@ function ToggleRow({
   );
 }
 
+function permissionSubtitle(
+  ready: boolean,
+  status: 'granted' | 'denied' | 'undetermined' | 'unavailable'
+): string | undefined {
+  if (!ready) return undefined;
+  if (Platform.OS === 'web' || status === 'unavailable') return undefined;
+  if (status === 'granted') return undefined;
+  if (status === 'denied') return 'Off in iPhone Settings';
+  return undefined;
+}
+
 export default function NotificationPrefsScreen() {
+  const { colors } = useTheme();
   const { items: lastDoneItems } = useLastDone();
   const [prefs, setPrefs] = useState<NotificationPrefs>(DEFAULT_NOTIFICATION_PREFS);
   const [ready, setReady] = useState(false);
-  const [osStatus, setOsStatus] = useState<string>('…');
+  const [osStatus, setOsStatus] = useState<
+    'granted' | 'denied' | 'undetermined' | 'unavailable'
+  >('undetermined');
 
   useEffect(() => {
     void (async () => {
       const loaded = await loadNotificationPrefs();
       setPrefs(loaded);
-      const status = await getNotificationPermission();
-      setOsStatus(
-        Platform.OS === 'web'
-          ? 'Unavailable on web'
-          : status === 'granted'
-            ? 'Allowed'
-            : status === 'denied'
-              ? 'Denied in system settings'
-              : 'Not asked yet'
-      );
+      setOsStatus(await getNotificationPermission());
       setReady(true);
     })();
   }, []);
 
   async function update(patch: Partial<NotificationPrefs>) {
-    const next = { ...prefs, ...patch };
+    const next: NotificationPrefs = {
+      ...prefs,
+      ...patch,
+      quietHoursStart: normalizeQuietHoursTime(
+        patch.quietHoursStart ?? prefs.quietHoursStart,
+        DEFAULT_NOTIFICATION_PREFS.quietHoursStart
+      ),
+      quietHoursEnd: normalizeQuietHoursTime(
+        patch.quietHoursEnd ?? prefs.quietHoursEnd,
+        DEFAULT_NOTIFICATION_PREFS.quietHoursEnd
+      ),
+    };
+    if (patch.push !== undefined) {
+      next.maintenance = patch.push;
+    }
     setPrefs(next);
     await saveNotificationPrefs(next);
-    if (next.push && (patch.push === true || patch.maintenance === true)) {
+    if (next.push && patch.push === true) {
       const ok = await ensureNotificationPermissions();
-      setOsStatus(ok ? 'Allowed' : 'Denied in system settings');
+      setOsStatus(ok ? 'granted' : 'denied');
     }
     if (
       patch.push !== undefined ||
-      patch.maintenance !== undefined
+      patch.quietHoursStart !== undefined ||
+      patch.quietHoursEnd !== undefined
     ) {
       void syncLastDoneReminders(lastDoneItems);
     }
@@ -101,59 +120,76 @@ export default function NotificationPrefsScreen() {
 
   return (
     <ModuleScreen
-      title="Notification preferences"
+      title="Notifications"
       backLabel="Settings"
       backFallbackHref="/settings"
       bottomExtra={DETAIL_DOCK_PAD}
+      contentStyle={{ paddingTop: spacing.lg }}
     >
-      <ModuleSection label="Delivery">
-        <ListCard>
-          <ToggleRow
-            title="Local notifications"
-            subtitle={
-              ready
-                ? `System permission: ${osStatus}`
-                : 'Loading…'
-            }
-            value={prefs.push}
-            onChange={(v) => void update({ push: v })}
-            last
-          />
-        </ListCard>
-      </ModuleSection>
-      <ModuleSection label="Categories">
-        <ListCard>
-          <ToggleRow
-            title="Maintenance due"
-            subtitle="Schedules when you set a Last Done reminder"
-            value={prefs.maintenance}
-            onChange={(v) => void update({ maintenance: v })}
-            disabled={!prefs.push}
-            last
-          />
-        </ListCard>
-        <Text variant="caption" style={{ marginTop: spacing.sm, color: colors.mute }}>
-          Warranty, insurance, return-window, document-expiry, and family
-          notifications aren’t built yet. Anything due still shows in Tasks &
-          reminders.
+      {/* No "Reminders" heading — page title already owns that job. */}
+      <ListCard>
+        <ToggleRow
+          title="Activity reminders"
+          subtitle={permissionSubtitle(ready, osStatus)}
+          value={prefs.push}
+          onChange={(v) => void update({ push: v })}
+          last
+        />
+      </ListCard>
+
+      <View style={{ marginTop: spacing.xxl }}>
+        <Text
+          style={{
+            fontFamily: fonts.sansSemi,
+            fontSize: 22,
+            color: colors.ink,
+            letterSpacing: -0.3,
+            marginBottom: 4,
+          }}
+        >
+          Quiet hours
         </Text>
-      </ModuleSection>
+        <Text
+          style={{
+            fontFamily: fonts.sans,
+            fontSize: 16,
+            lineHeight: 22,
+            color: colors.mute,
+            marginBottom: spacing.sm,
+          }}
+        >
+          No alerts between these times.
+        </Text>
+        <ListCard>
+          <TimeField
+            label="From"
+            value={prefs.quietHoursStart}
+            onChange={(v) => void update({ quietHoursStart: v })}
+          />
+          <TimeField
+            label="Until"
+            value={prefs.quietHoursEnd}
+            onChange={(v) => void update({ quietHoursEnd: v })}
+            last
+          />
+        </ListCard>
+      </View>
     </ModuleScreen>
   );
 }
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 14,
-  },
-  border: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
-  },
-});
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      paddingHorizontal: spacing.md,
+      paddingVertical: 14,
+    },
+    border: {
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.line,
+    },
+  });
 }

@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 import {
   displayWarrantyExpiry,
   localDayKey,
+  looksLikeReminder,
+  looksLikeReminderQuery,
   normalizeWarrantyExpiry,
   parseRecurringWeekdayReminder,
   parseReminderFromUtterance,
@@ -178,6 +180,17 @@ describe('reminder speech', () => {
       reminderLabelFromUtterance('Can you set a reminder for school bag'),
       'School bag'
     );
+  });
+
+  it('treats what-reminders questions as queries, not creates', () => {
+    assert.equal(
+      looksLikeReminderQuery('What reminders do I have for Monday'),
+      true
+    );
+    assert.equal(looksLikeReminder('What reminders do I have for Monday'), false);
+    assert.equal(looksLikeReminderQuery('Show my reminders'), true);
+    assert.equal(looksLikeReminder('Remind me to stretch next Tuesday'), true);
+    assert.equal(looksLikeReminderQuery('Remind me to stretch next Tuesday'), false);
   });
 
   it('parses end after N weeks, months, or until a month', () => {

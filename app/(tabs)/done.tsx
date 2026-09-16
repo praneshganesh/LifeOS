@@ -82,6 +82,7 @@ export default function DoneTabScreen() {
                 <LastDoneActivityCard
                   key={item.id}
                   item={item}
+                  compact
                   onOpen={() => openDetail(item.id)}
                   onLog={() => void logDone({ id: item.id })}
                 />

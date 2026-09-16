@@ -11,9 +11,10 @@ import {
   DetailField,
   DetailHero,
   DetailPrimaryButton,
-  DetailRemoveButton,
+  DetailTrashButton,
   DetailSection,
-  DETAIL_DOCK_PAD,
+  DetailStickyActions,
+  DETAIL_STICKY_PAD,
 } from '@/components/ui/DetailKit';
 import { Text } from '@/components/ui/Text';
 import { HabitCard } from '@/components/HabitCard';
@@ -153,7 +154,18 @@ export default function HabitDetailScreen() {
       title={habit.title}
       backLabel="Habits"
       backFallbackHref="/habits"
-      bottomExtra={DETAIL_DOCK_PAD}
+      bottomExtra={DETAIL_STICKY_PAD}
+      right={<DetailTrashButton onPress={() => void onRemove()} />}
+      footer={
+        <DetailStickyActions>
+          <DetailPrimaryButton
+            label={savingDetails ? 'Saving…' : 'Save habit'}
+            onPress={onSave}
+            accent={accent}
+            disabled={!title.trim() || savingDetails}
+          />
+        </DetailStickyActions>
+      }
       hero={
         <DetailHero
           eyebrow={`${cat.emoji}  ${cat.name}`}
@@ -286,15 +298,6 @@ export default function HabitDetailScreen() {
           ) : null}
         </DetailSection>
       ) : null}
-
-      <DetailPrimaryButton
-        label={savingDetails ? 'Saving…' : 'Save habit'}
-        onPress={onSave}
-        accent={accent}
-        disabled={!title.trim() || savingDetails}
-      />
-
-      <DetailRemoveButton onPress={() => void onRemove()} />
     </ModuleScreen>
   );
 }

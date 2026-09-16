@@ -68,9 +68,31 @@ function calendarDayFromUtterance(text, from = new Date()) {
   return undefined;
 }
 
+/** Asking about existing reminders — never create. */
+export function looksLikeReminderQuery(text) {
+  if (!text?.trim()) return false;
+  const t = text.trim();
+  if (!/\breminders?\b/i.test(t)) return false;
+  return (
+    /\b(what|which|any|how many|upcoming|next)\b.{0,48}\breminders?\b/i.test(t) ||
+    /\b(my|our)\s+reminders?\b/i.test(t) ||
+    /\breminders?\b.{0,48}\b(do i have|have i|are there|do we have|have we)\b/i.test(t) ||
+    /\b(do i|did i|do we)\s+have\b.{0,48}\breminders?\b/i.test(t) ||
+    /\b(show|list|see|open|view|check)\b.{0,40}\b(my\s+|our\s+)?reminders?\b/i.test(t) ||
+    /\bwhat\s+reminders?\b/i.test(t)
+  );
+}
+
+/** Create / schedule a reminder — not a list/query question. */
 export function looksLikeReminder(text) {
   if (!text?.trim()) return false;
-  return /\bremind(?:er|ers|ing)?\b|\bremind me\b/i.test(text);
+  if (looksLikeReminderQuery(text)) return false;
+  return (
+    /\bremind\s+me\b/i.test(text) ||
+    /\b(?:please\s+)?(?:log|set|add|create)\s+(?:a\s+)?reminder\b/i.test(text) ||
+    /\breminder\s+to\b/i.test(text) ||
+    /\b(?:a\s+)?reminder\s+(?:for|about)\b/i.test(text)
+  );
 }
 
 export function nextWeekdayKey(weekday, from = new Date()) {
@@ -417,9 +439,13 @@ export function ensureReminderActions(
   inventorySummary,
   from = new Date()
 ) {
-  const list = (Array.isArray(actions) ? actions : []).filter(
+  let list = (Array.isArray(actions) ? actions : []).filter(
     (a) => a && a.type && a.type !== 'none'
   );
+  // "What reminders do I have…" must never create a reminder.
+  if (looksLikeReminderQuery(lastUserText)) {
+    return list.filter((a) => a.type !== 'set_reminder');
+  }
   const types = new Set(list.map((a) => a.type));
   const recurring = parseRecurringWeekdayReminder(lastUserText, from);
   const remindAt = remindAtFromUtterance(lastUserText, from);

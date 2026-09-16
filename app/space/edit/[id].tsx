@@ -14,9 +14,10 @@ import {
   DetailChipRow,
   DetailField,
   DetailPrimaryButton,
-  DetailRemoveButton,
   DetailSection,
-  DETAIL_DOCK_PAD,
+  DetailStickyActions,
+  DetailTrashButton,
+  DETAIL_STICKY_PAD,
 } from '@/components/ui/DetailKit';
 import { Text } from '@/components/ui/Text';
 import { Icon3DBadge, type Icon3DName } from '@/components/ui/Icon3D';
@@ -163,8 +164,13 @@ export default function EditSpaceScreen() {
 
   return (
     <Screen>
-      <Stack.Screen options={{ title: 'Edit space' }} />
-      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={DETAIL_DOCK_PAD}>
+      <Stack.Screen
+        options={{
+          title: 'Edit space',
+          headerRight: () => <DetailTrashButton onPress={confirmDelete} />,
+        }}
+      />
+      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={DETAIL_STICKY_PAD}>
         <DetailSection label="Name">
           <DetailField value={name} onChangeText={setName} />
         </DetailSection>
@@ -274,7 +280,7 @@ export default function EditSpaceScreen() {
               style={[
                 styles.addRoomBtn,
                 { backgroundColor: accent },
-                !newRoom.trim() && { opacity: 0.4 },
+                !newRoom.trim() && { opacity: 0.45 },
               ]}
             >
               <Text style={[styles.addRoomBtnText, { color: colors.forestOn }]}>Add</Text>
@@ -282,15 +288,15 @@ export default function EditSpaceScreen() {
           </View>
         </DetailSection>
 
+      </KeyboardFormScroll>
+      <DetailStickyActions>
         <DetailPrimaryButton
           label={saving ? 'Saving…' : 'Save changes'}
           accent={accent}
           disabled={!name.trim() || saving}
           onPress={() => void save()}
         />
-
-        <DetailRemoveButton onPress={confirmDelete} />
-      </KeyboardFormScroll>
+      </DetailStickyActions>
     </Screen>
   );
 }
@@ -347,9 +353,11 @@ function makeStyles(_colors: ThemeColors) {
       marginTop: spacing.sm,
     },
     addRoomBtn: {
-      borderRadius: radius.full,
+      borderRadius: radius.md,
       paddingHorizontal: 18,
       paddingVertical: 14,
+      minHeight: 48,
+      justifyContent: 'center',
     },
     addRoomBtnText: {
       fontFamily: fonts.sansSemi,

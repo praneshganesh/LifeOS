@@ -39,6 +39,20 @@ export function parseScheduleTime(timeStr?: string): { hours: number; minutes: n
   return { hours: Math.min(23, Math.max(0, h)), minutes: Math.min(59, Math.max(0, min)) };
 }
 
+/** Convert stored display time → HH:MM for TimeField. */
+export function scheduleTimeToHhmm(timeStr?: string): string {
+  const { hours, minutes } = parseScheduleTime(timeStr);
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+/** Convert HH:MM → stored display time ("9:00 AM"). */
+export function formatScheduleTimeDisplay(hhmm: string): string {
+  const { hours, minutes } = parseScheduleTime(hhmm);
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  const h12 = hours % 12 || 12;
+  return `${h12}:${String(minutes).padStart(2, '0')} ${ampm}`;
+}
+
 /**
  * Pure helper: Computes next notification triggers for a class pack (evening-before at 18:00 and morning-of at 08:00).
  * Scheduled for upcoming occurrences (up to 4 weeks in advance) within the pack validity window (startsOn to endsOn)

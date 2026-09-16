@@ -15,7 +15,8 @@ import {
   DetailField,
   DetailPrimaryButton,
   DetailSection,
-  DETAIL_DOCK_PAD,
+  DetailStickyActions,
+  DETAIL_STICKY_PAD,
 } from '@/components/ui/DetailKit';
 import { Icon3DBadge, type Icon3DName } from '@/components/ui/Icon3D';
 import { useSpaces, type SpaceKind } from '@/lib/SpacesContext';
@@ -69,7 +70,7 @@ export default function NewSpaceScreen() {
   return (
     <Screen>
       <Stack.Screen options={{ title: 'New space' }} />
-      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={DETAIL_DOCK_PAD}>
+      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={DETAIL_STICKY_PAD}>
         <DetailSection label="Name">
           <DetailField
             value={name}
@@ -126,13 +127,15 @@ export default function NewSpaceScreen() {
           </DetailSection>
         ) : null}
 
+      </KeyboardFormScroll>
+      <DetailStickyActions>
         <DetailPrimaryButton
           label={saving ? 'Creating…' : 'Create space'}
           accent={accent}
           disabled={!name.trim() || saving}
           onPress={() => void save()}
         />
-      </KeyboardFormScroll>
+      </DetailStickyActions>
     </Screen>
   );
 }

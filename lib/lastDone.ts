@@ -1,5 +1,6 @@
 import { localDayKey } from '@/lib/dates';
 import { newUuid } from '@/lib/ids';
+import type { AlertMode, UserAlertSpec } from '@/lib/reminderAlerts';
 
 export type RemindUnit = 'days' | 'months' | 'weekdays';
 
@@ -16,6 +17,11 @@ export type RemindInterval = {
   hour?: number;
   /** Local minute 0–59. */
   minute?: number;
+  /**
+   * Optional series start (YYYY-MM-DD), inclusive.
+   * First fire is on/after this day (and after now).
+   */
+  startsAt?: string;
   /**
    * Optional series end (YYYY-MM-DD), inclusive.
    * Omit for indefinite weekly / interval reminders.
@@ -49,6 +55,13 @@ export type LastDoneItem = {
    * rolls remindAt forward from the new done date.
    */
   remindInterval?: RemindInterval;
+  /**
+   * How OS alerts are chosen for one-shot reminders.
+   * `auto` = due-time band rules; `custom` = userAlerts only.
+   */
+  alertMode?: AlertMode;
+  /** When alertMode is custom — up to two user-chosen alerts. */
+  userAlerts?: UserAlertSpec[];
   /** Last local mutation time — the last-write-wins clock for row sync. */
   updatedAt?: string;
 };
@@ -143,6 +156,22 @@ export function hasActivityHistory(item: LastDoneItem): boolean {
   return (item.logs?.length ?? 0) > 0;
 }
 
+/**
+ * Year heatmap is for recurring habits — not one-shot reminders.
+ * Marking a Once reminder done clears `remindAt`, so we also require either a
+ * recurring interval or multiple logs (real history) before showing the grid.
+ */
+export function shouldShowActivityHeatmap(item: LastDoneItem): boolean {
+  const logs = item.logs?.length ?? 0;
+  if (logs === 0) return false;
+  // Weekly / Every — habit calendar.
+  if (item.remindInterval) return true;
+  // Still scheduled as Once — never.
+  if (item.remindAt) return false;
+  // Unscheduled (or completed one-shot): only after more than one completion.
+  return logs >= 2;
+}
+
 /** Calendar years that have at least one log, newest first. */
 export function yearsWithLogs(item: LastDoneItem): number[] {
   const years = new Set<number>();
@@ -177,8 +206,11 @@ export function formatInterval(interval: RemindInterval): string {
         : interval.unit;
     base = `Every ${interval.value} ${unit}`;
   }
-  if (interval.endsAt) {
-    return `${base} · until ${formatRemindDate(interval.endsAt)}`;
+  if (interval.startsAt || interval.endsAt) {
+    const bits: string[] = [base];
+    if (interval.startsAt) bits.push(`from ${formatRemindDate(interval.startsAt)}`);
+    if (interval.endsAt) bits.push(`until ${formatRemindDate(interval.endsAt)}`);
+    return bits.join(' · ');
   }
   return base;
 }
@@ -206,6 +238,21 @@ export function reminderSeriesEnded(
   if (!end) return false;
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   return today.getTime() > end.getTime();
+}
+
+/**
+ * Anchor for computing the next fire: now, or just before `startsAt`
+ * when the series begins in the future (so that day can fire).
+ */
+export function seriesAnchorDate(startsAt?: string, now = new Date()): Date {
+  if (!startsAt) return now;
+  const start = parseDateInput(startsAt);
+  if (!start) return now;
+  const dayStart = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  if (dayStart.getTime() > now.getTime()) {
+    return new Date(dayStart.getTime() - 1);
+  }
+  return now;
 }
 
 /** Next local calendar day (YYYY-MM-DD) that matches weekdays at hour:minute after `from`. */
@@ -389,7 +436,38 @@ export function normalizeItem(raw: unknown): LastDoneItem | null {
     if (typeof ri.endsAt === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(ri.endsAt.trim())) {
       next.endsAt = ri.endsAt.trim();
     }
+    if (typeof ri.startsAt === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(ri.startsAt.trim())) {
+      next.startsAt = ri.startsAt.trim();
+    }
     item.remindInterval = next;
+  }
+
+  if (r.alertMode === 'custom' || r.alertMode === 'auto') {
+    item.alertMode = r.alertMode;
+  }
+  if (Array.isArray(r.userAlerts)) {
+    const alerts = r.userAlerts
+      .filter(
+        (a): a is UserAlertSpec =>
+          !!a &&
+          typeof a === 'object' &&
+          typeof (a as UserAlertSpec).kind === 'string'
+      )
+      .slice(0, 2)
+      .map((a) => {
+        const spec: UserAlertSpec = { kind: a.kind };
+        if (
+          typeof a.minutesBefore === 'number' &&
+          Number.isFinite(a.minutesBefore)
+        ) {
+          spec.minutesBefore = Math.max(0, Math.floor(a.minutesBefore));
+        }
+        return spec;
+      });
+    if (alerts.length) {
+      item.userAlerts = alerts;
+      if (!item.alertMode) item.alertMode = 'custom';
+    }
   }
 
   return item;
@@ -516,7 +594,7 @@ export function resolveRemindAt(
         opts.remindInterval.weekdays ?? [],
         opts.remindInterval.hour ?? 9,
         opts.remindInterval.minute ?? 0,
-        doneAt,
+        seriesAnchorDate(opts.remindInterval.startsAt, doneAt),
         opts.remindInterval.endsAt
       );
       return {
@@ -524,9 +602,18 @@ export function resolveRemindAt(
         ...(day ? { remindAt: day } : {}),
       };
     }
+    const nextAt = startOfDayISO(addInterval(doneAt, opts.remindInterval));
+    let remindAt = nextAt;
+    if (opts.remindInterval.startsAt) {
+      const start = parseDateInput(opts.remindInterval.startsAt);
+      const next = parseDateInput(nextAt);
+      if (start && next && next.getTime() < start.getTime()) {
+        remindAt = startOfDayISO(start);
+      }
+    }
     return {
       remindInterval: opts.remindInterval,
-      remindAt: startOfDayISO(addInterval(doneAt, opts.remindInterval)),
+      remindAt,
     };
   }
   if (opts.remindAt === null || opts.remindInterval === null) {

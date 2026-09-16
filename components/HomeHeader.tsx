@@ -1,7 +1,8 @@
 import { Pressable, StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Plus, Search as SearchIcon, User } from 'lucide-react-native';
+import { Bell, Plus, Search as SearchIcon, User } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { HomeSurfaceSwitch } from '@/components/HomeSurfaceSwitch';
 import { fonts, spacing } from '@/constants/theme';
@@ -9,6 +10,10 @@ import { useTheme } from '@/lib/ThemeContext';
 import { moduleHref } from '@/lib/moduleNav';
 import { blurActiveElement } from '@/lib/a11y';
 import type { HomeSurface } from '@/lib/homeSurface';
+import {
+  syncDeliveredFromOS,
+  unreadNotificationCount,
+} from '@/lib/notificationLog';
 
 /** Shared top bar for home surfaces — Today, Ask, and Life. */
 export function HomeHeader({
@@ -24,6 +29,24 @@ export function HomeHeader({
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const [unread, setUnread] = useState(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      let live = true;
+      void syncDeliveredFromOS()
+        .then(() => unreadNotificationCount())
+        .then((n) => {
+          if (live) setUnread(n);
+        })
+        .catch(() => {
+          if (live) setUnread(0);
+        });
+      return () => {
+        live = false;
+      };
+    }, [])
+  );
 
   return (
     <View style={[styles.bar, { paddingTop: insets.top + 8 }]}>
@@ -43,6 +66,28 @@ export function HomeHeader({
           <Plus size={20} color={colors.ink} strokeWidth={2.4} />
         </Pressable>
       ) : null}
+      <Pressable
+        onPress={() => {
+          blurActiveElement();
+          router.push(
+            moduleHref('/notifications', surface === 'things' ? 'things' : 'today')
+          );
+        }}
+        hitSlop={8}
+        style={styles.iconBtn}
+        accessibilityLabel={
+          unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'
+        }
+      >
+        <Bell size={20} color={colors.ink} strokeWidth={1.8} />
+        {unread > 0 ? (
+          <View style={[styles.badge, { backgroundColor: colors.coral }]}>
+            <Text style={[styles.badgeText, { color: colors.pure }]}>
+              {unread > 9 ? '9+' : String(unread)}
+            </Text>
+          </View>
+        ) : null}
+      </Pressable>
       <Pressable
         onPress={() => {
           blurActiveElement();
@@ -101,6 +146,22 @@ const styles = StyleSheet.create({
     height: 36,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  badge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  badgeText: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 10,
+    lineHeight: 12,
   },
   avatar: {
     width: 36,

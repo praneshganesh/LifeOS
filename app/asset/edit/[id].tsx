@@ -14,9 +14,10 @@ import { KeyboardFormScroll } from '@/components/ui/KeyboardFormScroll';
 import { Text } from '@/components/ui/Text';
 import { OptionalDateField } from '@/components/ui/DateField';
 import {
-  DETAIL_DOCK_PAD,
+  DETAIL_STICKY_PAD,
   DetailPrimaryButton,
-  DetailRemoveButton,
+  DetailStickyActions,
+  DetailTrashButton,
 } from '@/components/ui/DetailKit';
 import { PersonChips } from '@/components/PersonChips';
 import { useHousehold } from '@/lib/HouseholdContext';
@@ -202,8 +203,13 @@ export default function EditAssetScreen() {
 
   return (
     <Screen>
-      <Stack.Screen options={{ title: 'Edit item' }} />
-      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={DETAIL_DOCK_PAD}>
+      <Stack.Screen
+        options={{
+          title: 'Edit item',
+          headerRight: () => <DetailTrashButton onPress={confirmDelete} />,
+        }}
+      />
+      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={DETAIL_STICKY_PAD}>
           <Field label="Name" value={name} onChangeText={setName} />
           <Field label="Brand" value={brand} onChangeText={setBrand} />
           <Field label="Category" value={category} onChangeText={setCategory} />
@@ -326,15 +332,14 @@ export default function EditAssetScreen() {
           />
 
           <Field label="Notes" value={insight} onChangeText={setInsight} multiline />
-
-          <DetailPrimaryButton
-            label="Save changes"
-            onPress={() => void save()}
-            accent={colors.accent}
-          />
-
-          <DetailRemoveButton onPress={confirmDelete} />
-        </KeyboardFormScroll>
+      </KeyboardFormScroll>
+      <DetailStickyActions>
+        <DetailPrimaryButton
+          label="Save changes"
+          onPress={() => void save()}
+          accent={colors.accent}
+        />
+      </DetailStickyActions>
     </Screen>
   );
 }
@@ -397,17 +402,16 @@ function makeStyles(colors: ThemeColors) {
   },
   fieldLabel: {
     marginBottom: 8,
-    fontFamily: fonts.sansMedium,
-    fontSize: 13,
-    letterSpacing: 0.3,
-    textTransform: 'uppercase',
-    color: colors.mute,
+    fontFamily: fonts.sansSemi,
+    fontSize: 15,
+    letterSpacing: -0.2,
+    color: colors.ink,
   },
   input: {
     backgroundColor: colors.surfaceSoft,
     borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: colors.lineStrong,
     paddingHorizontal: spacing.md,
     paddingVertical: 14,
     fontFamily: fonts.sans,
@@ -425,25 +429,27 @@ function makeStyles(colors: ThemeColors) {
     marginBottom: spacing.sm,
   },
   chip: {
-    borderRadius: radius.full,
+    borderRadius: radius.md,
     paddingHorizontal: 14,
     paddingVertical: 10,
     backgroundColor: colors.surface,
     borderWidth: 1.5,
     borderColor: colors.lineStrong,
+    minHeight: 40,
+    justifyContent: 'center',
   },
   chipOn: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
+    backgroundColor: colors.ink,
+    borderColor: colors.ink,
   },
   chipText: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 14,
+    fontFamily: fonts.sansSemi,
+    fontSize: 15,
     letterSpacing: -0.2,
     color: colors.ink,
   },
   chipTextOn: {
-    color: colors.pure,
+    color: colors.onInk,
   },
 });
 }

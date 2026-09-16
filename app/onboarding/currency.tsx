@@ -46,7 +46,7 @@ export default function OnboardingCurrency() {
         contentContainerStyle={styles.body}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.step}>Step 2 of 5</Text>
+        <Text style={styles.step}>Step 2 of 6</Text>
         <Text style={styles.title}>What’s your currency?</Text>
         <Text style={styles.lead}>
           Used for expenses, subscriptions, and Talk. You can change it anytime in
@@ -121,11 +121,13 @@ function makeStyles(colors: ThemeColors) {
       width: '47%',
       flexGrow: 1,
       borderRadius: radius.md,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.line,
+      borderWidth: 1.5,
+      borderColor: colors.lineStrong,
       backgroundColor: colors.surface,
       paddingHorizontal: 14,
       paddingVertical: 12,
+      minHeight: 56,
+      justifyContent: 'center',
     },
     chipOn: {
       backgroundColor: colors.ink,
@@ -155,9 +157,10 @@ function makeStyles(colors: ThemeColors) {
     },
     cta: {
       backgroundColor: colors.ink,
-      borderRadius: radius.full,
-      paddingVertical: 16,
+      borderRadius: radius.md,
+      height: 52,
       alignItems: 'center',
+      justifyContent: 'center',
     },
     ctaText: {
       fontFamily: fonts.sansSemi,

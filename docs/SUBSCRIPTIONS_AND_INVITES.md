@@ -35,10 +35,22 @@ Trial ends → paywall → Pro or Family → home (or finish onboarding)
 Direct subscribe (future store) → paywall/plan → onboarding if needed → home
 ```
 
-Billing provider: **RevenueCat** (not wired yet). Current UI unlocks plan **on-device only** (no charge). Product IDs (planned):
+Billing: **our paywall UI → RevenueCat → Apple StoreKit** (real Apple ID charge / Sandbox on TestFlight).
+
+Product IDs:
 
 - `saavi_pro_monthly` / `saavi_pro_yearly`
-- `saavi_family_yearly` (+ monthly later)
+- `saavi_family_monthly` / `saavi_family_yearly`
+
+### Why TestFlight shows no prices / no payment sheet
+
+1. **Web / localhost never bills.** Expo web cannot load StoreKit. Screenshots with `localhost` in Safari are not TestFlight.
+2. **EAS builds must bake** `EXPO_PUBLIC_REVENUECAT_IOS_KEY` (EAS secret / env for the profile). Local `.env` does not ship to TestFlight.
+3. **App Store Connect** needs those subscription products (Ready to Submit / approved) + Paid Applications agreement.
+4. **RevenueCat** current offering must include packages whose identifiers match `pickOffer` (`$rc_annual` / `annual` / `yearly`, `family_annual`, etc.) and map to the App Store product IDs.
+5. **Sandbox:** TestFlight uses Sandbox Apple ID — tap Continue → Apple’s sheet (not a fake in-app charge).
+
+Until (2)–(4) are done, `billingReady` is false or offers are empty → paywall shows “not connected” / “Unavailable”, not store prices.
 
 ## Family invite (mobile)
 
@@ -75,7 +87,6 @@ Block invite; message to free a seat / add-on (add-ons later).
 
 ## Not in v1
 
-- RevenueCat purchase / restore
 - Universal Links host (`saavi.app`) + deferred deep link polish
 - Extra seat SKUs
 - Multiple households per login

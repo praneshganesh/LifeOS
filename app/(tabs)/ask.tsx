@@ -175,7 +175,7 @@ export default function ChatScreen() {
     {
       id: 'welcome',
       role: 'assistant',
-      text: 'Add a thing, check in a habit, log a class, or ask about a document.',
+      text: 'Add a thing, check in a habit, log a session, or ask about a document.',
     },
   ]);
 
@@ -459,7 +459,7 @@ export default function ChatScreen() {
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
           ListHeaderComponent={
             topAttention.length ? (
-              <View style={[styles.attentionBlock, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+              <View style={[styles.attentionBlock, { backgroundColor: colors.surface, borderColor: colors.lineStrong }]}>
                 <Text style={[styles.attentionLabel, { color: colors.mute }]}>Due soon</Text>
                 {topAttention.map((a) => (
                   <Pressable
@@ -510,8 +510,8 @@ export default function ChatScreen() {
                   contentContainerStyle={styles.promptsInner}
                 >
                   {STARTER_PROMPTS.map((s) => (
-                    <Pressable key={s} onPress={() => void ask(s)} style={[styles.chip, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-                      <Text style={[styles.chipText, { color: colors.slate }]}>{s}</Text>
+                    <Pressable key={s} onPress={() => void ask(s)} style={[styles.chip, { backgroundColor: colors.surface, borderColor: colors.lineStrong }]}>
+                      <Text style={[styles.chipText, { color: colors.ink }]}>{s}</Text>
                     </Pressable>
                   ))}
                 </ScrollView>
@@ -533,8 +533,8 @@ export default function ChatScreen() {
                     : {
                         maxWidth: '88%',
                         backgroundColor: colors.surface,
-                        borderWidth: StyleSheet.hairlineWidth,
-                        borderColor: colors.line,
+                        borderWidth: 1.5,
+                        borderColor: colors.lineStrong,
                       },
                 ]}
               >
@@ -573,7 +573,7 @@ export default function ChatScreen() {
           <View
             style={[
               styles.composerCard,
-              { backgroundColor: colors.surface, borderColor: colors.line },
+              { backgroundColor: colors.surface, borderColor: colors.lineStrong },
             ]}
           >
             <TextInput
@@ -606,7 +606,7 @@ export default function ChatScreen() {
                   }}
                   style={({ pressed }) => [
                     styles.roundBtn,
-                    { borderColor: colors.line },
+                    { borderColor: colors.lineStrong },
                     pressed && { opacity: 0.7 },
                   ]}
                   accessibilityLabel="Capture with camera"
@@ -620,7 +620,7 @@ export default function ChatScreen() {
                   }}
                   style={({ pressed }) => [
                     styles.roundBtn,
-                    { borderColor: colors.line },
+                    { borderColor: colors.lineStrong },
                     pressed && { opacity: 0.7 },
                   ]}
                   accessibilityLabel="Talk instead"
@@ -653,7 +653,7 @@ const styles = StyleSheet.create({
   attentionBlock: {
     marginBottom: spacing.md,
     borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1.5,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
@@ -741,23 +741,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   chip: {
-    borderRadius: radius.full,
+    borderRadius: radius.md,
     paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 10,
+    borderWidth: 1.5,
+    minHeight: 40,
+    justifyContent: 'center',
   },
   chipText: {
-    fontFamily: fonts.sans,
-    fontSize: 16,
-    lineHeight: 21,
+    fontFamily: fonts.sansSemi,
+    fontSize: 15,
+    letterSpacing: -0.2,
+    lineHeight: 20,
   },
   composer: {
     paddingHorizontal: spacing.md,
     paddingTop: 6,
   },
   composerCard: {
-    borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
     paddingHorizontal: spacing.md,
     paddingTop: Platform.OS === 'ios' ? 12 : 10,
     paddingBottom: 8,
@@ -784,7 +787,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
   },

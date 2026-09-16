@@ -48,7 +48,7 @@ export default function ClassesScreen() {
         <Pressable
           onPress={() => router.push('/classes/create' as Href)}
           style={styles.addBtn}
-          accessibilityLabel="Add class pack"
+          accessibilityLabel="Add class"
         >
           <Plus size={18} color={colors.forest} strokeWidth={2.2} />
           <Text style={styles.addLabel}>Add</Text>
@@ -57,17 +57,17 @@ export default function ClassesScreen() {
     >
       <StatStrip
         items={[
-          { label: 'Packs', value: String(packs.length) },
-          { label: 'Left', value: String(left) },
+          { label: 'Classes', value: String(packs.length) },
+          { label: 'Sessions left', value: String(left) },
           { label: 'Ending soon', value: String(ending) },
         ]}
       />
 
       {packs.length === 0 ? (
-        <ModuleSection label="Session packs">
+        <ModuleSection label="Your classes">
           <Text variant="body" style={{ color: colors.mute }}>
-            Add a pack like “Skating — 24 classes in 3 months.” Log a class when they
-            go. Talk: “Aarav went to skating.”
+            Add a class like “Skating — 24 sessions in 3 months.” Log a session when
+            they go. Talk: “Aarav went to skating.”
           </Text>
         </ModuleSection>
       ) : (
@@ -94,17 +94,19 @@ export default function ClassesScreen() {
                   <Text variant="caption" style={{ marginTop: 4 }}>
                     {who}
                     {pack.total > 0
-                      ? `${used} of ${pack.total} used · until ${formatPackWindow(pack)}`
+                      ? `${used} of ${pack.total} sessions · until ${formatPackWindow(pack)}`
                       : `${used} logged · until ${formatPackWindow(pack)}`}
                   </Text>
                 </View>
                 <Pressable
                   onPress={() => void logClass(pack.id, today)}
                   style={[styles.logBtn, todayDone && styles.logBtnOn]}
-                  accessibilityLabel={todayDone ? 'Undo today’s class' : 'Log class today'}
+                  accessibilityLabel={
+                    todayDone ? 'Undo today’s session' : 'Log session today'
+                  }
                 >
                   <Text style={[styles.logLabel, todayDone && styles.logLabelOn]}>
-                    {todayDone ? 'Today ✓' : 'Log today'}
+                    {todayDone ? 'Today ✓' : 'Log session'}
                   </Text>
                 </Pressable>
               </View>
@@ -112,7 +114,9 @@ export default function ClassesScreen() {
                 <View style={[styles.fill, { width: `${pct * 100}%` }]} />
               </View>
               <Text variant="caption" style={{ marginTop: 8, color: colors.forest }}>
-                {remaining == null ? 'Set a class count' : `${remaining} left`}
+                {remaining == null
+                  ? 'Set session count'
+                  : `${remaining} session${remaining === 1 ? '' : 's'} left`}
               </Text>
             </Pressable>
           );

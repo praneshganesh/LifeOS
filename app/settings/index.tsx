@@ -11,19 +11,16 @@ import { loadPlanPrefs, planById } from '@/lib/planLimits';
 import { resolveSelfDisplayName } from '@/lib/people';
 import { moduleHref } from '@/lib/moduleNav';
 import { useTheme } from '@/lib/ThemeContext';
-import { THEME_FAMILIES } from '@/constants/theme';
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { family, resolved } = useTheme();
+  const { mode, resolved } = useTheme();
   const { spaces } = useSpaces();
   const { members } = useHousehold();
   const { currency } = useCurrency();
   const [displayName, setDisplayName] = useState('You');
   const [planTitle, setPlanTitle] = useState('Trial');
 
-  // Reload on focus (not just mount) so edits made on child screens
-  // show immediately when navigating back.
   useFocusEffect(
     useCallback(() => {
       let live = true;
@@ -45,6 +42,8 @@ export default function SettingsScreen() {
   const homes = spaces.filter((s) => s.kind === 'home');
   const defaultHome = homes[0]?.name || 'No home yet';
   const homesMeta = [defaultHome, currency].filter(Boolean).join(' · ');
+  const modeLabel =
+    mode === 'system' ? `System · ${resolved}` : mode === 'dark' ? 'Dark' : 'Light';
 
   return (
     <ModuleScreen
@@ -86,7 +85,7 @@ export default function SettingsScreen() {
           <ListRow
             icon="sparkles"
             title="Appearance"
-            subtitle={`${THEME_FAMILIES.find((t) => t.id === family)?.title ?? 'Earth'} · ${resolved}`}
+            subtitle={modeLabel}
             onPress={() => router.push('/settings/appearance' as Href)}
           />
           <ListRow

@@ -1,19 +1,23 @@
 import { useTheme } from '@/lib/ThemeContext';
 import { useMemo, useState } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Stack, useRouter, type Href } from 'expo-router';
 import { Screen } from '@/components/ui/Screen';
 import { KeyboardFormScroll } from '@/components/ui/KeyboardFormScroll';
 import {
   DetailChip,
   DetailChipRow,
-  DetailField,
   DetailPrimaryButton,
-  DetailSection,
-  DETAIL_DOCK_PAD,
+  DetailStickyActions,
+  DETAIL_STICKY_PAD,
 } from '@/components/ui/DetailKit';
-import { Text } from '@/components/ui/Text';
-import { DateField } from '@/components/ui/DateField';
+import {
+  FormCaption,
+  FormGroup,
+  FormInputRow,
+} from '@/components/ui/FormKit';
+import { DatePillRow } from '@/components/ui/DateField';
+import { TimePillRow } from '@/components/ui/TimeField';
 import { PersonChips } from '@/components/PersonChips';
 import { useClasses } from '@/lib/ClassesContext';
 import { useToast } from '@/lib/ToastContext';
@@ -21,11 +25,10 @@ import { useHousehold } from '@/lib/HouseholdContext';
 import { selfMember } from '@/lib/people';
 import { sanitizeIntegerInput } from '@/lib/currency';
 import { addCalendarMonths, localDayKey } from '@/lib/dates';
-import {
-  SCHEDULE_DAYS,
-  type ScheduleDay,
-} from '@/lib/classes';
+import { formatScheduleTimeDisplay } from '@/lib/classSchedule';
+import { SCHEDULE_DAYS, type ScheduleDay } from '@/lib/classes';
 import { type ThemeColors, fonts, spacing } from '@/constants/theme';
+import { Text } from '@/components/ui/Text';
 
 const MONTH_CHIPS = [1, 2, 3, 6] as const;
 
@@ -38,9 +41,10 @@ export default function CreateClassPackScreen() {
   const { showToast, showError } = useToast();
   const [title, setTitle] = useState('');
   const [total, setTotal] = useState('24');
-  const [completed, setCompleted] = useState('0');
+  const [completed, setCompleted] = useState('');
   const [scheduleDays, setScheduleDays] = useState<ScheduleDay[]>([]);
-  const [scheduleTime, setScheduleTime] = useState('');
+  const [scheduleHhmm, setScheduleHhmm] = useState('09:00');
+  const [timeTouched, setTimeTouched] = useState(false);
   const [months, setMonths] = useState(3);
   const [startsOn, setStartsOn] = useState(localDayKey());
   const [personId, setPersonId] = useState<string | null>(
@@ -60,8 +64,6 @@ export default function CreateClassPackScreen() {
     [startsOn, months]
   );
   const person = members.find((m) => m.id === personId);
-  // Digits only — "24 classes" or "1,500" must not turn into NaN or a
-  // silently coerced 1.
   const totalN = Math.round(Number(total.replace(/[^\d]/g, '')) || 0);
   const completedN = Math.round(Number(completed.replace(/[^\d]/g, '')) || 0);
   const canSave = Boolean(title.trim()) && totalN > 0;
@@ -70,22 +72,25 @@ export default function CreateClassPackScreen() {
     if (!canSave || saving) return;
     setSaving(true);
     try {
-      const pack = await addPack({
+      await addPack({
         title: title.trim(),
         total: totalN,
         completed: completedN > 0 ? completedN : undefined,
         scheduleDays: scheduleDays.length ? scheduleDays : undefined,
-        scheduleTime: scheduleTime.trim() || undefined,
+        scheduleTime: timeTouched
+          ? formatScheduleTimeDisplay(scheduleHhmm)
+          : undefined,
         months,
         startsOn,
         endsOn,
         personId: person?.id,
         assignedTo: person?.name,
       });
-      showToast('Class pack added');
-      router.replace(`/classes/${pack.id}` as Href);
+      showToast('Class added');
+      if (router.canGoBack()) router.back();
+      else router.replace('/classes' as Href);
     } catch {
-      showError('Couldn’t save the class pack — try again.');
+      showError('Couldn’t save the class — try again.');
     } finally {
       setSaving(false);
     }
@@ -93,85 +98,86 @@ export default function CreateClassPackScreen() {
 
   return (
     <Screen>
-      <Stack.Screen options={{ title: 'New class pack' }} />
-      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={DETAIL_DOCK_PAD}>
-        <DetailSection label="Class">
-          <DetailField
+      <Stack.Screen options={{ title: 'New class' }} />
+      <KeyboardFormScroll
+        contentContainerStyle={styles.content}
+        bottomExtra={DETAIL_STICKY_PAD}
+      >
+        <FormGroup>
+          <FormInputRow
             value={title}
             onChangeText={setTitle}
-            placeholder="e.g. Skating, Piano, Swimming"
+            placeholder="Class name"
             autoFocus
           />
-        </DetailSection>
-
-        <DetailSection label="How many classes">
-          <DetailField
+          <FormInputRow
+            label="Sessions"
             value={total}
             onChangeText={(t) => setTotal(sanitizeIntegerInput(t))}
             keyboardType="number-pad"
             placeholder="24"
           />
-        </DetailSection>
-
-        <DetailSection label="Already completed">
-          <DetailField
+          <FormInputRow
+            label="Completed"
             value={completed}
             onChangeText={(t) => setCompleted(sanitizeIntegerInput(t))}
             keyboardType="number-pad"
             placeholder="0"
+            accessibilityLabel="Already completed"
+            last
           />
-        </DetailSection>
+        </FormGroup>
 
-        <DetailSection label="Schedule days">
-          <DetailChipRow>
-            {SCHEDULE_DAYS.map((day) => (
-              <DetailChip
-                key={day.id}
-                label={day.short}
-                selected={scheduleDays.includes(day.id)}
-                onPress={() => toggleDay(day.id)}
-                accent={accent}
-              />
-            ))}
-          </DetailChipRow>
-        </DetailSection>
-
-        <DetailSection label="Schedule time">
-          <DetailField
-            value={scheduleTime}
-            onChangeText={setScheduleTime}
-            placeholder="e.g. 10:00 AM"
+        <Text style={[styles.sectionLabel, { color: colors.ink }]}>Schedule</Text>
+        <FormGroup>
+          <View style={styles.chipPad}>
+            <DetailChipRow equal>
+              {SCHEDULE_DAYS.map((day) => (
+                <DetailChip
+                  key={day.id}
+                  label={day.short}
+                  selected={scheduleDays.includes(day.id)}
+                  onPress={() => toggleDay(day.id)}
+                  accent={accent}
+                />
+              ))}
+            </DetailChipRow>
+          </View>
+          <TimePillRow
+            label="Time"
+            value={scheduleHhmm}
+            onChange={(v) => {
+              setScheduleHhmm(v);
+              setTimeTouched(true);
+            }}
           />
-        </DetailSection>
-
-        <DetailSection label="Use within">
-          <DetailChipRow>
-            {MONTH_CHIPS.map((n) => (
-              <DetailChip
-                key={n}
-                label={`${n} ${n === 1 ? 'month' : 'months'}`}
-                selected={months === n}
-                onPress={() => setMonths(n)}
-                accent={accent}
-              />
-            ))}
-          </DetailChipRow>
-        </DetailSection>
-
-        <DetailSection label="Starts">
-          <DateField value={startsOn} onChange={setStartsOn} />
-        </DetailSection>
-
-        <DetailSection label="Window">
-          <Text style={{ color: accent, fontFamily: fonts.sansMedium, fontSize: 15 }}>
-            {totalN} classes until{' '}
-            {new Date(`${endsOn}T12:00:00`).toLocaleDateString(undefined, {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
-            })}
-          </Text>
-        </DetailSection>
+          <DatePillRow label="Starts" value={startsOn} onChange={setStartsOn} />
+          <View style={styles.chipPad}>
+            <Text style={[styles.subLabel, { color: colors.mute }]}>Use within</Text>
+            <DetailChipRow equal>
+              {MONTH_CHIPS.map((n) => (
+                <DetailChip
+                  key={n}
+                  label={`${n} mo`}
+                  selected={months === n}
+                  onPress={() => setMonths(n)}
+                  accent={accent}
+                />
+              ))}
+            </DetailChipRow>
+          </View>
+          <FormCaption>
+            {totalN > 0
+              ? `${totalN} session${totalN === 1 ? '' : 's'} until ${new Date(
+                  `${endsOn}T12:00:00`
+                ).toLocaleDateString(undefined, {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric',
+                })}`
+              : 'Set how many sessions to see the end date'}
+          </FormCaption>
+        </FormGroup>
 
         <PersonChips
           members={members}
@@ -179,14 +185,16 @@ export default function CreateClassPackScreen() {
           onChange={setPersonId}
           noneLabel="Unassigned"
         />
+      </KeyboardFormScroll>
 
+      <DetailStickyActions>
         <DetailPrimaryButton
-          label={saving ? 'Saving…' : 'Save class pack'}
-          accent={accent}
+          label={saving ? 'Saving…' : 'Save class'}
+          accent={colors.accent}
           disabled={!canSave || saving}
           onPress={() => void save()}
         />
-      </KeyboardFormScroll>
+      </DetailStickyActions>
     </Screen>
   );
 }
@@ -195,7 +203,28 @@ function makeStyles(_colors: ThemeColors) {
   return StyleSheet.create({
     content: {
       paddingHorizontal: spacing.lg,
-      paddingTop: spacing.xs,
+      paddingTop: spacing.md,
+      gap: 0,
+    },
+    sectionLabel: {
+      fontFamily: fonts.sansSemi,
+      fontSize: 13,
+      letterSpacing: 0.2,
+      textTransform: 'uppercase',
+      marginBottom: 8,
+      marginTop: spacing.sm,
+      marginLeft: 4,
+    },
+    subLabel: {
+      fontFamily: fonts.sansMedium,
+      fontSize: 13,
+      letterSpacing: -0.1,
+      marginBottom: 8,
+    },
+    chipPad: {
+      paddingHorizontal: spacing.md,
+      paddingTop: spacing.md,
+      paddingBottom: spacing.sm,
     },
   });
 }

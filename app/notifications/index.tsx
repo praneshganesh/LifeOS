@@ -12,6 +12,7 @@ import { buildAttentionItems } from '@/lib/attention';
 import { useAttentionDismissals } from '@/lib/attentionDismiss';
 import {
   loadNotificationLog,
+  markNotificationLogRead,
   syncDeliveredFromOS,
   type DeliveredNotification,
 } from '@/lib/notificationLog';
@@ -52,8 +53,9 @@ export default function NotificationsScreen() {
       let live = true;
       void syncDeliveredFromOS()
         .then(loadNotificationLog)
-        .then((log) => {
+        .then(async (log) => {
           if (live) setHistory(log);
+          await markNotificationLogRead();
         });
       return () => {
         live = false;

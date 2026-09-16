@@ -41,6 +41,8 @@ export interface ModuleScreenProps {
   hero?: ReactNode;
   /** Extra bottom scroll pad for the floating dock. Defaults to 108. */
   bottomExtra?: number;
+  /** Sticky footer (e.g. DetailStickyActions) pinned below the scroll area. */
+  footer?: ReactNode;
 }
 
 /**
@@ -60,6 +62,7 @@ export function ModuleScreen({
   backFallbackHref: backFallbackHrefProp,
   hero,
   bottomExtra = 108,
+  footer,
 }: ModuleScreenProps) {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
@@ -103,7 +106,7 @@ export function ModuleScreen({
               onPress={handleBack}
               style={({ pressed }) => [
                 styles.backBtn,
-                { marginBottom: 0 },
+                lifestyle && { marginBottom: 0 },
                 pressed && styles.backBtnPressed,
               ]}
               hitSlop={12}
@@ -137,12 +140,13 @@ export function ModuleScreen({
       <KeyboardFormScroll
         ref={scrollRef}
         contentContainerStyle={[styles.content, contentStyle]}
-        bottomExtra={bottomExtra}
+        bottomExtra={footer ? Math.min(bottomExtra, 28) : bottomExtra}
         keyboardShouldPersistTaps="always"
       >
         {hero}
         {children}
       </KeyboardFormScroll>
+      {footer}
     </Screen>
   );
 }
@@ -160,7 +164,7 @@ export function ModuleSection({
   return (
     <View style={styles.section}>
       <View style={styles.sectionHead}>
-        <Text variant="label" style={[styles.sectionLabel, { color: colors.mute }]}>
+        <Text style={[styles.sectionLabel, { color: colors.ink }]}>
           {label}
         </Text>
         {count != null ? <Text variant="caption">{count}</Text> : null}
@@ -180,7 +184,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.sm,
   },
-  sectionLabel: {},
+  sectionLabel: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 15,
+    letterSpacing: -0.2,
+  },
 });
 
 function makeStyles() {
@@ -226,14 +234,14 @@ function makeStyles() {
       flexDirection: 'row',
       alignItems: 'flex-start',
       gap: spacing.md,
-      marginTop: 2,
+      marginTop: spacing.xs,
     },
     lead: {
       marginTop: 4,
     },
     content: {
       paddingHorizontal: spacing.lg,
-      paddingTop: spacing.sm,
+      paddingTop: spacing.md,
     },
   });
 }

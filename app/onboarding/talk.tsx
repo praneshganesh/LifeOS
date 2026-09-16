@@ -28,7 +28,7 @@ export default function OnboardingTalk() {
   return (
     <View style={[styles.root, { paddingBottom: Math.max(insets.bottom, 16) + 8 }]}>
       <View style={styles.body}>
-        <Text style={styles.step}>Step 5 of 5</Text>
+        <Text style={styles.step}>Step 6 of 6</Text>
         <Text style={styles.title}>Meet Talk</Text>
         <Text style={styles.lead}>
           Say “I bought AirPods for 900” or ask “what’s due soon?” Talk updates your home data —
@@ -118,7 +118,7 @@ function makeStyles(colors: ThemeColors) {
   },
   cta: {
     height: 52,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     backgroundColor: colors.forest,
     alignItems: 'center',
     justifyContent: 'center',
@@ -130,7 +130,7 @@ function makeStyles(colors: ThemeColors) {
   },
   secondary: {
     height: 48,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },

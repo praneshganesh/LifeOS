@@ -20,11 +20,45 @@ export type DeliveredNotification = {
 };
 
 const KEY = 'lifeos:notification-log:v1';
+const READ_KEY = 'lifeos:notification-log-read-at:v1';
 const VERSION = 1;
 const MAX_ENTRIES = 100;
 
 export async function loadNotificationLog(): Promise<DeliveredNotification[]> {
   return loadVersioned<DeliveredNotification[]>(KEY, VERSION, []);
+}
+
+export async function getNotificationLogReadAt(): Promise<string | null> {
+  try {
+    const { default: AsyncStorage } = await import(
+      '@react-native-async-storage/async-storage'
+    );
+    return (await AsyncStorage.getItem(READ_KEY)) || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function markNotificationLogRead(
+  at = new Date().toISOString()
+): Promise<void> {
+  try {
+    const { default: AsyncStorage } = await import(
+      '@react-native-async-storage/async-storage'
+    );
+    await AsyncStorage.setItem(READ_KEY, at);
+  } catch {
+    /* ignore */
+  }
+}
+
+export async function unreadNotificationCount(): Promise<number> {
+  const [log, readAt] = await Promise.all([
+    loadNotificationLog(),
+    getNotificationLogReadAt(),
+  ]);
+  if (!readAt) return log.length;
+  return log.filter((e) => e.receivedAt > readAt).length;
 }
 
 export async function recordDeliveredNotifications(

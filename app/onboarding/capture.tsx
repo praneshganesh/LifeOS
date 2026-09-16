@@ -16,7 +16,7 @@ export default function OnboardingCapture() {
   return (
     <View style={[styles.root, { paddingBottom: Math.max(insets.bottom, 16) + 8 }]}>
       <View style={styles.body}>
-        <Text style={styles.step}>Step 4 of 5</Text>
+        <Text style={styles.step}>Step 5 of 6</Text>
         <Text style={styles.title}>Capture once — filed forever</Text>
         <Text style={styles.lead}>
           Snap a Thing, receipt, or ID. Text is read automatically. Receipts can become a Thing,
@@ -96,8 +96,8 @@ function makeStyles(colors: ThemeColors) {
   card: {
     backgroundColor: colors.white,
     borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
+    borderWidth: 1.5,
+    borderColor: colors.lineStrong,
     padding: spacing.lg,
     gap: 4,
   },
@@ -118,7 +118,7 @@ function makeStyles(colors: ThemeColors) {
   },
   cta: {
     height: 52,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     backgroundColor: colors.forest,
     alignItems: 'center',
     justifyContent: 'center',
@@ -130,7 +130,7 @@ function makeStyles(colors: ThemeColors) {
   },
   secondary: {
     height: 48,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },

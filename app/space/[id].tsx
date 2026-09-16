@@ -288,7 +288,7 @@ function makeStyles(colors: ThemeColors) {
     gap: 2,
     paddingVertical: 6,
     paddingHorizontal: 6,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
   },
   backBtnPressed: {
     opacity: 0.65,

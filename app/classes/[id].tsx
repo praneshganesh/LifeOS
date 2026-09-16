@@ -11,12 +11,15 @@ import {
   DetailField,
   DetailHero,
   DetailPrimaryButton,
-  DetailRemoveButton,
+  DetailTrashButton,
   DetailSection,
-  DETAIL_DOCK_PAD,
+  DetailStickyActions,
+  DETAIL_STICKY_PAD,
 } from '@/components/ui/DetailKit';
 import { Text } from '@/components/ui/Text';
-import { DateField } from '@/components/ui/DateField';
+import { DatePillRow } from '@/components/ui/DateField';
+import { TimePillRow } from '@/components/ui/TimeField';
+import { FormGroup } from '@/components/ui/FormKit';
 import { useClasses } from '@/lib/ClassesContext';
 import { useHousehold } from '@/lib/HouseholdContext';
 import {
@@ -31,6 +34,10 @@ import {
   type ScheduleDay,
   usedCount,
 } from '@/lib/classes';
+import {
+  formatScheduleTimeDisplay,
+  scheduleTimeToHhmm,
+} from '@/lib/classSchedule';
 import { confirmDelete } from '@/lib/confirmDelete';
 import { useToast } from '@/lib/ToastContext';
 import { displayNameFor } from '@/lib/people';
@@ -47,22 +54,21 @@ export default function ClassPackDetailScreen() {
   const router = useRouter();
   const { getById, logClass, removePack, updatePack } = useClasses();
   const { members } = useHousehold();
-  const { showToast, showError } = useToast();
+  const { showError } = useToast();
   const saveFailed = () => showError('Couldn’t save — try again.');
 
   const packEarly = id && id !== 'new' ? getById(id) : undefined;
   const [title, setTitle] = useState('');
   const [total, setTotal] = useState('');
   const [scheduleDays, setScheduleDays] = useState<ScheduleDay[]>([]);
-  const [scheduleTime, setScheduleTime] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [scheduleHhmm, setScheduleHhmm] = useState('09:00');
 
   useEffect(() => {
     if (!packEarly) return;
     setTitle(packEarly.title);
     setTotal(packEarly.total > 0 ? String(packEarly.total) : '');
     setScheduleDays(packEarly.scheduleDays || []);
-    setScheduleTime(packEarly.scheduleTime || '');
+    setScheduleHhmm(scheduleTimeToHhmm(packEarly.scheduleTime));
   }, [
     packEarly?.id,
     packEarly?.title,
@@ -72,9 +78,17 @@ export default function ClassPackDetailScreen() {
   ]);
 
   const toggleDay = (dayId: ScheduleDay) => {
-    setScheduleDays((prev) =>
-      prev.includes(dayId) ? prev.filter((d) => d !== dayId) : [...prev, dayId]
-    );
+    setScheduleDays((prev) => {
+      const next = prev.includes(dayId)
+        ? prev.filter((d) => d !== dayId)
+        : [...prev, dayId];
+      if (packEarly) {
+        void updatePack(packEarly.id, {
+          scheduleDays: next.length ? next : undefined,
+        }).catch(saveFailed);
+      }
+      return next;
+    });
   };
 
   if (id === 'new') {
@@ -97,30 +111,29 @@ export default function ClassPackDetailScreen() {
     else router.replace('/classes' as Href);
   }
 
-  function onSave() {
-    if (!pack || !title.trim() || saving) return;
+  function persistTotal() {
+    if (!pack) return;
     const digits = total.replace(/[^\d]/g, '');
     const parsed = Math.round(Number(digits));
     if (total.trim() && (!digits || parsed <= 0)) {
-      showError('Total classes must be a number above 0.');
+      showError('Total sessions must be a number above 0.');
+      setTotal(pack.total > 0 ? String(pack.total) : '');
       return;
     }
     const nextTotal = digits && parsed > 0 ? parsed : pack.total;
-    setSaving(true);
-    void updatePack(pack.id, {
-      title: title.trim(),
-      total: nextTotal,
-      scheduleDays: scheduleDays.length ? scheduleDays : undefined,
-      scheduleTime: scheduleTime.trim() || undefined,
-      scheduleTimeInferred: false,
-    })
-      .then(() => {
-        showToast('Class pack saved');
-        if (router.canGoBack()) router.back();
-        else router.replace('/classes' as Href);
-      })
-      .catch(saveFailed)
-      .finally(() => setSaving(false));
+    if (nextTotal === pack.total) return;
+    void updatePack(pack.id, { total: nextTotal }).catch(saveFailed);
+  }
+
+  function persistTitle() {
+    if (!pack) return;
+    const next = title.trim();
+    if (!next) {
+      setTitle(pack.title);
+      return;
+    }
+    if (next === pack.title) return;
+    void updatePack(pack.id, { title: next }).catch(saveFailed);
   }
 
   if (!pack) {
@@ -130,7 +143,7 @@ export default function ClassPackDetailScreen() {
         backLabel="Classes"
         backFallbackHref="/classes"
       >
-        <Text variant="body">Class pack not found.</Text>
+        <Text variant="body">Class not found.</Text>
       </ModuleScreen>
     );
   }
@@ -149,7 +162,7 @@ export default function ClassPackDetailScreen() {
 
   const statusLabel =
     status === 'complete'
-      ? 'All used'
+      ? 'All sessions used'
       : status === 'expired'
         ? 'Window ended'
         : status === 'ending-soon'
@@ -167,49 +180,38 @@ export default function ClassPackDetailScreen() {
 
   const countLine =
     remaining == null
-      ? `${used} logged · until ${formatPackWindow(pack)}`
-      : `${remaining} / ${pack.total} left · until ${formatPackWindow(pack)}`;
+      ? `${used} session${used === 1 ? '' : 's'} logged · until ${formatPackWindow(pack)}`
+      : `${remaining} of ${pack.total} sessions left · until ${formatPackWindow(pack)}`;
 
   return (
     <ModuleScreen
       title={pack.title}
       backLabel="Classes"
       backFallbackHref="/classes"
-      bottomExtra={DETAIL_DOCK_PAD}
+      bottomExtra={DETAIL_STICKY_PAD}
+      right={<DetailTrashButton onPress={() => void onRemove()} />}
+      footer={
+        <DetailStickyActions>
+          <DetailPrimaryButton
+            label={todayDone ? 'Undo today’s session' : 'Log session'}
+            onPress={() => void logClass(pack.id, today).catch(saveFailed)}
+            accent={colors.accent}
+          />
+        </DetailStickyActions>
+      }
       hero={
         <DetailHero
-          eyebrow={ownerName ? `For ${ownerName}` : 'Class pack'}
+          eyebrow={ownerName ? `For ${ownerName}` : 'Class'}
           accent={accent}
           vividFallback={accent}
           editableTitle
           titleValue={title}
           onTitleChange={setTitle}
-          titlePlaceholder="Pack name"
+          onTitleCommit={persistTitle}
+          titlePlaceholder="Class name"
           subtitle={countLine}
           meta={[scheduleDesc, pace].filter(Boolean).join(' · ') || undefined}
-        >
-          <Pressable
-            onPress={() => void logClass(pack.id, today).catch(saveFailed)}
-            style={({ pressed }) => [
-              styles.logToday,
-              {
-                backgroundColor: todayDone ? accent : colors.surface,
-                borderColor: accent,
-                opacity: pressed ? 0.9 : 1,
-              },
-            ]}
-            accessibilityRole="button"
-          >
-            <Text
-              style={[
-                styles.logTodayText,
-                { color: todayDone ? colors.pure : accent },
-              ]}
-            >
-              {todayDone ? 'Undo today’s class' : 'Log today’s class'}
-            </Text>
-          </Pressable>
-        </DetailHero>
+        />
       }
     >
       <Stack.Screen options={{ headerShown: false }} />
@@ -217,62 +219,72 @@ export default function ClassPackDetailScreen() {
       <DetailFacts>
         <DetailFact
           label="Used"
-          value={pack.total > 0 ? `${used} of ${pack.total}` : String(used)}
+          value={
+            pack.total > 0
+              ? `${used} of ${pack.total} sessions`
+              : `${used} session${used === 1 ? '' : 's'}`
+          }
         />
         {nextOcc ? (
           <DetailFact
-            label="Next class"
+            label="Next session"
             value={`${nextOcc.daysAhead === 0 ? 'Today' : nextOcc.daysAhead === 1 ? 'Tomorrow' : nextOcc.dayName}${pack.scheduleTime ? ` · ${pack.scheduleTime}` : ''}`}
           />
         ) : null}
         <DetailFact label="Window" value={statusLabel} last />
       </DetailFacts>
 
-      <DetailSection label="Total classes">
+      <DetailSection label="Total sessions">
         <DetailField
           value={total}
           onChangeText={(t) => setTotal(sanitizeIntegerInput(t))}
+          onBlur={persistTotal}
           keyboardType="number-pad"
           placeholder="Not set yet"
-          accessibilityLabel="Total classes"
+          accessibilityLabel="Total sessions"
         />
       </DetailSection>
 
-      <DetailSection label="Schedule days">
-        <DetailChipRow>
-          {SCHEDULE_DAYS.map((day) => (
-            <DetailChip
-              key={day.id}
-              label={day.short}
-              selected={scheduleDays.includes(day.id)}
-              accent={accent}
-              onPress={() => toggleDay(day.id)}
-            />
-          ))}
-        </DetailChipRow>
-      </DetailSection>
-
-      <DetailSection label="Schedule time">
-        <DetailField
-          value={scheduleTime}
-          onChangeText={setScheduleTime}
-          placeholder="e.g. 10:00 AM"
-          accessibilityLabel="Schedule time"
-        />
-      </DetailSection>
-
-      <DetailSection label="Starts">
-        <DateField
-          value={pack.startsOn}
-          onChange={(startsOn) => void updatePack(pack.id, { startsOn }).catch(saveFailed)}
-        />
-      </DetailSection>
-
-      <DetailSection label="Ends">
-        <DateField
-          value={pack.endsOn}
-          onChange={(endsOn) => void updatePack(pack.id, { endsOn }).catch(saveFailed)}
-        />
+      <DetailSection label="Schedule">
+        <FormGroup>
+          <View style={styles.dayPad}>
+            <DetailChipRow equal>
+              {SCHEDULE_DAYS.map((day) => (
+                <DetailChip
+                  key={day.id}
+                  label={day.short}
+                  selected={scheduleDays.includes(day.id)}
+                  accent={accent}
+                  onPress={() => toggleDay(day.id)}
+                />
+              ))}
+            </DetailChipRow>
+          </View>
+          <TimePillRow
+            label="Time"
+            value={scheduleHhmm}
+            onChange={(hhmm) => {
+              setScheduleHhmm(hhmm);
+              void updatePack(pack.id, {
+                scheduleTime: formatScheduleTimeDisplay(hhmm),
+                scheduleTimeInferred: false,
+              }).catch(saveFailed);
+            }}
+          />
+          <DatePillRow
+            label="Starts"
+            value={pack.startsOn}
+            onChange={(startsOn) =>
+              void updatePack(pack.id, { startsOn }).catch(saveFailed)
+            }
+          />
+          <DatePillRow
+            label="Ends"
+            value={pack.endsOn}
+            onChange={(endsOn) => void updatePack(pack.id, { endsOn }).catch(saveFailed)}
+            last
+          />
+        </FormGroup>
       </DetailSection>
 
       {members.length ? (
@@ -307,13 +319,6 @@ export default function ClassPackDetailScreen() {
         </DetailSection>
       ) : null}
 
-      <DetailPrimaryButton
-        label={saving ? 'Saving…' : 'Save details'}
-        onPress={onSave}
-        accent={accent}
-        disabled={!title.trim() || saving}
-      />
-
       {recent.length ? (
         <DetailSection label="Attendance" style={{ marginTop: spacing.md }}>
           <View style={[styles.logList, { backgroundColor: colors.surfaceSoft }]}>
@@ -330,7 +335,7 @@ export default function ClassPackDetailScreen() {
                   pressed && { opacity: 0.7 },
                 ]}
                 accessibilityRole="button"
-                accessibilityLabel={`Undo class on ${log.doneAt}`}
+                accessibilityLabel={`Undo session on ${log.doneAt}`}
               >
                 <Text style={[styles.logWhen, { color: colors.ink }]}>{log.doneAt}</Text>
                 <Text style={[styles.logMeta, { color: colors.mute }]}>Logged · tap to undo</Text>
@@ -340,29 +345,19 @@ export default function ClassPackDetailScreen() {
         </DetailSection>
       ) : (
         <Text style={[styles.emptyLogs, { color: colors.mute }]}>
-          No classes logged yet. Use Log today, or Talk: “went to {pack.title}.”
+          No sessions logged yet. Use Log session, or Talk: “went to {pack.title}.”
         </Text>
       )}
-
-      <DetailRemoveButton onPress={() => void onRemove()} />
     </ModuleScreen>
   );
 }
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    logToday: {
-      marginTop: spacing.sm,
-      alignSelf: 'flex-start',
-      borderRadius: radius.full,
-      borderWidth: 1.5,
-      paddingVertical: 11,
-      paddingHorizontal: 16,
-    },
-    logTodayText: {
-      fontFamily: fonts.sansSemi,
-      fontSize: 15,
-      letterSpacing: -0.2,
+    dayPad: {
+      paddingHorizontal: spacing.md,
+      paddingTop: spacing.md,
+      paddingBottom: spacing.sm,
     },
     logList: {
       borderRadius: radius.md,

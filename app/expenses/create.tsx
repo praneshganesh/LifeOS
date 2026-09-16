@@ -10,7 +10,8 @@ import {
   DetailField,
   DetailPrimaryButton,
   DetailSection,
-  DETAIL_DOCK_PAD,
+  DetailStickyActions,
+  DETAIL_STICKY_PAD,
 } from '@/components/ui/DetailKit';
 import { Text } from '@/components/ui/Text';
 import { DateField } from '@/components/ui/DateField';
@@ -127,7 +128,7 @@ export default function ExpenseFormScreen() {
   return (
     <Screen>
       <Stack.Screen options={{ title: editing ? 'Edit expense' : 'Add expense' }} />
-      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={DETAIL_DOCK_PAD}>
+      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={DETAIL_STICKY_PAD}>
         <DetailSection label="What for">
           <DetailField
             value={title}
@@ -180,13 +181,15 @@ export default function ExpenseFormScreen() {
           </DetailChipRow>
         </DetailSection>
 
+      </KeyboardFormScroll>
+      <DetailStickyActions>
         <DetailPrimaryButton
           label={saving ? 'Saving…' : editing ? 'Save changes' : 'Save expense'}
           accent={accent}
           disabled={!canSave || saving}
           onPress={() => void save()}
         />
-      </KeyboardFormScroll>
+      </DetailStickyActions>
     </Screen>
   );
 }

@@ -85,12 +85,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     void import('@/lib/cloud/sync').then((m) => m.scheduleCloudPush()).catch(() => undefined);
   }, []);
 
-  const setFamily = useCallback(
-    async (family: ThemeFamily) => {
-      await persist({ ...prefs, family });
-    },
-    [persist, prefs]
-  );
+  const setFamily = useCallback(async (_family: ThemeFamily) => {
+    // Ink is the only palette — ignore family changes.
+    await persist({ ...prefs, family: 'ink' });
+  }, [persist, prefs]);
 
   const setMode = useCallback(
     async (mode: ThemeMode) => {

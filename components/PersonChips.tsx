@@ -57,22 +57,25 @@ export function PersonChips({
 
   return (
     <>
-      <Text style={[styles.label, { color: colors.mute }]}>{label}</Text>
+      <Text style={[styles.label, { color: colors.ink }]}>{label}</Text>
       <View style={styles.chips}>
         <Pressable
           onPress={() => onChange(null)}
-          style={[
+          style={({ pressed }) => [
             styles.chip,
             {
-              backgroundColor: !personId ? colors.accentSoft : colors.surface,
-              borderColor: !personId ? colors.accent : colors.line,
+              backgroundColor: !personId ? colors.ink : colors.surface,
+              borderColor: !personId ? colors.ink : colors.lineStrong,
+              opacity: pressed ? 0.9 : 1,
             },
           ]}
+          accessibilityRole="button"
+          accessibilityState={{ selected: !personId }}
         >
           <Text
             style={[
               styles.chipText,
-              { color: !personId ? colors.accent : colors.ink },
+              { color: !personId ? colors.onInk : colors.ink },
             ]}
           >
             {noneLabel}
@@ -80,22 +83,29 @@ export function PersonChips({
         </Pressable>
         {members.map((m) => {
           const on = personId === m.id;
+          const title = self && m.id === self.id ? 'Me' : m.name;
           return (
             <Pressable
               key={m.id}
               onPress={() => onChange(m.id)}
-              style={[
+              style={({ pressed }) => [
                 styles.chip,
                 {
-                  backgroundColor: on ? colors.accentSoft : colors.surface,
-                  borderColor: on ? colors.accent : colors.line,
+                  backgroundColor: on ? colors.ink : colors.surface,
+                  borderColor: on ? colors.ink : colors.lineStrong,
+                  opacity: pressed ? 0.9 : 1,
                 },
               ]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: on }}
             >
               <Text
-                style={[styles.chipText, { color: on ? colors.accent : colors.ink }]}
+                style={[
+                  styles.chipText,
+                  { color: on ? colors.onInk : colors.ink },
+                ]}
               >
-                {m.id === self?.id ? 'Me' : m.name}
+                {title}
               </Text>
             </Pressable>
           );
@@ -103,47 +113,50 @@ export function PersonChips({
         {allowCreate && !adding ? (
           <Pressable
             onPress={() => setAdding(true)}
-            style={[
+            style={({ pressed }) => [
               styles.chip,
               styles.chipDashed,
-              { borderColor: colors.line, backgroundColor: colors.surface },
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.lineStrong,
+                opacity: pressed ? 0.9 : 1,
+              },
             ]}
           >
             <Text style={[styles.chipText, { color: colors.mute }]}>+ New</Text>
           </Pressable>
         ) : null}
       </View>
-      {allowCreate && adding ? (
+      {adding ? (
         <View style={styles.addRow}>
           <TextInput
             value={newName}
             onChangeText={setNewName}
-            placeholder="Name, e.g. Maya"
+            placeholder="Name"
             placeholderTextColor={colors.faint}
             autoFocus
-            autoCorrect={false}
-            autoCapitalize="words"
-            returnKeyType="done"
             onSubmitEditing={() => void createPerson()}
             style={[
               styles.addInput,
               {
                 color: colors.ink,
-                backgroundColor: colors.surface,
-                borderColor: colors.line,
+                backgroundColor: colors.surfaceSoft,
+                borderColor: colors.lineStrong,
               },
             ]}
           />
           <Pressable
             onPress={() => void createPerson()}
-            disabled={!newName.trim() || saving}
-            style={[
+            disabled={saving || !newName.trim()}
+            style={({ pressed }) => [
               styles.addBtn,
-              { backgroundColor: colors.accent },
-              (!newName.trim() || saving) && { opacity: 0.45 },
+              {
+                backgroundColor: colors.ink,
+                opacity: saving || !newName.trim() ? 0.45 : pressed ? 0.9 : 1,
+              },
             ]}
           >
-            <Text style={[styles.addBtnText, { color: colors.accentOn }]}>
+            <Text style={[styles.addBtnText, { color: colors.onInk }]}>
               {saving ? '…' : 'Add'}
             </Text>
           </Pressable>
@@ -164,10 +177,9 @@ export function PersonChips({
 
 const styles = StyleSheet.create({
   label: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 13,
-    letterSpacing: 0.3,
-    textTransform: 'uppercase',
+    fontFamily: fonts.sansSemi,
+    fontSize: 15,
+    letterSpacing: -0.2,
     marginBottom: spacing.sm,
     marginTop: spacing.md,
   },
@@ -178,18 +190,20 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1.5,
+    minHeight: 40,
+    justifyContent: 'center',
   },
   chipDashed: {
     borderStyle: 'dashed',
-    borderWidth: 1,
   },
   chipText: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
+    fontFamily: fonts.sansSemi,
+    fontSize: 15,
+    letterSpacing: -0.2,
   },
   addRow: {
     flexDirection: 'row',
@@ -202,7 +216,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sans,
     fontSize: 16,
     borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1.5,
     paddingHorizontal: spacing.md,
     paddingVertical: 10,
   },
@@ -210,6 +224,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: radius.md,
+    minHeight: 40,
+    justifyContent: 'center',
   },
   addBtnText: {
     fontFamily: fonts.sansSemi,

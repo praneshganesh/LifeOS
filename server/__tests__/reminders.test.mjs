@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   ensureReminderActions,
+  looksLikeReminder,
+  looksLikeReminderQuery,
   parseReminderFromUtterance,
   parseRecurringWeekdayReminder,
   remindAtFromUtterance,
@@ -94,5 +96,20 @@ describe('chat-api reminder repair', () => {
       []
     );
     assert.equal(next[0]?.label, 'PE uniform in the morning');
+  });
+
+  it('does not create a reminder for what-reminders questions', () => {
+    const q = 'What reminders do I have for Monday';
+    assert.equal(looksLikeReminderQuery(q), true);
+    assert.equal(looksLikeReminder(q), false);
+    const injected = ensureReminderActions([], q, [], new Date(2026, 8, 13));
+    assert.equal(injected.length, 0);
+    const stripped = ensureReminderActions(
+      [{ type: 'set_reminder', label: 'What reminders do I have for', remindAt: '2026-09-14' }],
+      q,
+      [],
+      new Date(2026, 8, 13)
+    );
+    assert.equal(stripped.length, 0);
   });
 });

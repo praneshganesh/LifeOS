@@ -94,7 +94,7 @@ Facts (critical):
 - passport / document expiry → expiryDate, else warrantyExpiry. Never invent.
 - "when did I last service/maintain X" → LastDone rows with matching itemId/itemName, or recentEvents on the item; if neither matches, say you don’t have a service log.
 - User says they serviced/maintained/descaled something → log_done { label, inventoryItemId?, doneAt? } (prefer inventory id from Inventory JSON).
-- reminder / "remind me" / "log a reminder" → set_reminder { label, remindAt, inventoryItemId?, remindInterval? }. remindAt YYYY-MM-DD ("next Tuesday" → that date). For "every Tuesday and Friday at 6:30am for 8 weeks" / "until December" set remindInterval { unit:"weekdays", weekdays:[2,5], hour:6, minute:30, value:1, endsAt? } (JS weekdays 0=Sun…6=Sat; endsAt YYYY-MM-DD optional — omit for indefinite). Not log_done.
+- reminder / "remind me" / "log a reminder" → set_reminder { label, remindAt, inventoryItemId?, remindInterval? }. remindAt YYYY-MM-DD ("next Tuesday" → that date). For "every Tuesday and Friday at 6:30am for 8 weeks" / "until December" set remindInterval { unit:"weekdays", weekdays:[2,5], hour:6, minute:30, value:1, endsAt? } (JS weekdays 0=Sun…6=Sat; endsAt YYYY-MM-DD optional — omit for indefinite). Not log_done. Questions like "what reminders do I have" / "show my reminders" → none only; answer from LastDone JSON. Never set_reminder for a question.
 
 Actions:
 - durable goods (laptop, machine, headphones, passport) → add_item (name, brand?, room?, category?, price?, purchasedFrom?, warrantyExpiry?, manualUrl?, assignedTo?, personId?). warrantyExpiry YYYY-MM-DD; year-only "until 2028" → 2028-12-31. Omit condition unless they said used/refurbished/etc — never invent Good. "I got a new X" is not a condition.
@@ -109,7 +109,7 @@ Actions:
 - attended a class ("I attended", "went to skating") → log_class { title?, id?, date?, assignedTo?, personId? } only if Classes JSON has a pack for that person (or one unassigned pack). If Classes JSON is empty, do not log_class. Never invent a pack from attendance. Never log another adult’s pack.
 - refine Thing (store/price/warranty/date/serial/name) → update_item { id, patch } (patch may include purchaseDate, warrantyExpiry, serial, purchasedFrom, price). If user gives price with a currency word → include that ISO code in the price string; bare numbers use Default currency. Sharafdg→Sharaf DG.
 - service/maintain/descale/filter change → log_done { label, inventoryItemId?, doneAt? }
-- reminder ("remind me next Tuesday", "every Tuesday and Friday at 6:30 AM", "log a reminder to renew passport") → set_reminder { label, remindAt, remindInterval?, inventoryItemId?, assignedTo?, personId? }. remindAt YYYY-MM-DD. Recurring weekdays use remindInterval.unit "weekdays". Do not refuse — Saavi stores this on Last Done.
+- reminder ("remind me next Tuesday", "every Tuesday and Friday at 6:30 AM", "log a reminder to renew passport") → set_reminder { label, remindAt, remindInterval?, inventoryItemId?, assignedTo?, personId? }. remindAt YYYY-MM-DD. Recurring weekdays use remindInterval.unit "weekdays". Do not refuse — Saavi stores this on Last Done. "What reminders do I have" / "show my reminders" → none; list from LastDone. Never create on a question.
 - delete a Last Done activity / reminder → remove_last_done { id } from LastDone JSON.
 - delete/sold a Thing → remove_item { id } (reply with count). "Did you delete?" → none only, do not remove again.
 - show/open a Thing → open_item { id } (use focus item id; never omit id)
@@ -210,10 +210,10 @@ function sanitizeReply(reply, actions) {
   if (types.includes('remove_subscription')) return 'Deleted that subscription.';
   if (types.includes('habit_check_in')) return 'Checked in.';
   if (types.includes('remove_habit')) return 'Deleted that habit.';
-  if (types.includes('add_class_pack')) return 'Added that class pack.';
-  if (types.includes('update_class_pack')) return 'Updated that class pack.';
-  if (types.includes('remove_class_pack')) return 'Deleted that class pack.';
-  if (types.includes('log_class')) return 'Logged that class.';
+  if (types.includes('add_class_pack')) return 'Added that class.';
+  if (types.includes('update_class_pack')) return 'Updated that class.';
+  if (types.includes('remove_class_pack')) return 'Deleted that class.';
+  if (types.includes('log_class')) return 'Logged that session.';
   if (types.includes('log_done')) return 'Logged that.';
   if (types.includes('set_reminder')) return 'Reminder set.';
   if (types.includes('remove_last_done')) return 'Deleted that activity.';
@@ -313,11 +313,11 @@ export function alignReplyWithActions(reply, actions) {
   if (pack) {
     const bits = [`Added ${pack.title}`];
     if (pack.assignedTo) bits.push(`for ${pack.assignedTo}`);
-    if (pack.total) bits.push(`${pack.total} classes`);
+    if (pack.total) bits.push(`${pack.total} sessions`);
     return `${bits.join(' — ')}.`;
   }
   const logged = list.find((a) => a?.type === 'log_class');
-  if (logged) return logged.title ? `Logged ${logged.title}.` : 'Logged that class.';
+  if (logged) return logged.title ? `Logged ${logged.title}.` : 'Logged that session.';
   const reminder = list.find((a) => a?.type === 'set_reminder' && a.label);
   if (reminder) {
     return reminder.remindAt
@@ -1193,8 +1193,8 @@ const server = createServer(async (req, res) => {
     ) {
       const title = classTitleFromUtterance(lastUserText);
       parsed.reply = title
-        ? `There's no ${title} pack yet. Enroll first, then I can log attendance.`
-        : `There's no class pack to log against yet.`;
+        ? `There's no ${title} class yet. Add it first, then I can log a session.`
+        : `There's no class to log a session against yet.`;
     }
 
     const cost = estimateCostUsd(data?.usage);

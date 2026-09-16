@@ -12,7 +12,8 @@ import {
   DetailField,
   DetailPrimaryButton,
   DetailSection,
-  DETAIL_DOCK_PAD,
+  DetailStickyActions,
+  DETAIL_STICKY_PAD,
 } from '@/components/ui/DetailKit';
 import { useHousehold } from '@/lib/HouseholdContext';
 import type { HouseholdRole } from '@/lib/household';
@@ -71,7 +72,7 @@ export default function NewFamilyMemberScreen() {
       <Stack.Screen options={{ title: 'Add person' }} />
       <KeyboardFormScroll
         contentContainerStyle={styles.content}
-        bottomExtra={DETAIL_DOCK_PAD}
+        bottomExtra={DETAIL_STICKY_PAD}
       >
         <DetailSection label="Name">
           <DetailField
@@ -108,13 +109,15 @@ export default function NewFamilyMemberScreen() {
           </DetailChipRow>
         </DetailSection>
 
+      </KeyboardFormScroll>
+      <DetailStickyActions>
         <DetailPrimaryButton
           label={saving ? 'Saving…' : 'Save'}
           accent={accent}
           disabled={!name.trim() || saving}
           onPress={() => void save()}
         />
-      </KeyboardFormScroll>
+      </DetailStickyActions>
     </Screen>
   );
 }

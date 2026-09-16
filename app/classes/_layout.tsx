@@ -17,7 +17,7 @@ export default function ClassesLayout() {
       }}
     >
       <Stack.Screen name="index" options={{ headerShown: false }} />
-      <Stack.Screen name="create" options={{ title: 'New class pack', headerBackTitle: 'Cancel' }} />
+      <Stack.Screen name="create" options={{ title: 'New class', headerBackTitle: 'Cancel' }} />
       <Stack.Screen name="[id]" options={{ headerShown: false }} />
     </Stack>
   );

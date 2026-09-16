@@ -270,7 +270,7 @@ export default function DataSettingsScreen() {
               {
                 color: colors.ink,
                 backgroundColor: colors.surface,
-                borderColor: colors.line,
+                borderColor: colors.lineStrong,
               },
             ]}
           >
@@ -291,8 +291,8 @@ export default function DataSettingsScreen() {
             styles.input,
             {
               color: colors.ink,
-              backgroundColor: colors.surface,
-              borderColor: colors.line,
+              backgroundColor: colors.surfaceSoft,
+              borderColor: colors.lineStrong,
             },
           ]}
         />
@@ -360,7 +360,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: spacing.md,
     borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1.5,
     overflow: 'hidden',
   },
   input: {
@@ -372,6 +372,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: 12,
     borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1.5,
   },
 });

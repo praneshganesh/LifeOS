@@ -37,7 +37,7 @@ export function openingLineForFocus(focus: TalkFocus): string {
     case 'subscription':
       return 'Opening that subscription.';
     case 'class':
-      return 'Opening that class pack.';
+      return 'Opening that class.';
     case 'lastDone':
       return 'Opening that activity.';
     default:

@@ -51,6 +51,7 @@ import {
 } from '@/lib/chat/focus';
 import {
   looksLikeReminder,
+  looksLikeReminderQuery,
   normalizeWarrantyExpiry,
   remindAtFromUtterance,
   parseReminderFromUtterance,
@@ -1159,6 +1160,10 @@ export async function applyChatActions(
       continue;
     }
     if (action.type === 'set_reminder' && action.label?.trim() && options?.lastDone?.setReminder) {
+      if (looksLikeReminderQuery(lastUserText)) {
+        console.log('[LifeOS chat] skip set_reminder — query, not create', action.label);
+        continue;
+      }
       const recurring =
         action.remindInterval?.unit === 'weekdays'
           ? {
@@ -2042,6 +2047,9 @@ function ensureTalkActions(
       title: classTitleFromUtterance(lastUserText),
     });
   }
+  if (looksLikeReminderQuery(lastUserText)) {
+    return list.length ? list.filter((a) => a.type !== 'set_reminder') : actions;
+  }
   if (looksLikeReminder(lastUserText) && !types.has('set_reminder')) {
     const recurring = parseRecurringWeekdayReminder(lastUserText);
     const remindAt = remindAtFromUtterance(lastUserText);
@@ -2067,7 +2075,7 @@ function sanitizeReply(reply: string, actions: ChatAction[]) {
   if (types.includes('open_expense')) return 'Opening that expense.';
   if (types.includes('open_habit')) return 'Opening that habit.';
   if (types.includes('open_subscription')) return 'Opening that subscription.';
-  if (types.includes('open_class')) return 'Opening that class pack.';
+  if (types.includes('open_class')) return 'Opening that class.';
   if (types.includes('open_last_done')) return 'Opening that activity.';
   if (types.includes('open_item')) return 'Opening that item.';
   if (types.includes('add_item')) return 'Added to your inventory.';
@@ -2079,10 +2087,10 @@ function sanitizeReply(reply: string, actions: ChatAction[]) {
   if (types.includes('remove_subscription')) return 'Removed that subscription.';
   if (types.includes('habit_check_in')) return 'Got it.';
   if (types.includes('remove_habit')) return 'Removed that habit.';
-  if (types.includes('add_class_pack')) return 'Added that class pack.';
-  if (types.includes('log_class')) return 'Logged that class.';
-  if (types.includes('remove_class_pack')) return 'Removed that class pack.';
-  if (types.includes('update_class_pack')) return 'Updated that class pack.';
+  if (types.includes('add_class_pack')) return 'Added that class.';
+  if (types.includes('log_class')) return 'Logged that session.';
+  if (types.includes('remove_class_pack')) return 'Removed that class.';
+  if (types.includes('update_class_pack')) return 'Updated that class.';
   if (types.includes('update_item')) return 'Updated.';
   if (types.includes('log_done')) return 'Marked that as done.';
   if (types.includes('set_reminder')) return 'Reminder set.';

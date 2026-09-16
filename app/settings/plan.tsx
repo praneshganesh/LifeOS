@@ -130,14 +130,14 @@ export default function PlanSettingsScreen() {
                 styles.plan,
                 {
                   backgroundColor: colors.surface,
-                  borderColor: current ? colors.accent : colors.line,
-                  borderWidth: current ? 1.5 : StyleSheet.hairlineWidth,
+                  borderColor: current ? colors.ink : colors.lineStrong,
+                  borderWidth: 1.5,
                 },
               ]}
             >
               <View style={styles.planTop}>
                 <Text variant="headline">{p.name}</Text>
-                <Text style={[styles.price, { color: colors.accent }]}>
+                <Text style={[styles.price, { color: colors.ink }]}>
                   {p.price}
                 </Text>
               </View>
@@ -147,7 +147,7 @@ export default function PlanSettingsScreen() {
                 </Text>
               ))}
               {current ? (
-                <Text style={[styles.current, { color: colors.accent }]}>
+                <Text style={[styles.current, { color: colors.ink }]}>
                   Current
                 </Text>
               ) : (
@@ -180,10 +180,17 @@ export default function PlanSettingsScreen() {
             subtitle={
               billingReady
                 ? 'Re-link an existing App Store subscription'
-                : 'Needs native iOS build + RevenueCat key'
+                : 'Available on TestFlight / App Store builds'
             }
             onPress={() => {
               void (async () => {
+                if (!billingReady) {
+                  Alert.alert(
+                    'Restore',
+                    'App Store restore needs a TestFlight or App Store build with billing connected.'
+                  );
+                  return;
+                }
                 const result = await restore();
                 if (result.ok) {
                   await refresh();
@@ -198,10 +205,10 @@ export default function PlanSettingsScreen() {
             title="App Store billing"
             subtitle={
               billingReady
-                ? 'RevenueCat connected'
-                : 'Add EXPO_PUBLIC_REVENUECAT_IOS_KEY and use a native build'
+                ? 'Apple subscriptions via RevenueCat'
+                : 'Not connected on this build'
             }
-            meta={billingReady ? 'On' : '—'}
+            meta={billingReady ? 'On' : 'Off'}
             last
           />
         </ListCard>
@@ -289,7 +296,7 @@ function MeterRow({
 
 const styles = StyleSheet.create({
   plan: {
-    borderRadius: radius.lg,
+    borderRadius: radius.md,
     padding: spacing.lg,
     marginBottom: spacing.md,
   },

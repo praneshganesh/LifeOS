@@ -226,7 +226,7 @@ export function buildAttentionItems(
           const title = isToday
             ? `${who}${pack.title} class today${pack.scheduleTime ? ` at ${pack.scheduleTime}` : ''}`
             : `${who}${pack.title} class tomorrow${pack.scheduleTime ? ` at ${pack.scheduleTime}` : ''}`;
-          const subtitle = `${remaining != null ? `${remaining} left · ` : ''}Every ${occ.dayName}${pack.scheduleTime ? ` · ${pack.scheduleTime}` : ''}`;
+          const subtitle = `${remaining != null ? `${remaining} session${remaining === 1 ? '' : 's'} left · ` : ''}Every ${occ.dayName}${pack.scheduleTime ? ` · ${pack.scheduleTime}` : ''}`;
           out.push({
             id: `cls-sched-${pack.id}-${occ.date}`,
             title,
@@ -241,14 +241,14 @@ export function buildAttentionItems(
       }
     }
 
-    // 2. Class pack window expiration or ending-soon notices
+    // 2. Class window expiration or ending-soon notices
     if (status === 'active') continue;
     if (status === 'expired') {
       out.push({
         id: `cls-${pack.id}`,
         title: remaining == null
-          ? `${pack.title} pack ended`
-          : `${pack.title} pack ended with ${remaining} left`,
+          ? `${pack.title} ended`
+          : `${pack.title} ended with ${remaining} session${remaining === 1 ? '' : 's'} left`,
         subtitle: who + (remaining == null ? 'window ended' : `${remaining} of ${pack.total} unused`),
         urgency: 'urgent',
         category: 'Classes',
@@ -261,7 +261,7 @@ export function buildAttentionItems(
     if (status === 'ending-soon') {
       out.push({
         id: `cls-${pack.id}`,
-        title: `${pack.title} — ${remaining == null ? 'pack' : `${remaining} classes left`}`,
+        title: `${pack.title} — ${remaining == null ? 'ending soon' : `${remaining} session${remaining === 1 ? '' : 's'} left`}`,
         subtitle: who + `window ends in ${daysLeft} days`,
         urgency: daysLeft <= 7 ? 'urgent' : 'soon',
         category: 'Classes',

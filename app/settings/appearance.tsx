@@ -3,23 +3,16 @@ import { DETAIL_DOCK_PAD } from '@/components/ui/DetailKit';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { Text } from '@/components/ui/Text';
 import { useTheme } from '@/lib/ThemeContext';
-import {
-  PALETTES,
-  THEME_FAMILIES,
-  fonts,
-  radius,
-  spacing,
-  type ThemeMode,
-} from '@/constants/theme';
+import { fonts, radius, type ThemeMode } from '@/constants/theme';
 
-const MODES: { id: ThemeMode; title: string }[] = [
-  { id: 'light', title: 'Light' },
-  { id: 'dark', title: 'Dark' },
-  { id: 'system', title: 'System' },
+const MODES: { id: ThemeMode; title: string; hint: string }[] = [
+  { id: 'light', title: 'Light', hint: 'White cards on light gray' },
+  { id: 'dark', title: 'Dark', hint: 'Charcoal studio' },
+  { id: 'system', title: 'System', hint: 'Match device setting' },
 ];
 
 export default function AppearanceSettingsScreen() {
-  const { family, mode, colors, setFamily, setMode, resolved } = useTheme();
+  const { mode, colors, setMode } = useTheme();
 
   return (
     <ModuleScreen
@@ -28,91 +21,34 @@ export default function AppearanceSettingsScreen() {
       backFallbackHref="/settings"
       bottomExtra={DETAIL_DOCK_PAD}
     >
-      <ModuleSection label="Palette">
-        <View style={styles.grid}>
-          {THEME_FAMILIES.map((t) => {
-            const on = family === t.id;
-            const p = PALETTES[t.id][resolved];
+      <ModuleSection label="Brightness">
+        <View style={styles.list}>
+          {MODES.map((m) => {
+            const on = mode === m.id;
             return (
               <Pressable
-                key={t.id}
-                onPress={() => void setFamily(t.id)}
+                key={m.id}
+                onPress={() => void setMode(m.id)}
                 style={[
-                  styles.previewWrap,
+                  styles.row,
                   {
-                    backgroundColor: colors.surface,
-                    borderColor: on ? colors.accent : colors.line,
-                    borderWidth: on ? 2 : StyleSheet.hairlineWidth,
+                    backgroundColor: on ? colors.accentSoft : colors.surface,
+                    borderColor: on ? colors.ink : colors.lineStrong,
                   },
                 ]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: on }}
               >
-                {/* Mini mockup: background → card → primary / secondary CTA */}
-                <View style={[styles.preview, { backgroundColor: p.bg }]}>
-                  <View
-                    style={[
-                      styles.previewCard,
-                      { backgroundColor: p.surface, borderColor: p.line },
-                    ]}
-                  >
-                    <View
-                      style={[styles.previewBar, { backgroundColor: p.ink, width: '64%' }]}
-                    />
-                    <View
-                      style={[styles.previewBar, { backgroundColor: p.faint, width: '42%' }]}
-                    />
-                  </View>
-                  <View style={styles.previewPills}>
-                    <View
-                      style={[styles.previewPill, { backgroundColor: p.accent, width: 36 }]}
-                    />
-                    <View
-                      style={[styles.previewPill, { backgroundColor: p.accentSoft, width: 24 }]}
-                    />
-                  </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={[styles.rowTitle, { color: colors.ink }]}>{m.title}</Text>
+                  <Text style={[styles.rowHint, { color: colors.mute }]}>{m.hint}</Text>
                 </View>
-                <View style={styles.previewMeta}>
-                  <View style={styles.previewTitleRow}>
-                    <Text variant="headline" style={{ fontSize: 16 }}>
-                      {t.title}
-                    </Text>
-                    {on ? (
-                      <View style={[styles.activeDot, { backgroundColor: colors.accent }]} />
-                    ) : null}
-                  </View>
-                  <Text variant="caption" numberOfLines={1}>
-                    {t.hint}
-                  </Text>
-                </View>
+                {on ? (
+                  <View style={[styles.activeDot, { backgroundColor: colors.ink }]} />
+                ) : null}
               </Pressable>
             );
           })}
-        </View>
-      </ModuleSection>
-
-      <ModuleSection label="Brightness">
-        <View style={styles.chips}>
-          {MODES.map((m) => (
-            <Pressable
-              key={m.id}
-              onPress={() => void setMode(m.id)}
-              style={[
-                styles.chip,
-                {
-                  backgroundColor: mode === m.id ? colors.accent : colors.surface,
-                  borderColor: mode === m.id ? colors.accent : colors.line,
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.chipText,
-                  { color: mode === m.id ? colors.accentOn : colors.slate },
-                ]}
-              >
-                {m.title}
-              </Text>
-            </Pressable>
-          ))}
         </View>
       </ModuleSection>
     </ModuleScreen>
@@ -120,63 +56,33 @@ export default function AppearanceSettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
+  list: {
+    gap: 8,
   },
-  previewWrap: {
-    flexBasis: '47%',
-    flexGrow: 1,
-    borderRadius: radius.md,
-    overflow: 'hidden',
-  },
-  preview: {
-    padding: 10,
-    paddingBottom: 12,
-  },
-  previewCard: {
-    borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 8,
-    gap: 5,
-  },
-  previewBar: {
-    height: 5,
-    borderRadius: 3,
-  },
-  previewPills: {
-    flexDirection: 'row',
-    gap: 5,
-    marginTop: 8,
-  },
-  previewPill: {
-    height: 14,
-    borderRadius: radius.full,
-  },
-  previewMeta: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: 10,
-  },
-  previewTitleRow: {
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 12,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    minHeight: 56,
+  },
+  rowTitle: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 16,
+    letterSpacing: -0.2,
+  },
+  rowHint: {
+    fontFamily: fonts.sans,
+    fontSize: 13,
+    letterSpacing: -0.1,
+    marginTop: 2,
   },
   activeDot: {
-    width: 7,
-    height: 7,
+    width: 8,
+    height: 8,
     borderRadius: 4,
-  },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: radius.full,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  chipText: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
   },
 });

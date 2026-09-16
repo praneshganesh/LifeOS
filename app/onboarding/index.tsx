@@ -104,7 +104,7 @@ function makeStyles(colors: ThemeColors) {
   },
   cta: {
     height: 52,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     backgroundColor: colors.forest,
     alignItems: 'center',
     justifyContent: 'center',

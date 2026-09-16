@@ -33,8 +33,8 @@ import {
   DetailFact,
   DetailFacts,
   DetailHero,
-  DetailRemoveButton,
   DetailSection,
+  DetailTrashButton,
 } from '@/components/ui/DetailKit';
 import { useInventory } from '@/lib/InventoryContext';
 import { useLastDone } from '@/lib/LastDoneContext';
@@ -305,13 +305,16 @@ export default function AssetDetailScreen() {
             <ChevronLeft size={22} color={colors.ink} strokeWidth={2.2} />
           </Pressable>
           {isUserItem ? (
-            <DetailEditButton
-              accent={accent}
-              onPress={() => {
-                blurActiveElement();
-                router.push(editHref);
-              }}
-            />
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <DetailTrashButton onPress={() => void onDelete()} />
+              <DetailEditButton
+                accent={accent}
+                onPress={() => {
+                  blurActiveElement();
+                  router.push(editHref);
+                }}
+              />
+            </View>
           ) : null}
         </View>
       ) : null}
@@ -367,13 +370,16 @@ export default function AssetDetailScreen() {
                 <Text style={styles.backLabel}>Back</Text>
               </Pressable>
               {isUserItem ? (
-                <DetailEditButton
-                  accent={accent}
-                  onPress={() => {
-                    blurActiveElement();
-                    router.push(editHref);
-                  }}
-                />
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <DetailTrashButton onPress={() => void onDelete()} />
+                  <DetailEditButton
+                    accent={accent}
+                    onPress={() => {
+                      blurActiveElement();
+                      router.push(editHref);
+                    }}
+                  />
+                </View>
               ) : null}
             </View>
           ) : null}
@@ -554,10 +560,6 @@ export default function AssetDetailScreen() {
                 ))}
               </DetailSection>
             ) : null}
-
-            {isUserItem ? (
-              <DetailRemoveButton onPress={() => void onDelete()} />
-            ) : null}
           </Animated.View>
         </View>
       </ScrollView>
@@ -638,7 +640,7 @@ function makeStyles(colors: ThemeColors) {
     gap: 2,
     paddingVertical: 6,
     paddingHorizontal: 6,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
   },
   backBtnPressed: {
     opacity: 0.65,
@@ -759,7 +761,7 @@ function makeStyles(colors: ThemeColors) {
   privacyBanner: {
     marginBottom: spacing.md,
     padding: spacing.md,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     backgroundColor: colors.forestWash,
   },
   privacyText: {

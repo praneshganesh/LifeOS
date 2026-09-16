@@ -15,7 +15,7 @@ import {
   formatRemindDate,
   formatRemindStatus,
   getLastDoneAt,
-  hasActivityHistory,
+  shouldShowActivityHeatmap,
   toDateInputValue,
   yearsWithLogs,
   type LastDoneItem,
@@ -279,7 +279,7 @@ export function LastDoneActivityCard({
 }) {
   const { colors } = useTheme();
   const category = paintLastDoneCategory(categorizeLastDone(item.label).id, colors);
-  const showHeatmap = !compact && hasActivityHistory(item);
+  const showHeatmap = !compact && shouldShowActivityHeatmap(item);
   const last = item.logs?.length
     ? formatRelativeDone(getLastDoneAt(item))
     : item.remindAt
@@ -418,7 +418,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   reminderPanel: {
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
     gap: 2,
@@ -443,10 +443,10 @@ const styles = StyleSheet.create({
     height: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: radius.full,
+    borderRadius: radius.md,
   },
   yearNavBtnOff: {
-    opacity: 0.35,
+    opacity: 0.45,
   },
   yearNavLabel: {
     fontFamily: fonts.sansMedium,

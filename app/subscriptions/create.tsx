@@ -14,7 +14,8 @@ import {
   DetailField,
   DetailPrimaryButton,
   DetailSection,
-  DETAIL_DOCK_PAD,
+  DetailStickyActions,
+  DETAIL_STICKY_PAD,
 } from '@/components/ui/DetailKit';
 import { Text } from '@/components/ui/Text';
 import { DateField } from '@/components/ui/DateField';
@@ -150,7 +151,7 @@ export default function SubscriptionFormScreen() {
       <Stack.Screen
         options={{ title: editing ? 'Edit subscription' : 'Add subscription' }}
       />
-      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={DETAIL_DOCK_PAD}>
+      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={DETAIL_STICKY_PAD}>
         <DetailSection label="Name">
           <DetailField
             value={title}
@@ -237,6 +238,8 @@ export default function SubscriptionFormScreen() {
           </DetailChipRow>
         </DetailSection>
 
+      </KeyboardFormScroll>
+      <DetailStickyActions>
         <DetailPrimaryButton
           label={
             saving ? 'Saving…' : editing ? 'Save changes' : 'Save subscription'
@@ -245,7 +248,7 @@ export default function SubscriptionFormScreen() {
           disabled={!canSave || saving}
           onPress={() => void save()}
         />
-      </KeyboardFormScroll>
+      </DetailStickyActions>
     </Screen>
   );
 }

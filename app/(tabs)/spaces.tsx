@@ -205,8 +205,8 @@ export default function SpacesScreen() {
             href: '/habits/create' as Href,
           },
           {
-            title: 'Class pack',
-            subtitle: 'Sessions in a window',
+            title: 'Class',
+            subtitle: 'Track sessions',
             icon: 'today' as Icon3DName,
             href: '/classes/create' as Href,
           },

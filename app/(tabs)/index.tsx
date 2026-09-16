@@ -110,11 +110,13 @@ export default function HomeDashboard() {
 
   const hello = first ? `${greetingForNow()}, ${first}` : greetingForNow();
   const featured = dash.featured;
+  const restOverdue = dash.overdueRows.filter((row) => row.id !== featured?.id);
   const restToday = dash.today.filter((row) => row.id !== featured?.id);
   const restNext = dash.next.filter((row) => row.id !== featured?.id);
   const doneToday = dash.doneToday.filter((row) => row.id !== featured?.id);
   const clear =
     !featured &&
+    restOverdue.length === 0 &&
     restToday.length === 0 &&
     restNext.length === 0 &&
     doneToday.length === 0;
@@ -259,6 +261,20 @@ export default function HomeDashboard() {
           </View>
         ) : null}
 
+        {restOverdue.length ? (
+          <Section title="Overdue" meta={`${restOverdue.length}`}>
+            {restOverdue.map((row) => (
+              <RowCard
+                key={row.id}
+                row={row}
+                busy={busyId === row.habitId || busyId === row.lastDoneId}
+                onOpen={() => open(row.href)}
+                onCheck={checkFor(row)}
+              />
+            ))}
+          </Section>
+        ) : null}
+
         {restToday.length ? (
           <Section title="Today">
             {restToday.map((row) => (
@@ -337,8 +353,14 @@ export default function HomeDashboard() {
             <Tile
               Icon={CalendarDays}
               label="Classes"
-              value={classesLeft ? String(classesLeft) : '—'}
-              hint={classesLeft ? 'sessions left' : 'add a pack'}
+              value={classPacks.length ? String(classPacks.length) : '—'}
+              hint={
+                !classPacks.length
+                  ? 'add a class'
+                  : classesLeft
+                    ? `${classesLeft} sessions left`
+                    : 'none left'
+              }
               accent={isNearGray(colors.sky) ? '#5E7A8C' : colors.sky}
               dots={{
                 bg: hubCardBg(colors.sky, resolved === 'light', '#5E7A8C'),
@@ -353,7 +375,7 @@ export default function HomeDashboard() {
               Icon={Package}
               label="Things"
               value={items.length ? String(items.length) : '—'}
-              hint={items.length ? 'things saved' : 'browse'}
+              hint={items.length ? 'saved' : 'browse'}
               accent={isNearGray(colors.violet) ? '#7A6E8E' : colors.violet}
               dots={{
                 bg: hubCardBg(colors.violet, resolved === 'light', '#7A6E8E'),
@@ -485,7 +507,11 @@ function Tile({
   dots: DotTone;
   onPress: () => void;
 }) {
-  const { colors } = useTheme();
+  const { colors, resolved } = useTheme();
+  const onTintedDark = resolved === 'dark';
+  const labelColor = onTintedDark ? '#FFFFFF' : colors.ink;
+  const valueColor = onTintedDark ? '#FFFFFF' : colors.ink;
+  const hintColor = onTintedDark ? 'rgba(255,255,255,0.62)' : colors.mute;
   return (
     <Pressable
       onPress={onPress}
@@ -498,15 +524,19 @@ function Tile({
     >
       <DotField tone={dots} />
       <View style={styles.tileFill}>
-        <View style={[styles.tileIcon, { backgroundColor: colors.surfaceSoft }]}>
-          <Icon size={18} color={accent} strokeWidth={2.1} />
+        <View style={styles.tileHead}>
+          <View style={[styles.tileIcon, { backgroundColor: colors.surfaceSoft }]}>
+            <Icon size={18} color={accent} strokeWidth={2.1} />
+          </View>
+          <Text style={[styles.tileLabel, { color: labelColor }]} numberOfLines={1}>
+            {label}
+          </Text>
         </View>
         <View>
-          <Text style={[styles.tileLabel, { color: colors.mute }]}>{label}</Text>
-          <Text style={[styles.tileValue, { color: colors.ink }]} numberOfLines={1}>
+          <Text style={[styles.tileValue, { color: valueColor }]} numberOfLines={1}>
             {value}
           </Text>
-          <Text style={[styles.tileHint, { color: colors.faint }]} numberOfLines={1}>
+          <Text style={[styles.tileHint, { color: hintColor }]} numberOfLines={1}>
             {hint}
           </Text>
         </View>
@@ -600,10 +630,12 @@ const styles = StyleSheet.create({
   clearBtn: {
     paddingHorizontal: 22,
     paddingVertical: 10,
-    borderRadius: radius.full,
+    borderRadius: radius.md,
+    minHeight: 40,
+    justifyContent: 'center',
   },
   clearBtnGhost: {
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1.5,
   },
   clearBtnText: {
     fontFamily: fonts.sansSemi,
@@ -678,6 +710,11 @@ const styles = StyleSheet.create({
     minHeight: 136,
     justifyContent: 'space-between',
   },
+  tileHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
   tileIcon: {
     width: 34,
     height: 34,
@@ -686,11 +723,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   tileLabel: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 13,
-    lineHeight: 16,
-    letterSpacing: -0.08,
-    marginBottom: 4,
+    flex: 1,
+    fontFamily: fonts.sansSemi,
+    fontSize: 17,
+    lineHeight: 22,
+    letterSpacing: -0.3,
   },
   tileValue: {
     fontFamily: fonts.sansSemi,

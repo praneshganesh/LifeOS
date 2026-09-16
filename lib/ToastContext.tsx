@@ -16,7 +16,7 @@ import { useTheme } from '@/lib/ThemeContext';
 type ToastTone = 'success' | 'error';
 
 type ToastContextValue = {
-  /** Brief confirmation pill ("Saved", "Class pack added"). Auto-dismisses. */
+  /** Brief confirmation pill ("Saved", "Class added"). Auto-dismisses. */
   showToast: (message: string, tone?: ToastTone) => void;
   /** Error pill — longer visible, coral background. */
   showError: (message: string) => void;

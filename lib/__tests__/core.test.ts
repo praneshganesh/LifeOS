@@ -482,44 +482,42 @@ describe('crossSearch', () => {
 });
 
 describe('theme palettes', () => {
-  it('resolves system dark to earth dark (legacy hearth)', () => {
-    assert.equal(paletteFor('system', true).bg, paletteFor('hearth').bg);
-    assert.equal(paletteFor('system', false).bg, paletteFor('linen').bg);
+  it('resolves system to ink light/dark', () => {
+    assert.equal(paletteFor('system', true).bg, paletteFor('ink', true, 'dark').bg);
+    assert.equal(paletteFor('system', false).bg, paletteFor('ink', false, 'light').bg);
   });
 
-  it('keeps ocean and clay distinct from earth sage', () => {
-    assert.notEqual(paletteFor('ocean').accent, paletteFor('earth').accent);
-    assert.notEqual(paletteFor('clay').accent, paletteFor('earth').accent);
-    assert.notEqual(paletteFor('ink').accent, paletteFor('earth').accent);
+  it('locks every family resolve to ink', () => {
+    assert.equal(paletteFor('earth', false, 'dark').bg, paletteFor('ink', false, 'dark').bg);
+    assert.equal(paletteFor('ocean', false, 'light').bg, paletteFor('ink', false, 'light').bg);
+    assert.equal(paletteFor('clay', false, 'dark').ink, '#FAFAFA');
     assert.equal(paletteFor('ink', false, 'dark').ink, '#FAFAFA');
   });
 
   it('gives readable ink on surface and accentOn on accent', () => {
-    for (const family of ['earth', 'ocean', 'clay', 'ink'] as const) {
-      for (const mode of ['light', 'dark'] as const) {
-        const p = PALETTES[family][mode];
-        assert.ok(
-          contrastRatio(p.ink, p.surface) >= 4.5,
-          `${family} ${mode} ink/surface ${contrastRatio(p.ink, p.surface).toFixed(2)}`
-        );
-        assert.ok(
-          contrastRatio(p.accentOn, p.accent) >= 4.5,
-          `${family} ${mode} accentOn/accent ${contrastRatio(p.accentOn, p.accent).toFixed(2)}`
-        );
-      }
+    for (const mode of ['light', 'dark'] as const) {
+      const p = PALETTES.ink[mode];
+      assert.ok(
+        contrastRatio(p.ink, p.surface) >= 4.5,
+        `ink ${mode} ink/surface ${contrastRatio(p.ink, p.surface).toFixed(2)}`
+      );
+      assert.ok(
+        contrastRatio(p.accentOn, p.accent) >= 4.5,
+        `ink ${mode} accentOn/accent ${contrastRatio(p.accentOn, p.accent).toFixed(2)}`
+      );
     }
   });
 
-  it('promotes the old Earth default to Ink once', () => {
-    const fromDefault = migrateAppearancePrefs({ family: 'earth', mode: 'light' });
-    assert.equal(fromDefault.family, 'ink');
-    assert.equal(fromDefault.mode, 'dark');
-    const fromDark = migrateAppearancePrefs({ family: 'earth', mode: 'dark' });
-    assert.equal(fromDark.family, 'ink');
-    assert.equal(fromDark.mode, 'dark');
-    const kept = migrateAppearancePrefs({ family: 'earth', mode: 'light', rev: 2 });
-    assert.equal(kept.family, 'earth');
-    assert.equal(kept.mode, 'light');
+  it('forces every stored palette to Ink', () => {
+    const fromEarth = migrateAppearancePrefs({ family: 'earth', mode: 'light' });
+    assert.equal(fromEarth.family, 'ink');
+    assert.equal(fromEarth.mode, 'light');
+    const fromOcean = migrateAppearancePrefs({ family: 'ocean', mode: 'dark', rev: 2 });
+    assert.equal(fromOcean.family, 'ink');
+    assert.equal(fromOcean.mode, 'dark');
+    const keptMode = migrateAppearancePrefs({ family: 'clay', mode: 'system', rev: 99 });
+    assert.equal(keptMode.family, 'ink');
+    assert.equal(keptMode.mode, 'system');
   });
 });
 

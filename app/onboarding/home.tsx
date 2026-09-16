@@ -54,7 +54,7 @@ export default function OnboardingHome() {
         onPress={Keyboard.dismiss}
         accessible={false}
       >
-        <Text style={styles.step}>Step 1 of 5</Text>
+        <Text style={styles.step}>Step 1 of 6</Text>
         <Text style={styles.title}>What do you call home?</Text>
         <Text style={styles.lead}>
           Spaces hold rooms and Things. You can rename this anytime in Settings.
@@ -132,9 +132,9 @@ function makeStyles(colors: ThemeColors) {
     fontSize: 17,
     color: colors.ink,
     backgroundColor: colors.white,
-    borderRadius: radius.sm,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    borderColor: colors.lineStrong,
     paddingHorizontal: spacing.md,
     paddingVertical: 14,
   },
@@ -145,7 +145,7 @@ function makeStyles(colors: ThemeColors) {
   },
   cta: {
     height: 52,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     backgroundColor: colors.forest,
     alignItems: 'center',
     justifyContent: 'center',

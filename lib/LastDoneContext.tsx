@@ -72,6 +72,8 @@ type LastDoneContextValue = {
       notes?: string | null;
       remindAt?: string | null;
       remindInterval?: RemindInterval | null;
+      alertMode?: 'auto' | 'custom' | null;
+      userAlerts?: import('@/lib/reminderAlerts').UserAlertSpec[] | null;
     }
   ) => Promise<LastDoneItem>;
   /** Delete the whole activity (all logs). */
@@ -391,6 +393,8 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
         notes?: string | null;
         remindAt?: string | null;
         remindInterval?: RemindInterval | null;
+        alertMode?: 'auto' | 'custom' | null;
+        userAlerts?: import('@/lib/reminderAlerts').UserAlertSpec[] | null;
       }
     ) => {
       const list = itemsRef.current;
@@ -429,6 +433,36 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
           updated = {
             ...updated,
             ...resolveRemindAt(anchor, { remindInterval: patch.remindInterval }),
+          };
+        }
+      }
+      if (patch.alertMode !== undefined) {
+        if (patch.alertMode === null || patch.alertMode === 'auto') {
+          updated = {
+            ...updated,
+            alertMode: 'auto',
+            userAlerts: undefined,
+          };
+        } else {
+          updated = { ...updated, alertMode: 'custom' };
+        }
+      }
+      if (patch.userAlerts !== undefined) {
+        if (patch.userAlerts === null || patch.userAlerts.length === 0) {
+          updated = {
+            ...updated,
+            userAlerts: undefined,
+            // Empty custom list must not kick back to automatic.
+            alertMode:
+              patch.alertMode === 'custom' || updated.alertMode === 'custom'
+                ? 'custom'
+                : updated.alertMode,
+          };
+        } else {
+          updated = {
+            ...updated,
+            alertMode: 'custom',
+            userAlerts: patch.userAlerts.slice(0, 2),
           };
         }
       }

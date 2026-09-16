@@ -33,7 +33,9 @@ export type DashboardModel = {
   habitsOpen: number;
   /** Habits already checked in today — so a productive day shows, not vanishes. */
   habitsDone: number;
-  /** Open habits + attention due today — one list for the Today section. */
+  /** Past-due attention items — own section, not under Today. */
+  overdueRows: DashRow[];
+  /** Open habits + attention due today only. */
   today: DashRow[];
   next: DashRow[];
   /** Habits / activities already completed today. */
@@ -89,8 +91,12 @@ export function buildDashboard(input: {
   const overdue = attention.filter((a) => (a.daysLeft ?? 0) < 0).length;
   const dueToday = attention.filter((a) => a.daysLeft === 0).length;
 
-  const todayAtt: DashRow[] = attention
-    .filter((a) => a.daysLeft != null && a.daysLeft <= 0)
+  const overdueAtt: DashRow[] = attention
+    .filter((a) => a.daysLeft != null && a.daysLeft < 0)
+    .map(fromAttention);
+
+  const dueTodayAtt: DashRow[] = attention
+    .filter((a) => a.daysLeft === 0)
     .map(fromAttention);
 
   const nextAtt: DashRow[] = attention
@@ -142,16 +148,21 @@ export function buildDashboard(input: {
       icon: 'tools' as Icon3DName,
     }));
 
-  // Habits first (daily rhythm), then attention due today.
-  const today = dedupeRows([...openHabitDash, ...todayAtt]).slice(0, 12);
+  // Habits first (daily rhythm), then attention due today — not overdue.
+  const overdueRows = dedupeRows(overdueAtt).slice(0, 12);
+  const today = dedupeRows([...openHabitDash, ...dueTodayAtt]).slice(0, 12);
   const next = dedupeRows(nextAtt)
-    .filter((row) => !today.some((t) => t.id === row.id))
+    .filter(
+      (row) =>
+        !today.some((t) => t.id === row.id) &&
+        !overdueRows.some((o) => o.id === row.id)
+    )
     .slice(0, 8);
   const doneToday = dedupeRows([...doneHabitDash, ...activityDoneDash]).slice(
     0,
     12
   );
-  const featured = today[0] ?? next[0] ?? null;
+  const featured = today[0] ?? overdueRows[0] ?? next[0] ?? null;
 
   // Legacy shape for older tests / callers.
   const checklist: ChecklistRow[] = [
@@ -189,6 +200,7 @@ export function buildDashboard(input: {
     dueToday,
     habitsOpen: openHabitDash.length,
     habitsDone: doneHabitDash.length,
+    overdueRows,
     today,
     next,
     doneToday,
