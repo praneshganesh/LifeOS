@@ -17,8 +17,6 @@ import { DotField, hubCardBg, isNearGray, type DotTone } from '@/components/ui/D
 import { HomeHeader } from '@/components/HomeHeader';
 import { greetingForNow } from '@/data/mock';
 import { buildDashboard, formatDashDate, givenName, type DashRow } from '@/lib/dashboard';
-import { openAttentionQueue } from '@/lib/attention';
-import { useAttentionDismissals } from '@/lib/attentionDismiss';
 import { loadHomeSurface } from '@/lib/homeSurface';
 import { useInventory } from '@/lib/InventoryContext';
 import { useLastDone } from '@/lib/LastDoneContext';
@@ -35,6 +33,7 @@ import { fonts, radius, shadowsFor, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
 import { dayKey } from '@/lib/habits';
 import { remainingCount } from '@/lib/classes';
+import { reminderTodayProgress } from '@/lib/lastDone';
 
 const DOCK_CLEARANCE = 108;
 
@@ -45,7 +44,6 @@ export default function HomeDashboard() {
   const router = useRouter();
   const { items } = useInventory();
   const { items: lastDoneItems, logDone } = useLastDone();
-  const { isDismissed } = useAttentionDismissals();
   const { members } = useHousehold();
   const { habits, checkIn } = useHabits();
   const { packs: classPacks } = useClasses();
@@ -95,12 +93,9 @@ export default function HomeDashboard() {
     [items, lastDoneItems, subscriptions, classPacks, habits, displayName]
   );
 
-  const reminderOpenCount = useMemo(
-    () =>
-      openAttentionQueue(items, lastDoneItems, subscriptions, classPacks).filter(
-        (a) => !isDismissed(a.id)
-      ).length,
-    [items, lastDoneItems, subscriptions, classPacks, isDismissed]
+  const reminderToday = useMemo(
+    () => reminderTodayProgress(lastDoneItems),
+    [lastDoneItems]
   );
 
   const classesLeft = useMemo(
@@ -338,8 +333,12 @@ export default function HomeDashboard() {
             <Tile
               Icon={Bell}
               label="Reminders"
-              value={reminderOpenCount ? String(reminderOpenCount) : '—'}
-              hint={reminderOpenCount ? 'open' : 'add one'}
+              value={
+                reminderToday.total
+                  ? `${reminderToday.done}/${reminderToday.total}`
+                  : '—'
+              }
+              hint={reminderToday.total ? 'done today' : 'add one'}
               accent={colors.amber}
               dots={{
                 bg: hubCardBg(colors.amber, resolved === 'light', '#A8884A'),

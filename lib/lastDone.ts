@@ -106,6 +106,33 @@ export function daysUntil(iso: string, now = new Date()): number {
   return -dayDiff(iso, now);
 }
 
+/**
+ * Today’s reminder progress — same shape as Habits (`done / total`).
+ * Open = due today or overdue. Done = completed today (recurring rolled
+ * forward, or a one-shot whose schedule was cleared on mark-done).
+ */
+export function reminderTodayProgress(
+  items: LastDoneItem[],
+  now = new Date()
+): { done: number; total: number } {
+  const today = localDayKey(now);
+  const open = items.filter((i) => {
+    if (!i.remindAt) return false;
+    return daysUntil(i.remindAt, now) <= 0;
+  });
+  const done = items.filter((i) => {
+    if (i.logs?.[0]?.doneAt?.slice(0, 10) !== today) return false;
+    if (i.remindInterval) return true;
+    // One-shot: mark-done clears remindAt.
+    if (!i.remindAt) return true;
+    // Logged today and next fire already rolled past today.
+    return daysUntil(i.remindAt, now) > 0;
+  });
+  const doneIds = new Set(done.map((i) => i.id));
+  const openLeft = open.filter((i) => !doneIds.has(i.id)).length;
+  return { done: done.length, total: done.length + openLeft };
+}
+
 export function formatRelativeDone(iso: string, now = new Date()): string {
   const days = daysSince(iso, now);
 

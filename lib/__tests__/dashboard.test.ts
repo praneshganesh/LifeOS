@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import { buildDashboard, givenName } from '../dashboard';
 import { createHabit, dayKey } from '../habits';
 import { createClassPack } from '../classes';
+import { reminderTodayProgress } from '../lastDone';
 
 describe('dashboard', () => {
   it('uses the first given name, never You', () => {
@@ -69,5 +70,28 @@ describe('dashboard', () => {
     const classAttention = dash.next.find((a) => a.id.startsWith('cls-sched-'));
     assert.ok(classAttention);
     assert.equal(classAttention.title, 'Ishaan · Skating class tomorrow at 10:00 AM');
+  });
+});
+
+describe('reminderTodayProgress', () => {
+  it('matches Habits-style done/total for today’s reminders', () => {
+    const today = dayKey();
+    const open: Parameters<typeof reminderTodayProgress>[0][number] = {
+      id: 'ld-open',
+      label: 'Pay rent',
+      createdAt: `${today}T08:00:00.000Z`,
+      logs: [],
+      remindAt: today,
+    };
+    const doneOnce: Parameters<typeof reminderTodayProgress>[0][number] = {
+      id: 'ld-done',
+      label: 'Review Will document',
+      createdAt: '2026-09-01T08:00:00.000Z',
+      logs: [{ id: 'log-1', doneAt: today }],
+      // one-shot cleared on mark-done
+    };
+    const progress = reminderTodayProgress([open, doneOnce], new Date(`${today}T12:00:00`));
+    assert.equal(progress.done, 1);
+    assert.equal(progress.total, 2);
   });
 });
