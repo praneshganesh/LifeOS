@@ -6,9 +6,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { Screen } from '@/components/ui/Screen';
-import { KeyboardFormScroll } from '@/components/ui/KeyboardFormScroll';
+import { Redirect, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import {
   DetailChip,
   DetailChipRow,
@@ -17,9 +15,9 @@ import {
   DetailSection,
   DetailStickyActions,
   DetailTrashButton,
-  DETAIL_STICKY_PAD,
 } from '@/components/ui/DetailKit';
 import { Text } from '@/components/ui/Text';
+import { ChevronRight } from 'lucide-react-native';
 import { Icon3DBadge, type Icon3DName } from '@/components/ui/Icon3D';
 import { useInventory } from '@/lib/InventoryContext';
 import { useSpaces, type SpaceKind } from '@/lib/SpacesContext';
@@ -35,10 +33,10 @@ const KINDS: { id: SpaceKind; label: string; icon: Icon3DName }[] = [
 
 const HOME_ICONS: Icon3DName[] = ['house', 'holiday', 'building'];
 
-export default function EditSpaceScreen() {
+export function SpaceEditor({ spaceId }: { spaceId: string }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const id = spaceId;
   const router = useRouter();
   const {
     getSpace,
@@ -53,7 +51,7 @@ export default function EditSpaceScreen() {
   const { showToast, showError } = useToast();
   const space = id ? getSpace(id) : undefined;
   const spaceRooms = id ? roomsForSpace(id) : [];
-  const accent = colors.forest;
+  const accent = colors.accent;
 
   const [name, setName] = useState('');
   const [meta, setMeta] = useState('');
@@ -72,19 +70,7 @@ export default function EditSpaceScreen() {
     setIcon(space.icon);
   }, [space]);
 
-  if (!space) {
-    return (
-      <Screen>
-        <Stack.Screen options={{ title: 'Edit space' }} />
-        <View style={styles.missing}>
-          <Text variant="body">Space not found.</Text>
-          <Pressable onPress={() => router.back()} style={{ marginTop: spacing.md }}>
-            <Text style={[styles.link, { color: accent }]}>Go back</Text>
-          </Pressable>
-        </View>
-      </Screen>
-    );
-  }
+  if (!space) return null;
 
   async function save() {
     if (!id || !space || !name.trim() || saving) return;
@@ -97,7 +83,6 @@ export default function EditSpaceScreen() {
         icon: kind === 'home' ? icon : KINDS.find((k) => k.id === kind)?.icon || icon,
       });
       showToast('Space saved');
-      router.back();
     } catch {
       showError('Couldn’t save the space — try again.');
     } finally {
@@ -163,14 +148,11 @@ export default function EditSpaceScreen() {
   }
 
   return (
-    <Screen>
-      <Stack.Screen
-        options={{
-          title: 'Edit space',
-          headerRight: () => <DetailTrashButton onPress={confirmDelete} />,
-        }}
-      />
-      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={DETAIL_STICKY_PAD}>
+    <View>
+      <View style={{ alignItems: 'flex-end', marginBottom: spacing.sm }}>
+        <DetailTrashButton onPress={confirmDelete} />
+      </View>
+      <View>
         <DetailSection label="Name">
           <DetailField value={name} onChangeText={setName} />
         </DetailSection>
@@ -247,6 +229,13 @@ export default function EditSpaceScreen() {
                 </Pressable>
               )}
               <Pressable
+                onPress={() => router.push(`/room/${room.id}` as Href)}
+                hitSlop={8}
+                accessibilityLabel={`Open ${room.name}`}
+              >
+                <ChevronRight size={18} color={colors.faint} strokeWidth={2} />
+              </Pressable>
+              <Pressable
                 onPress={() => {
                   Alert.alert('Remove room?', `Remove “${room.name}”?`, [
                     { text: 'Cancel', style: 'cancel' },
@@ -283,12 +272,12 @@ export default function EditSpaceScreen() {
                 !newRoom.trim() && { opacity: 0.45 },
               ]}
             >
-              <Text style={[styles.addRoomBtnText, { color: colors.forestOn }]}>Add</Text>
+              <Text style={[styles.addRoomBtnText, { color: colors.accentOn }]}>Add</Text>
             </Pressable>
           </View>
         </DetailSection>
 
-      </KeyboardFormScroll>
+      </View>
       <DetailStickyActions>
         <DetailPrimaryButton
           label={saving ? 'Saving…' : 'Save changes'}
@@ -297,8 +286,15 @@ export default function EditSpaceScreen() {
           onPress={() => void save()}
         />
       </DetailStickyActions>
-    </Screen>
+    </View>
   );
+}
+
+export default function EditSpaceRoute() {
+  const { id: idParam } = useLocalSearchParams<{ id: string }>();
+  const id = Array.isArray(idParam) ? idParam[0] : idParam;
+  if (!id) return <Redirect href={'/(tabs)/spaces' as Href} />;
+  return <Redirect href={`/space/${id}` as Href} />;
 }
 
 function makeStyles(_colors: ThemeColors) {

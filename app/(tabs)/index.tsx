@@ -13,7 +13,8 @@ import {
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { AppIcon } from '@/components/ui/Icon3D';
-import { DotField, hubCardBg, isNearGray, type DotTone } from '@/components/ui/DotField';
+import { DotField, type DotTone } from '@/components/ui/DotField';
+import { moduleTone } from '@/lib/moduleTone';
 import { HomeHeader } from '@/components/HomeHeader';
 import { greetingForNow } from '@/data/mock';
 import { buildDashboard, formatDashDate, givenName, type DashRow } from '@/lib/dashboard';
@@ -311,80 +312,65 @@ export default function HomeDashboard() {
 
         <Section title="Jump in">
           <View style={styles.tiles}>
-            <Tile
-              Icon={Sparkles}
-              label="Habits"
-              value={
-                habits.length
-                  ? `${dash.habitsDone}/${habits.length}`
-                  : '—'
-              }
-              hint={habits.length ? 'done today' : 'start one'}
-              accent={colors.coral}
-              dots={{
-                bg: hubCardBg(colors.coral, resolved === 'light', '#A66A5C'),
-                dot: colors.coral,
-              }}
-              onPress={() => {
-                blurActiveElement();
-                router.push(moduleHref('/habits', 'today'));
-              }}
-            />
-            <Tile
-              Icon={Bell}
-              label="Reminders"
-              value={
-                reminderToday.total
-                  ? `${reminderToday.done}/${reminderToday.total}`
-                  : '—'
-              }
-              hint={reminderToday.total ? 'done today' : 'add one'}
-              accent={colors.amber}
-              dots={{
-                bg: hubCardBg(colors.amber, resolved === 'light', '#A8884A'),
-                dot: colors.amber,
-              }}
-              onPress={() => {
-                blurActiveElement();
-                router.push(moduleHref('/tasks', 'today'));
-              }}
-            />
-            <Tile
-              Icon={CalendarDays}
-              label="Classes"
-              value={classPacks.length ? String(classPacks.length) : '—'}
-              hint={
-                !classPacks.length
-                  ? 'add a class'
-                  : classesLeft
-                    ? `${classesLeft} sessions left`
-                    : 'none left'
-              }
-              accent={isNearGray(colors.sky) ? '#5E7A8C' : colors.sky}
-              dots={{
-                bg: hubCardBg(colors.sky, resolved === 'light', '#5E7A8C'),
-                dot: isNearGray(colors.sky) ? '#5E7A8C' : colors.sky,
-              }}
-              onPress={() => {
-                blurActiveElement();
-                router.push(moduleHref('/classes', 'today'));
-              }}
-            />
-            <Tile
-              Icon={Package}
-              label="Things"
-              value={items.length ? String(items.length) : '—'}
-              hint={items.length ? 'saved' : 'browse'}
-              accent={isNearGray(colors.violet) ? '#7A6E8E' : colors.violet}
-              dots={{
-                bg: hubCardBg(colors.violet, resolved === 'light', '#7A6E8E'),
-                dot: isNearGray(colors.violet) ? '#7A6E8E' : colors.violet,
-              }}
-              onPress={() => {
-                blurActiveElement();
-                router.push('/(tabs)/spaces' as Href);
-              }}
-            />
+            {(
+              [
+                {
+                  key: 'habits' as const,
+                  Icon: Sparkles,
+                  label: 'Habits',
+                  value: habits.length ? `${dash.habitsDone}/${habits.length}` : '—',
+                  hint: habits.length ? 'done today' : 'start one',
+                  href: moduleHref('/habits', 'today'),
+                },
+                {
+                  key: 'tasks' as const,
+                  Icon: Bell,
+                  label: 'Reminders',
+                  value: reminderToday.total
+                    ? `${reminderToday.done}/${reminderToday.total}`
+                    : '—',
+                  hint: reminderToday.total ? 'done today' : 'add one',
+                  href: moduleHref('/tasks', 'today'),
+                },
+                {
+                  key: 'classes' as const,
+                  Icon: CalendarDays,
+                  label: 'Classes',
+                  value: classPacks.length ? String(classPacks.length) : '—',
+                  hint: !classPacks.length
+                    ? 'add a class'
+                    : classesLeft
+                      ? `${classesLeft} sessions left`
+                      : 'none left',
+                  href: moduleHref('/classes', 'today'),
+                },
+                {
+                  key: 'things' as const,
+                  Icon: Package,
+                  label: 'Things',
+                  value: items.length ? String(items.length) : '—',
+                  hint: items.length ? 'saved' : 'browse',
+                  href: '/(tabs)/spaces' as Href,
+                },
+              ] as const
+            ).map((tile) => {
+              const tone = moduleTone(tile.key, colors, resolved === 'light');
+              return (
+                <Tile
+                  key={tile.key}
+                  Icon={tile.Icon}
+                  label={tile.label}
+                  value={tile.value}
+                  hint={tile.hint}
+                  accent={tone.accent}
+                  dots={tone.dots}
+                  onPress={() => {
+                    blurActiveElement();
+                    router.push(tile.href);
+                  }}
+                />
+              );
+            })}
           </View>
         </Section>
       </ScrollView>
@@ -451,7 +437,7 @@ function RowCard({
             <Check size={18} color={colors.forest} strokeWidth={2.6} />
           </View>
         ) : (
-          <AppIcon name={row.icon} size={40} />
+          <AppIcon name={row.icon} size={32} />
         )}
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text
@@ -480,7 +466,7 @@ function RowCard({
           ]}
           accessibilityLabel={`Mark ${row.title} done`}
         >
-          <Check size={18} color={colors.accent} strokeWidth={2.4} />
+          <Check size={16} color={colors.accent} strokeWidth={2.4} />
         </Pressable>
       ) : done ? null : (
         <ArrowUpRight size={18} color={colors.faint} strokeWidth={1.8} />
@@ -580,28 +566,28 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
+    gap: 10,
     borderRadius: radius.lg,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: 14,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
   },
   featuredTitle: {
     fontFamily: fonts.sansSemi,
-    fontSize: 18,
-    lineHeight: 24,
+    fontSize: 16,
+    lineHeight: 20,
     letterSpacing: -0.3,
   },
   featuredSub: {
     fontFamily: fonts.sans,
-    fontSize: 16,
-    lineHeight: 21,
+    fontSize: 13,
+    lineHeight: 17,
     opacity: 0.65,
     marginTop: 1,
   },
   featuredCheck: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
@@ -661,30 +647,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    borderRadius: radius.lg,
-    paddingVertical: 10,
-    paddingLeft: 10,
-    paddingRight: spacing.md,
-    marginBottom: 8,
+    borderRadius: radius.md,
+    paddingVertical: 8,
+    paddingLeft: 8,
+    paddingRight: spacing.sm,
+    marginBottom: 6,
   },
   rowMain: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
+    gap: 10,
     minWidth: 0,
   },
   rowCheck: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
   doneBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: 13,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },

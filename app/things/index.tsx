@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Plus } from 'lucide-react-native';
@@ -14,32 +14,38 @@ import { moduleHref } from '@/lib/moduleNav';
 import { confirmDelete } from '@/lib/confirmDelete';
 import { blurActiveElement } from '@/lib/a11y';
 import { captureHref } from '@/lib/captureContext';
-import { radius, spacing } from '@/constants/theme';
+import { fonts, radius, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
 import { useToast } from '@/lib/ToastContext';
 
-type ThingFilter = 'all' | 'vehicles' | 'documents' | `person:${string}`;
+type TypeFilter = 'all' | 'vehicles' | 'documents';
+type WhoFilter = 'all' | `person:${string}`;
 
-/** Flat Things library — Who tags via person chips; no Spaces/rooms. */
+/** Flat Things library — Type and Who are independent filters. */
 export default function ThingsScreen() {
   const { colors } = useTheme();
   const router = useRouter();
   const { items, removeItem, getById } = useInventory();
   const { showError } = useToast();
   const { members } = useHousehold();
-  const [filter, setFilter] = useState<ThingFilter>('all');
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
+  const [whoFilter, setWhoFilter] = useState<WhoFilter>('all');
 
-  const filterOptions = useMemo(() => {
-    const base = [
+  const typeOptions = useMemo(
+    () => [
       { key: 'all', label: 'All' },
       { key: 'vehicles', label: 'Vehicles' },
       { key: 'documents', label: 'Documents' },
-    ];
+    ],
+    []
+  );
+
+  const whoOptions = useMemo(() => {
     const people = members.map((m) => ({
       key: `person:${m.id}`,
       label: m.name.split(' ')[0] || m.name,
     }));
-    return [...base, ...people];
+    return [{ key: 'all', label: 'Anyone' }, ...people];
   }, [members]);
 
   const sortedThings = useMemo(
@@ -48,13 +54,14 @@ export default function ThingsScreen() {
   );
 
   const visibleThings = useMemo(() => {
-    if (filter === 'all') return sortedThings;
-    if (filter === 'vehicles') return sortedThings.filter((i) => isVehicleItem(i));
-    if (filter === 'documents') return sortedThings.filter((i) => isDocumentItem(i));
-    if (filter.startsWith('person:')) {
-      const personId = filter.slice('person:'.length);
+    let list = sortedThings;
+    if (typeFilter === 'vehicles') list = list.filter((i) => isVehicleItem(i));
+    else if (typeFilter === 'documents') list = list.filter((i) => isDocumentItem(i));
+
+    if (whoFilter.startsWith('person:')) {
+      const personId = whoFilter.slice('person:'.length);
       const member = members.find((m) => m.id === personId);
-      return sortedThings.filter(
+      list = list.filter(
         (i) =>
           i.personId === personId ||
           (member &&
@@ -62,8 +69,8 @@ export default function ThingsScreen() {
             i.assignedTo.toLowerCase() === member.name.toLowerCase())
       );
     }
-    return sortedThings;
-  }, [sortedThings, filter, members]);
+    return list;
+  }, [sortedThings, typeFilter, whoFilter, members]);
 
   async function onDeleteThing(id: string, name: string) {
     if (!getById(id)) return;
@@ -84,19 +91,35 @@ export default function ThingsScreen() {
       right={
         <Pressable
           onPress={openCapture}
-          style={[styles.addBtn, { backgroundColor: colors.forest }]}
+          style={[styles.addBtn, { backgroundColor: colors.accent }]}
           accessibilityLabel="Add thing"
         >
-          <Plus size={18} color={colors.forestOn} strokeWidth={2.2} />
+          <Plus size={18} color={colors.accentOn} strokeWidth={2.2} />
         </Pressable>
       }
     >
       <Stack.Screen options={{ headerShown: false }} />
-      <FilterChips
-        options={filterOptions}
-        value={filter}
-        onChange={(key) => setFilter(key as ThingFilter)}
-      />
+
+      <View style={styles.filterBlock}>
+        <Text style={[styles.filterLabel, { color: colors.mute }]}>Type</Text>
+        <FilterChips
+          options={typeOptions}
+          value={typeFilter}
+          onChange={(key) => setTypeFilter(key as TypeFilter)}
+        />
+      </View>
+
+      {members.length > 0 ? (
+        <View style={styles.filterBlock}>
+          <Text style={[styles.filterLabel, { color: colors.mute }]}>Who</Text>
+          <FilterChips
+            options={whoOptions}
+            value={whoFilter}
+            onChange={(key) => setWhoFilter(key as WhoFilter)}
+            tone="people"
+          />
+        </View>
+      ) : null}
 
       {visibleThings.length === 0 ? (
         <Pressable
@@ -135,7 +158,7 @@ export default function ThingsScreen() {
                   router.push(moduleHref(`/asset/${item.id}`, 'things'))
                 }
                 onEdit={() =>
-                  router.push(moduleHref(`/asset/edit/${item.id}`, 'things'))
+                  router.push(moduleHref(`/asset/${item.id}`, 'things'))
                 }
                 onDelete={() => void onDeleteThing(item.id, item.name)}
               />
@@ -154,6 +177,16 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  filterBlock: {
+    marginBottom: spacing.sm,
+  },
+  filterLabel: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 12,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    marginBottom: 6,
   },
   empty: {
     borderRadius: radius.lg,

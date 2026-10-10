@@ -20,12 +20,15 @@ export default function OnboardingLayout() {
       }}
     >
       <Stack.Screen name="index" options={{ headerShown: false }} />
-      <Stack.Screen name="home" options={{ title: 'Your home', headerBackTitle: 'Back' }} />
-      <Stack.Screen name="currency" options={{ title: 'Currency', headerBackTitle: 'Back' }} />
+      <Stack.Screen name="intent" options={{ title: 'Focus', headerBackTitle: 'Back' }} />
       <Stack.Screen name="family" options={{ title: 'Household', headerBackTitle: 'Back' }} />
+      <Stack.Screen name="currency" options={{ title: 'Currency', headerBackTitle: 'Back' }} />
       <Stack.Screen name="quiet-hours" options={{ title: 'Quiet hours', headerBackTitle: 'Back' }} />
-      <Stack.Screen name="capture" options={{ title: 'Capture', headerBackTitle: 'Back' }} />
-      <Stack.Screen name="talk" options={{ title: 'Talk', headerBackTitle: 'Back' }} />
+      <Stack.Screen name="how-it-works" options={{ title: 'How it works', headerBackTitle: 'Back' }} />
+      {/* Legacy routes — redirect if bookmarked mid-tour */}
+      <Stack.Screen name="home" options={{ headerShown: false }} />
+      <Stack.Screen name="capture" options={{ headerShown: false }} />
+      <Stack.Screen name="talk" options={{ headerShown: false }} />
     </Stack>
   );
 }

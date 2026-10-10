@@ -22,6 +22,8 @@ import {
   loadVersionedArray,
   saveVersionedArray,
 } from '@/lib/storage/versioned';
+import { queueDelete, queueUpsert } from '@/lib/sync/outbox';
+import { subscribeSyncApplied } from '@/lib/sync/engine';
 
 const STORAGE_KEY = 'lifeos:habits:v1';
 const SCHEMA_VERSION = 1;
@@ -52,12 +54,29 @@ export function HabitsProvider({ children }: { children: ReactNode }) {
 
   // Awaited commit: callers only resolve once the write is on disk, so a
   // failed write rejects instead of the UI reporting a save that never stuck.
-  const commit = useCallback(async (next: Habit[]) => {
-    const sorted = sortHabits(next);
+  // `touched` = rows to stamp + enqueue for row sync.
+  const commit = useCallback(async (next: Habit[], touched?: Habit[]) => {
+    const now = new Date().toISOString();
+    const touchedIds = new Set((touched ?? []).map((h) => h.id));
+    const stamped = next.map((h) => (touchedIds.has(h.id) ? { ...h, updatedAt: now } : h));
+    const sorted = sortHabits(stamped);
     habitsRef.current = sorted;
     setHabits(sorted);
     await saveVersionedArray(STORAGE_KEY, SCHEMA_VERSION, sorted);
+    for (const h of sorted) if (touchedIds.has(h.id)) void queueUpsert('habits', h);
     return sorted;
+  }, []);
+
+  useEffect(() => {
+    return subscribeSyncApplied((tables) => {
+      if (!tables.includes('habits')) return;
+      void loadVersionedArray<Habit>(STORAGE_KEY, SCHEMA_VERSION, normalizeHabit).then(
+        (loaded) => {
+          habitsRef.current = sortHabits(loaded);
+          setHabits(habitsRef.current);
+        }
+      );
+    });
   }, []);
 
   useEffect(() => {
@@ -101,23 +120,32 @@ export function HabitsProvider({ children }: { children: ReactNode }) {
             syncLastDone: existing.syncLastDone ?? true,
           };
           await commit(
-            habitsRef.current.map((h) => (h.id === existing.id ? patched : h))
+            habitsRef.current.map((h) => (h.id === existing.id ? patched : h)),
+            [patched]
           );
           return patched;
         }
         return existing;
       }
       const habit = createHabit(input);
-      await commit([habit, ...habitsRef.current]);
-      return habit;
+      const [saved] = await commit([habit, ...habitsRef.current], [habit]).then((list) =>
+        list.filter((h) => h.id === habit.id)
+      );
+      return saved ?? habit;
     },
     [commit]
   );
 
   const updateHabit = useCallback(
     async (id: string, patch: Partial<Habit>) => {
+      let updated: Habit | null = null;
       await commit(
-        habitsRef.current.map((h) => (h.id === id ? { ...h, ...patch, id: h.id } : h))
+        habitsRef.current.map((h) => {
+          if (h.id !== id) return h;
+          updated = { ...h, ...patch, id: h.id };
+          return updated;
+        }),
+        updated ? [updated] : []
       );
     },
     [commit]
@@ -126,6 +154,7 @@ export function HabitsProvider({ children }: { children: ReactNode }) {
   const removeHabit = useCallback(
     async (id: string) => {
       await commit(habitsRef.current.filter((h) => h.id !== id));
+      void queueDelete('habits', id);
     },
     [commit]
   );
@@ -138,8 +167,8 @@ export function HabitsProvider({ children }: { children: ReactNode }) {
         updated = toggleLogForDay(h, date);
         return updated;
       });
-      await commit(next);
-      return updated;
+      const saved = await commit(next, updated ? [updated] : []);
+      return saved.find((h) => h.id === id) ?? updated;
     },
     [commit]
   );

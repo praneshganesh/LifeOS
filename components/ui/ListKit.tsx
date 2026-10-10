@@ -19,7 +19,6 @@ export function ListCard({
         styles.card,
         {
           backgroundColor: colors.surface,
-          borderColor: colors.lineStrong,
         },
         style,
       ]}
@@ -101,15 +100,18 @@ export function ListRow({
 
 export function StatStrip({
   items,
+  style,
 }: {
   items: { label: string; value: string }[];
+  style?: object;
 }) {
   const { colors } = useTheme();
   return (
     <View
       style={[
         styles.stats,
-        { backgroundColor: colors.surface, borderColor: colors.lineStrong },
+        { backgroundColor: colors.surface },
+        style,
       ]}
     >
       {items.map((item, i) => (
@@ -137,16 +139,23 @@ export function FilterChips({
   options,
   value,
   onChange,
+  tone = 'default',
 }: {
   options: { key: string; label: string }[];
   value: string;
   onChange: (key: string) => void;
+  /** People chips use accent fill so they don’t look like Type chips. */
+  tone?: 'default' | 'people';
 }) {
   const { colors } = useTheme();
   return (
     <View style={styles.chips}>
       {options.map((opt) => {
         const on = opt.key === value;
+        const selectedBg =
+          tone === 'people' ? colors.accent : colors.ink;
+        const selectedFg =
+          tone === 'people' ? colors.accentOn : colors.onInk;
         return (
           <Pressable
             key={opt.key}
@@ -154,8 +163,13 @@ export function FilterChips({
             style={({ pressed }) => [
               styles.chip,
               {
-                backgroundColor: on ? colors.ink : colors.surface,
-                borderColor: on ? colors.ink : colors.lineStrong,
+                backgroundColor: on ? selectedBg : colors.surfaceSoft,
+                borderWidth: StyleSheet.hairlineWidth,
+                borderColor: on
+                  ? selectedBg
+                  : tone === 'people'
+                    ? colors.lineStrong
+                    : colors.line,
                 opacity: pressed ? 0.9 : 1,
               },
             ]}
@@ -165,7 +179,7 @@ export function FilterChips({
             <Text
               style={[
                 styles.chipText,
-                { color: on ? colors.onInk : colors.ink },
+                { color: on ? selectedFg : colors.ink },
               ]}
             >
               {opt.label}
@@ -180,7 +194,6 @@ export function FilterChips({
 const styles = StyleSheet.create({
   card: {
     borderRadius: radius.md,
-    borderWidth: 1.5,
     overflow: 'hidden',
   },
   row: {
@@ -220,7 +233,6 @@ const styles = StyleSheet.create({
   stats: {
     flexDirection: 'row',
     borderRadius: radius.md,
-    borderWidth: 1.5,
     marginBottom: spacing.lg,
   },
   stat: {
@@ -238,13 +250,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginBottom: spacing.md,
+    marginBottom: spacing.xs,
   },
   chip: {
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: radius.md,
-    borderWidth: 1.5,
     minHeight: 40,
     justifyContent: 'center',
   },

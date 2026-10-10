@@ -14,8 +14,8 @@ import { fonts, radius, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
 import { blurActiveElement } from '@/lib/a11y';
 
-const EDIT_W = 72;
-const DELETE_W = 80;
+const EDIT_W = 64;
+const DELETE_W = 72;
 const SPRING = { damping: 18, stiffness: 220, overshootClamping: true } as const;
 
 type Props = {
@@ -55,13 +55,13 @@ function RowFace({
       accessibilityRole="button"
       accessibilityLabel={name}
     >
-      <Icon3DBadge name={icon} size={48} />
+      <Icon3DBadge name={icon} size={36} />
       <View style={styles.copy}>
-        <Text variant="headline" numberOfLines={1}>
+        <Text variant="headline" numberOfLines={1} style={styles.title}>
           {name}
         </Text>
         {subtitle ? (
-          <Text variant="caption" numberOfLines={1} style={{ marginTop: 4 }}>
+          <Text variant="caption" numberOfLines={1} style={styles.subtitle}>
             {subtitle}
           </Text>
         ) : null}
@@ -219,14 +219,21 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    minHeight: 72,
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: spacing.md,
+    minHeight: 56,
   },
   copy: {
     flex: 1,
     minWidth: 0,
+  },
+  title: {
+    fontSize: 16,
+    lineHeight: 20,
+  },
+  subtitle: {
+    marginTop: 2,
   },
   actionsClip: {
     overflow: 'hidden',
@@ -237,20 +244,20 @@ const styles = StyleSheet.create({
   },
   editAction: {
     width: EDIT_W,
-    minHeight: 72,
+    minHeight: 56,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: 2,
   },
   deleteAction: {
     width: DELETE_W,
-    minHeight: 72,
+    minHeight: 56,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: 2,
   },
   actionLabel: {
     fontFamily: fonts.sansMedium,
-    fontSize: 12,
+    fontSize: 11,
   },
 });

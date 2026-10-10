@@ -1,12 +1,16 @@
 import { useTheme } from '@/lib/ThemeContext';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import { Plus } from 'lucide-react-native';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
-import { StatStrip } from '@/components/ui/ListKit';
+import { FilterChips, StatStrip } from '@/components/ui/ListKit';
 import { Text } from '@/components/ui/Text';
-import { HabitCard, HabitCategoryHeader } from '@/components/HabitCard';
+import {
+  HabitCard,
+  HabitCategoryHeader,
+  type HabitHeatmapRange,
+} from '@/components/HabitCard';
 import { useHabits } from '@/lib/HabitsContext';
 import { useLastDone } from '@/lib/LastDoneContext';
 import {
@@ -16,7 +20,12 @@ import {
   loggedOn,
   shouldSyncLastDone,
 } from '@/lib/habits';
-import { type ThemeColors,  colors, fonts, radius, spacing  } from '@/constants/theme';
+import { type ThemeColors, fonts, radius, spacing } from '@/constants/theme';
+
+const RANGE_FILTERS = [
+  { key: 'month', label: 'This month' },
+  { key: 'year', label: 'Year' },
+] as const;
 
 export default function HabitsScreen() {
   const { colors } = useTheme();
@@ -24,6 +33,7 @@ export default function HabitsScreen() {
   const router = useRouter();
   const { habits, checkIn, getById } = useHabits();
   const { logDone } = useLastDone();
+  const [heatmapRange, setHeatmapRange] = useState<HabitHeatmapRange>('month');
   const groups = useMemo(() => groupHabitsByCategory(habits), [habits]);
   const today = dayKey();
   const doneToday = habits.filter((h) => loggedOn(h, today)).length;
@@ -54,7 +64,7 @@ export default function HabitsScreen() {
           style={styles.addBtn}
           accessibilityLabel="Add habit"
         >
-          <Plus size={18} color={colors.forest} strokeWidth={2.2} />
+          <Plus size={18} color={colors.accent} strokeWidth={2.2} />
           <Text style={styles.addLabel}>Add</Text>
         </Pressable>
       }
@@ -74,6 +84,14 @@ export default function HabitsScreen() {
         ]}
       />
 
+      {habits.length > 0 ? (
+        <FilterChips
+          options={[...RANGE_FILTERS]}
+          value={heatmapRange}
+          onChange={(key) => setHeatmapRange(key as HabitHeatmapRange)}
+        />
+      ) : null}
+
       {habits.length === 0 ? (
         <ModuleSection label="Your rhythms">
           <Text variant="body" style={{ color: colors.mute }}>
@@ -88,6 +106,7 @@ export default function HabitsScreen() {
               <HabitCard
                 key={h.id}
                 habit={h}
+                range={heatmapRange}
                 onOpen={() => router.push(`/habits/${h.id}` as Href)}
                 onCheckIn={() => void onCheckIn(h.id)}
               />
@@ -101,19 +120,19 @@ export default function HabitsScreen() {
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
-  addBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: colors.forestSoft,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: radius.md,
-  },
-  addLabel: {
-    fontFamily: fonts.sansSemi,
-    fontSize: 16,
-    color: colors.forest,
-  },
-});
+    addBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: colors.accentSoft,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: radius.md,
+    },
+    addLabel: {
+      fontFamily: fonts.sansSemi,
+      fontSize: 16,
+      color: colors.accent,
+    },
+  });
 }

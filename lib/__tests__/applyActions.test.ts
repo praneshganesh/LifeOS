@@ -529,6 +529,55 @@ describe('applyChatActions', () => {
     assert.deepEqual(checks, ['2026-08-10', '2026-08-11']);
   });
 
+  it('creates a habit without marking it done', async () => {
+    const checks: string[] = [];
+    const created: { title: string; why?: string }[] = [];
+    const utterance = 'Create a new habit to meditate every day for 15 minutes';
+    const applied = await applyChatActions(
+      [{ type: 'habit_check_in', title: 'Meditate' }] as ChatAction[],
+      unusedInv,
+      'talk',
+      {
+        lastUserText: utterance,
+        habits: {
+          addHabit: async (input) => {
+            created.push({ title: input.title, why: input.why });
+            return {
+              id: 'hab-med',
+              title: input.title,
+              why: input.why,
+              categoryId: 'health' as const,
+              logs: [],
+              createdAt: new Date().toISOString(),
+            };
+          },
+          findByTitle: () => undefined,
+          getById: () => undefined,
+          checkIn: async () => {
+            checks.push('checked');
+            return null;
+          },
+        },
+      }
+    );
+    assert.deepEqual(checks, []);
+    assert.equal(created.length, 1);
+    assert.equal(created[0]?.title, 'Meditate');
+    assert.match(created[0]?.why || '', /15 minutes/);
+    assert.match(created[0]?.why || '', /every day/);
+    assert.equal(applied.addedHabitTitle, 'Meditate');
+    assert.equal(applied.habitCheckInTitle, null);
+    const reply = composeAppliedReply({
+      actions: [{ type: 'add_habit', title: 'Meditate', why: created[0]?.why }],
+      modelReply: 'Nice — Meditate today.',
+      addedHabitTitle: applied.addedHabitTitle,
+      addedHabitWhy: applied.addedHabitWhy,
+    });
+    assert.match(reply, /^Added Meditate/);
+    assert.doesNotMatch(reply, /Nice/);
+    assert.doesNotMatch(reply, /today/);
+  });
+
   it('does not assign invented household names', async () => {
     let assigned: string | undefined;
     await applyChatActions(
@@ -876,6 +925,148 @@ describe('applyChatActions', () => {
     assert.equal(saved[0]?.label, 'Apply for renewed passport');
     assert.match(saved[0]?.remindAt ?? '', /^\d{4}-\d{2}-\d{2}$/);
     assert.equal(result.reminderLabel, 'Apply for renewed passport');
+  });
+
+  it('defaults dateless remind-me to today even if the model invents tomorrow', async () => {
+    const today = new Date();
+    const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const tom = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+    const tomorrowKey = `${tom.getFullYear()}-${String(tom.getMonth() + 1).padStart(2, '0')}-${String(tom.getDate()).padStart(2, '0')}`;
+    const saved: { remindAt: string }[] = [];
+    await applyChatActions(
+      [
+        {
+          type: 'set_reminder',
+          label: 'Pack lunch',
+          remindAt: tomorrowKey,
+        },
+      ] as ChatAction[],
+      unusedInv,
+      'talk',
+      {
+        lastUserText: 'Remind me to pack lunch',
+        localDate: todayKey,
+        lastDone: {
+          logDone: async () => {
+            throw new Error('should not mark done');
+          },
+          setReminder: async (input) => {
+            saved.push({ remindAt: input.remindAt });
+            return { id: 'ld-2', label: input.label, remindAt: input.remindAt };
+          },
+        },
+      }
+    );
+    assert.equal(saved[0]?.remindAt, todayKey);
+  });
+
+  it('updates focused reminder due date from a follow-up', async () => {
+    const today = new Date();
+    const nextTue = (() => {
+      const d = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const day = d.getDay();
+      const delta = (2 - day + 7) % 7 || 7;
+      d.setDate(d.getDate() + delta);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    })();
+    const patched: { id: string; remindAt?: string | null }[] = [];
+    const result = await applyChatActions(
+      [{ type: 'none' }] as ChatAction[],
+      unusedInv,
+      'talk',
+      {
+        lastUserText: 'Update the due date to next Tuesday',
+        lastTalkFocus: { kind: 'lastDone', id: 'ld-pack' },
+        lastDoneList: [{ id: 'ld-pack', label: 'Pack lunch' }],
+        lastDone: {
+          logDone: async () => {
+            throw new Error('should not mark done');
+          },
+          setReminder: async () => {
+            throw new Error('should update, not create');
+          },
+          updateActivity: async (id, patch) => {
+            patched.push({ id, remindAt: patch.remindAt });
+            return { id, label: 'Pack lunch', remindAt: patch.remindAt || undefined };
+          },
+        },
+      }
+    );
+    assert.equal(patched[0]?.id, 'ld-pack');
+    assert.equal(patched[0]?.remindAt, nextTue);
+    assert.equal(result.updatedReminder, true);
+    assert.equal(result.reminderLabel, 'Pack lunch');
+  });
+
+  it('renames a focused habit from a follow-up', async () => {
+    const habits = new Map([
+      [
+        'h1',
+        {
+          id: 'h1',
+          title: 'Walk',
+          categoryId: 'health' as const,
+          createdAt: '2026-01-01',
+          logs: [],
+        },
+      ],
+    ]);
+    const result = await applyChatActions(
+      [{ type: 'none' }] as ChatAction[],
+      unusedInv,
+      'talk',
+      {
+        lastUserText: 'Change the name to Morning stretch',
+        lastTalkFocus: { kind: 'habit', id: 'h1' },
+        habitsList: [{ id: 'h1', title: 'Walk' }],
+        habits: {
+          addHabit: async () => {
+            throw new Error('should update, not create');
+          },
+          checkIn: async () => null,
+          findByTitle: () => undefined,
+          getById: (id) => habits.get(id),
+          updateHabit: async (id, patch) => {
+            const cur = habits.get(id);
+            if (!cur) throw new Error('missing');
+            habits.set(id, { ...cur, ...patch });
+          },
+        },
+      }
+    );
+    assert.equal(habits.get('h1')?.title, 'Morning Stretch');
+    assert.equal(result.updatedHabit, true);
+    assert.equal(result.updatedHabitTitle, 'Morning Stretch');
+  });
+
+  it('renames a focused expense from a follow-up', async () => {
+    const expenses = new Map([
+      ['e1', { id: 'e1', title: 'Juice', amount: 13, merchant: 'Spinis' }],
+    ]);
+    const result = await applyChatActions(
+      [{ type: 'none' }] as ChatAction[],
+      unusedInv,
+      'talk',
+      {
+        lastUserText: 'Call it Orange juice',
+        lastTalkFocus: { kind: 'expense', id: 'e1' },
+        expensesList: [{ id: 'e1', title: 'Juice', amount: 13, merchant: 'Spinis' }],
+        expenses: {
+          addExpense: async () => {
+            throw new Error('should update');
+          },
+          updateExpense: async (id, patch) => {
+            const cur = expenses.get(id);
+            if (!cur) throw new Error('missing');
+            expenses.set(id, { ...cur, ...patch });
+          },
+          getById: (id) => expenses.get(id),
+        },
+      }
+    );
+    assert.equal(expenses.get('e1')?.title, 'Orange Juice');
+    assert.equal(result.updatedExpense, true);
+    assert.equal(result.loggedExpenseTitle, 'Orange Juice');
   });
 });
 

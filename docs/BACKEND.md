@@ -1,9 +1,9 @@
 # Backend (staging)
 
-LifeOS stays **offline-capable**. Supabase is Auth + Postgres (and later Storage) for sync — not a dump of the whole household as one JSON blob.
+LifeOS stays **offline-capable**. Supabase is Auth + Postgres + Storage for sync — not a dump of the whole household as one JSON blob.
 
-**Target architecture (household-scoped rows, outbox, airplane mode):** see [`docs/SYNC_ARCHITECTURE.md`](./SYNC_ARCHITECTURE.md).  
-The `life_stores` JSON snapshot below is **transitional** solo backup only; do not extend it for Family.
+**Architecture (household-scoped rows, outbox, airplane mode, media bucket):** see [`docs/SYNC_ARCHITECTURE.md`](./SYNC_ARCHITECTURE.md).  
+The `life_stores` JSON snapshot is now **prefs only**; domain data lives in per-module tables.
 
 Supabase is the right default at this scale: Postgres + Auth + RLS, connection pooling, and a path to larger compute later. Talk’s bottleneck is still OpenAI, not the database. Persistent [preview branches](https://supabase.com/docs/guides/deployment/branching) are extra compute (billed per hour); keep one long-lived **staging** branch, not a branch per PR, until we need previews.
 
@@ -66,26 +66,38 @@ With GitHub linked, pushing `supabase/migrations/` to Git `staging` applies them
 
 `lib/supabase.ts` is a no-op until those env vars exist, so Talk and inventory keep working offline.
 
-## What we store on the server (legacy v1 snapshot — transitional)
-
-> Prefer the row-level design in [`SYNC_ARCHITECTURE.md`](./SYNC_ARCHITECTURE.md). The tables below remain until migration cutover.
+## What we store on the server
 
 | Table | Columns | Why |
 |-------|---------|-----|
 | `auth.users` | id (anonymous until Apple Sign in) | Session for RLS |
-| `public.profiles` | `id` (= auth uid), timestamps | Empty profile so RLS has a row |
-| `public.life_stores` | `user_id`, `store_key`, `body` jsonb | Per-module JSON snapshot (legacy) |
-| `public.life_recovery` | `code_hash`, `body` jsonb | Restore on a new phone with a recovery code (legacy) |
+| `public.profiles` | `id` (= auth uid), `plan_id`, `billing_cadence`, `store_product_id`, `renews_at`, `pending_store_product_id` | Plan tier plus the active store product (monthly vs yearly) |
+| `public.households`, `household_members`, `household_invites` | membership + roles | Sync + RLS scope |
+| `public.household_people` | `id, household_id, name, role, relation, body` | Kids / pets / assignees |
+| `public.spaces`, `rooms` | `id, household_id, title, body` | Space layout (legacy ids map to stable uuids) |
+| `public.things` | `id, household_id, name, category, space_key, room, is_document, document_kind, expiry_date, body` | Inventory + document metadata |
+| `public.reminders` | `id, household_id, thing_id?, label, remind_at, remind_interval, body` | Last Done / tasks |
+| `public.expenses`, `subscriptions`, `habits`, `class_packs` | `id, household_id, person_id?, title, body` | Module rows (full item in `body`) |
+| `public.ai_daily_usage` | `user_id / household_id, day, used` | Talk / Ask / Identify caps (`consume_ai_turn`) |
+| `public.life_stores` | `user_id`, `store_key`, `body` jsonb | **Prefs only**: notification prefs, profile, onboarding, appearance, plan mirror, AI usage mirror, talk voice |
+| `public.life_recovery` | `code_hash`, `household_id`, `body` | Recovery code → household claim (`claim_household_by_recovery`) |
+| Storage bucket `media` (private) | `{household_id}/{uuid}.ext` | Receipts, item photos, document scans; RLS by household membership; signed URLs only |
 
-**In the JSON snapshot:** Things, spaces, household, expenses, habits, classes, subscriptions, Last Done, profile, plan, appearance, notification prefs, talk-voice, onboarding. Local photo URIs are stripped. Face ID prefs stay on the device.
+All domain tables carry `created_at / updated_at / updated_by / client_mutated_at / deleted_at` and are RLS-scoped through `user_household_ids()` (read) and `household_can_edit()` (write).
 
-**Not in the cloud yet:** item photos, document scans, Apple user identity. Row-level sync + media bucket are defined in `SYNC_ARCHITECTURE.md`.
+**Media:** the device keeps the original `file://` (`imageUri` / `receiptUri`, stripped from every cloud body). The sync engine uploads to `media` and writes `imagePath` / `receiptPath` on the row; a new device downloads through a 1h signed URL into the app cache. Sync never deletes a local file. Identity documents are stored in the same private bucket; the user can keep them off the cloud by not capturing a photo, and Capture "AI off" keeps them away from OCR and OpenAI.
+
+**Plan enforcement:** RevenueCat is the source of truth. The chat API exposes `POST /rc/webhook` (`server/revenuecat.mjs`) which writes `profiles.plan_id` plus `billing_cadence`, `store_product_id`, `renews_at`, and `pending_store_product_id` through `admin_set_plan_id` with the service role (env: `REVENUECAT_WEBHOOK_SECRET`, `SUPABASE_SERVICE_ROLE_KEY`, optional `REVENUECAT_SECRET_KEY`). The client-side `set_my_plan_id` remains as an optimistic mirror of the same columns. `consume_ai_turn` reads `plan_id` only (trial 25 / pro 100 / a leftover family row uses the Pro cap).
+
+**JWT verification on the chat API:** `server/aiAuth.mjs` verifies the Supabase access token locally against the project JWKS (`/auth/v1/.well-known/jwks.json`, ES256 / RS256) and falls back to `/auth/v1/user` only for HS256 projects or JWKS outages.
+
+**Deploy:** apply `supabase/migrations/20260928090000_row_sync_all_modules.sql` on staging first, then production; redeploy the chat API with the webhook env set.
 
 Turn on **Anonymous** sign-ins in the staging Auth providers (or `enable_anonymous_sign_ins` locally). Apply `supabase/migrations/20260815180000_life_stores.sql` on staging before relying on backup.
 
 The app opens an anonymous session automatically when `EXPO_PUBLIC_SUPABASE_URL` + publishable key are set. Settings → Export & backup shows last sync and the recovery code.
 
-Apple Sign in can replace anonymous later (`linkIdentity`) without changing these tables.
+**Sign in with Apple** links the anonymous user (`linkIdentity` + IdToken) or reclaims on a new device (`signInWithIdToken`). Setup: App Store Connect capability + Supabase Apple provider + Manual linking — see [`AUTH_APPLE.md`](./AUTH_APPLE.md). Settings → Account exposes the UI; paywall / invite soft-nudge “Save with Apple”.
 
 ## Onboarding vs Apple App Privacy
 
@@ -99,9 +111,9 @@ Apple asks **what you collect** and **why**. Collecting unused fields is the fai
 
 Those are the product. They are **not** required for an account.
 
-**When we add Sign in with Apple (needs Developer account):**
+**Sign in with Apple (see `AUTH_APPLE.md`):**
 
-- Collect **User ID** only → App Functionality (sync later)
+- Collect **User ID** only → App Functionality (sync / seats)
 - Hide My Email / private relay — do not also ask for a personal email
 - Do **not** request name from Apple unless we show it in UI we cannot get another way
 - Notifications: optional permission, not an account field

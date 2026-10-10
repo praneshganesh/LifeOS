@@ -52,6 +52,7 @@ import {
 import {
   looksLikeReminder,
   looksLikeReminderQuery,
+  localDayKey,
   normalizeWarrantyExpiry,
   remindAtFromUtterance,
   parseReminderFromUtterance,
@@ -103,6 +104,18 @@ type LastDoneApi = {
     label: string;
     remindAt?: string;
     inventoryItemId?: string;
+  }>;
+  updateActivity?: (
+    id: string,
+    patch: {
+      label?: string;
+      notes?: string | null;
+      remindAt?: string | null;
+    }
+  ) => Promise<{
+    id: string;
+    label: string;
+    remindAt?: string;
   }>;
   remove?: (id: string) => Promise<void>;
 };
@@ -444,6 +457,12 @@ export type ApplyActionsResult = {
   removedClassTitle: string | null;
   habitCheckInTitle: string | null;
   habitStreak: number | null;
+  addedHabitTitle: string | null;
+  addedHabitWhy: string | null;
+  addedHabitAlready: boolean;
+  /** Habit title/why patched this turn. */
+  updatedHabit: boolean;
+  updatedHabitTitle: string | null;
   /** Distinct days marked in this turn (for natural multi-day replies). */
   habitCheckInDays: number;
   classPackTitle: string | null;
@@ -454,6 +473,8 @@ export type ApplyActionsResult = {
   classLogAttemptFor: string | null;
   reminderLabel: string | null;
   reminderAt: string | null;
+  /** Existing reminder due date / label was patched this turn. */
+  updatedReminder: boolean;
   removedLastDoneLabel: string | null;
   updatedClassPack: boolean;
   renamedPersonFrom: string | null;
@@ -536,6 +557,11 @@ export async function applyChatActions(
   let removedClassTitle: string | null = null;
   let habitCheckInTitle: string | null = null;
   let habitStreak: number | null = null;
+  let addedHabitTitle: string | null = null;
+  let addedHabitWhy: string | null = null;
+  let addedHabitAlready = false;
+  let updatedHabit = false;
+  let updatedHabitTitle: string | null = null;
   const habitCheckInDateSet = new Set<string>();
   let classPackTitle: string | null = null;
   let classPackRemaining: number | null = null;
@@ -545,6 +571,7 @@ export async function applyChatActions(
   let classLogAttemptFor: string | null = null;
   let reminderLabel: string | null = null;
   let reminderAt: string | null = null;
+  let updatedReminder = false;
   let removedLastDoneLabel: string | null = null;
   let updatedClassPack = false;
   let renamedPersonFrom: string | null = null;
@@ -559,7 +586,10 @@ export async function applyChatActions(
       : options?.lastTalkFocus
         ? null
         : options?.lastFocusExpenseId || null;
-  const list = ensureTalkActions(Array.isArray(actions) ? actions : [], lastUserText);
+  const list = ensureTalkActions(Array.isArray(actions) ? actions : [], lastUserText, {
+    talkFocus,
+    localDate: today,
+  });
 
   const remember = (kind: TalkFocus['kind'], id?: string | null) => {
     if (!id) return;
@@ -658,6 +688,24 @@ export async function applyChatActions(
         continue;
       }
 
+      if (!existingItem && options?.habits?.updateHabit) {
+        const habitId =
+          (options.habits.getById(action.id) ? action.id : undefined) ||
+          idFromTitleList(lastUserText, options.habitsList) ||
+          (talkFocus?.kind === 'habit' ? talkFocus.id : undefined);
+        const habitTitle =
+          action.patch?.name?.trim() || titleFromRenameUtterance(lastUserText);
+        if (habitId && habitTitle) {
+          await options.habits.updateHabit(habitId, { title: titleCase(habitTitle) });
+          const next = options.habits.getById(habitId);
+          updatedHabit = true;
+          updatedHabitTitle = next?.title || titleCase(habitTitle);
+          remember('habit', habitId);
+          console.log('[LifeOS chat] remapped update_item → update_habit', habitId);
+          continue;
+        }
+      }
+
       if (!existingItem && options?.subscriptions?.updateSubscription) {
         const subId =
           (options.subscriptions.getById?.(action.id)
@@ -701,6 +749,22 @@ export async function applyChatActions(
         const totalN =
           classTotalFromUtterance(lastUserText) ||
           (action.patch?.price != null ? Math.round(Number(parseAmount(action.patch.price))) : 0);
+        const renameTitle =
+          action.patch?.name?.trim() || titleFromRenameUtterance(lastUserText);
+        if (pack && renameTitle) {
+          await options.classes.updatePack(pack.id, { title: titleCase(renameTitle) });
+          const next = options.classes.getById(pack.id) || {
+            ...pack,
+            title: titleCase(renameTitle),
+          };
+          classPackTitle = next.title;
+          classPackRemaining = remainingCount(next);
+          classPackTotal = next.total;
+          updatedClassPack = true;
+          remember('class', pack.id);
+          console.log('[LifeOS chat] remapped update_item → update_class_pack title', pack.id);
+          continue;
+        }
         if (pack && Number.isFinite(totalN) && totalN > 0) {
           await options.classes.updatePack(pack.id, { total: totalN });
           const next = options.classes.getById(pack.id) || { ...pack, total: totalN };
@@ -774,7 +838,7 @@ export async function applyChatActions(
       }
       continue;
     }
-    if (action.type === 'update_expense' && action.id && options?.expenses?.updateExpense) {
+    if (action.type === 'update_expense' && options?.expenses?.updateExpense) {
       const patch: Parameters<ExpensesApi['updateExpense']>[1] = {};
       if (action.patch?.title?.trim()) patch.title = titleCase(action.patch.title);
       if (action.patch?.amount != null && action.patch.amount !== '') {
@@ -800,14 +864,18 @@ export async function applyChatActions(
       }
       if (action.patch?.note?.trim()) patch.note = action.patch.note.trim();
 
-      let id = action.id.trim();
-      if (!options.expenses.getById?.(id)) {
+      let id =
+        String(action.id || '').trim() ||
+        (talkFocus?.kind === 'expense' ? talkFocus.id : '') ||
+        lastExpenseFocus ||
+        '';
+      if (!id || !options.expenses.getById?.(id)) {
         id =
           resolveExpenseUpdateId({
             actionId: id,
             lastUserText,
             expensesList: options.expensesList,
-            lastFocusExpenseId: lastExpenseFocus,
+            lastFocusExpenseId: lastExpenseFocus || (talkFocus?.kind === 'expense' ? talkFocus.id : null),
             getById: options.expenses.getById,
             hasAmountPatch: patch.amount != null,
             hasPatch: Object.keys(patch).length > 0,
@@ -1172,12 +1240,16 @@ export async function applyChatActions(
             }
           : parseRecurringWeekdayReminder(lastUserText);
       const spokenAt = remindAtFromUtterance(lastUserText);
+      const modelAt = action.remindAt ? normalizeDateField(action.remindAt) : undefined;
+      // Prefer what the user said. If they named no day, ignore the model's
+      // invented date (it often picks tomorrow) and due today.
       const remindAt =
         (recurring?.remindAt
           ? normalizeDateField(recurring.remindAt)
           : undefined) ||
-        (action.remindAt ? normalizeDateField(action.remindAt) : undefined) ||
-        spokenAt;
+        spokenAt ||
+        (utteranceNamesRemindDate(lastUserText) ? modelAt : undefined) ||
+        today;
       if (!remindAt && !recurring?.remindInterval) {
         console.log('[LifeOS chat] skip set_reminder — no date', action.label);
         continue;
@@ -1225,6 +1297,48 @@ export async function applyChatActions(
       remember('lastDone', saved.id);
       if (inventoryItemId) focusItemId = inventoryItemId;
       console.log('[LifeOS chat] applied set_reminder', saved.label, remindAt);
+      continue;
+    }
+    if (action.type === 'update_last_done' && options?.lastDone?.updateActivity) {
+      const id =
+        action.id?.trim() ||
+        idFromLabelList(
+          `${lastUserText || ''} ${action.label || ''}`,
+          options.lastDoneList
+        ) ||
+        (talkFocus?.kind === 'lastDone' ? talkFocus.id : '') ||
+        '';
+      const row = options.lastDoneList?.find((d) => d.id === id);
+      if (!id || (!row && options.lastDoneList)) {
+        console.log('[LifeOS chat] skip update_last_done — missing id', action);
+        continue;
+      }
+      const spokenAt = remindAtFromUtterance(lastUserText);
+      const patchRemindAt =
+        spokenAt ||
+        (action.patch?.remindAt != null
+          ? action.patch.remindAt === null
+            ? null
+            : normalizeDateField(action.patch.remindAt)
+          : undefined);
+      const patch: {
+        label?: string;
+        notes?: string | null;
+        remindAt?: string | null;
+      } = {};
+      if (action.patch?.label?.trim()) patch.label = action.patch.label.trim();
+      if (action.patch?.notes !== undefined) patch.notes = action.patch.notes;
+      if (patchRemindAt !== undefined) patch.remindAt = patchRemindAt;
+      if (!Object.keys(patch).length) {
+        console.log('[LifeOS chat] skip update_last_done — empty patch');
+        continue;
+      }
+      const saved = await options.lastDone.updateActivity(id, patch);
+      reminderLabel = saved.label || row?.label || null;
+      reminderAt = saved.remindAt || (typeof patch.remindAt === 'string' ? patch.remindAt : null);
+      updatedReminder = true;
+      remember('lastDone', saved.id || id);
+      console.log('[LifeOS chat] applied update_last_done', id, patch);
       continue;
     }
     if (action.type === 'add_expense' && action.title?.trim() && options?.expenses) {
@@ -1339,6 +1453,7 @@ export async function applyChatActions(
       const id =
         String(action.id || '').trim() ||
         idFromTitleList(lastUserText, options.subscriptionsList) ||
+        (talkFocus?.kind === 'subscription' ? talkFocus.id : '') ||
         '';
       const row =
         options.subscriptions.getById?.(id) ||
@@ -1399,6 +1514,67 @@ export async function applyChatActions(
         clearedFocus = true;
       }
       console.log('[LifeOS chat] applied remove_subscription', id);
+      continue;
+    }
+    if (action.type === 'add_habit' && action.title?.trim() && options?.habits) {
+      const title = titleCase(action.title.trim());
+      const person = await ensurePerson(
+        resolveAssignment({
+          assignedTo: action.assignedTo,
+          personId: action.personId,
+          utterance: lastUserText,
+          members: household,
+          preferSelf: true,
+        })
+      );
+      const why = action.why?.trim() || habitDetailFromUtterance(lastUserText);
+      let habit =
+        options.habits.findByTitle(action.title.trim(), person?.personId) ||
+        options.habits.findByTitle(title, person?.personId);
+      if (habit) {
+        addedHabitAlready = true;
+        addedHabitTitle = habit.title;
+        addedHabitWhy = habit.why || why || null;
+      } else {
+        habit = await options.habits.addHabit({
+          title,
+          why,
+          personId: person?.personId,
+          assignedTo: person?.assignedTo,
+        });
+        addedHabitTitle = habit.title;
+        addedHabitWhy = habit.why || why || null;
+      }
+      remember('habit', habit.id);
+      console.log('[LifeOS chat] applied add_habit', habit.id, habit.title, addedHabitAlready ? 'existing' : 'new');
+      continue;
+    }
+    if (action.type === 'update_habit' && options?.habits?.updateHabit) {
+      const id =
+        action.id?.trim() ||
+        idFromTitleList(`${lastUserText || ''} ${action.title || ''}`, options.habitsList) ||
+        (talkFocus?.kind === 'habit' ? talkFocus.id : '') ||
+        '';
+      const habit = id ? options.habits.getById(id) : undefined;
+      if (!id || !habit) {
+        console.log('[LifeOS chat] skip update_habit — missing id', action);
+        continue;
+      }
+      const spokenTitle = titleFromRenameUtterance(lastUserText);
+      const patch: Partial<Habit> = {};
+      const nextTitle = action.patch?.title?.trim() || spokenTitle;
+      if (nextTitle) patch.title = titleCase(nextTitle);
+      if (action.patch?.why?.trim()) patch.why = action.patch.why.trim();
+      if (!Object.keys(patch).length) {
+        console.log('[LifeOS chat] skip update_habit — empty patch');
+        continue;
+      }
+      await options.habits.updateHabit(id, patch);
+      const next = options.habits.getById(id) || { ...habit, ...patch };
+      updatedHabit = true;
+      updatedHabitTitle = next.title;
+      remember('habit', id);
+      console.log('[LifeOS chat] applied update_habit', id, patch);
       continue;
     }
     if (action.type === 'habit_check_in' && action.title?.trim() && options?.habits) {
@@ -1841,6 +2017,11 @@ export async function applyChatActions(
     habitCheckInTitle,
     habitStreak,
     habitCheckInDays: habitCheckInDateSet.size,
+    addedHabitTitle,
+    addedHabitWhy,
+    addedHabitAlready,
+    updatedHabit,
+    updatedHabitTitle,
     classPackTitle,
     classPackRemaining,
     classPackTotal,
@@ -1849,6 +2030,7 @@ export async function applyChatActions(
     classLogAttemptFor,
     reminderLabel,
     reminderAt,
+    updatedReminder,
     removedLastDoneLabel,
     updatedClassPack,
     renamedPersonFrom,
@@ -2022,13 +2204,245 @@ function inventoryIdFromUtterance(
   return hit?.id;
 }
 
+
+function looksLikeCreateHabit(text?: string): boolean {
+  const t = (text || '').trim();
+  if (!t) return false;
+  const create =
+    /\b(create|add|make|start|set up|setup|track)\b[\s\S]{0,60}\bhabits?\b/i.test(t) ||
+    /\b(new|another)\s+habits?\b/i.test(t) ||
+    /\bhabits?\s+(to|for|called|named)\b/i.test(t);
+  if (!create) return false;
+  if (
+    /\b(mark( it| today)? done|already (did|done)|check(ed)? (it )?in|i (just |already )?(did|finished|completed) (it|today|my))\b/i.test(
+      t
+    )
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function habitDetailFromUtterance(text?: string): string | undefined {
+  const t = text || '';
+  const bits: string[] = [];
+  const mins = t.match(/\b(\d+)\s*(?:min|mins|minutes)\b/i);
+  if (mins) bits.push(`${mins[1]} minutes`);
+  if (/\bevery\s+day\b|\bdaily\b/i.test(t)) bits.push('every day');
+  return bits.length ? bits.join(', ') : undefined;
+}
+
+function habitTitleFromCreateUtterance(text?: string): string | undefined {
+  const t = (text || '').trim();
+  const m = t.match(/\bhabits?\s+(?:to|for|called|named)\s+(.+)/i);
+  if (!m?.[1]) return undefined;
+  const rest = m[1]
+    .replace(/\b(every\s+day|daily|for\s+\d+\s*(?:min|mins|minutes))\b/gi, ' ')
+    .replace(/[.,!?]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^(a|an|the)\s+/i, '');
+  if (!rest) return undefined;
+  const word = rest.split(/\s+/).slice(0, 4).join(' ');
+  return word.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function utteranceNamesRemindDate(text?: string): boolean {
+  if (!text?.trim()) return false;
+  return (
+    /\b(today|tomorrow|tonight)\b/i.test(text) ||
+    /\bnext\s+(week|month|year|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/i.test(
+      text
+    ) ||
+    /\b(?:on|this)\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/i.test(
+      text
+    ) ||
+    /\bin\s+\d{1,3}\s+days?\b/i.test(text) ||
+    /\b\d{4}-\d{2}-\d{2}\b/.test(text) ||
+    /\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/i.test(
+      text
+    )
+  );
+}
+
+function looksLikeReminderDateUpdate(text?: string): boolean {
+  if (!text?.trim()) return false;
+  if (looksLikeReminder(text)) return false;
+  const t = text.trim();
+  const cue =
+    /\b(update|change|move|set|reschedule|push|make)\b.{0,48}\b(due|date|remind(?:er)?)\b/i.test(
+      t
+    ) ||
+    /\b(due\s+date|remind(?:er)?\s+(?:date|to|for))\b/i.test(t) ||
+    /\b(due|date)\s+(to|for|on)\b/i.test(t);
+  return cue && (Boolean(remindAtFromUtterance(t)) || utteranceNamesRemindDate(t));
+}
+
+/** "change the name to X" / "rename it to X" / "call it X" follow-ups. */
+function looksLikeFocusedRename(text?: string): boolean {
+  if (!text?.trim()) return false;
+  if (looksLikeReminder(text) || looksLikeReminderDateUpdate(text)) return false;
+  if (looksLikeCreateHabit(text)) return false;
+  const t = text.trim();
+  return (
+    /\b(change|update|set|rename)\b.{0,40}\b(name|title|label)\b/i.test(t) ||
+    /\b(rename|name)\s+(it|that|this)\b/i.test(t) ||
+    /\bcall\s+(it|that|this)\b/i.test(t) ||
+    /\bit'?s\s+(called|named)\b/i.test(t)
+  );
+}
+
+function titleFromRenameUtterance(text?: string): string | undefined {
+  if (!text?.trim()) return undefined;
+  const t = text.trim();
+  const patterns = [
+    /\b(?:change|update|set|rename)\b.{0,40}\b(?:name|title|label)\b.{0,16}\b(?:to|as)\s+["']?(.+?)["']?\s*[.!?]?$/i,
+    /\b(?:rename|name)\s+(?:it|that|this)(?:\s+habit|\s+expense|\s+subscription|\s+class|\s+reminder|\s+item)?\s+(?:to|as)\s+["']?(.+?)["']?\s*[.!?]?$/i,
+    /\bcall\s+(?:it|that|this)\s+["']?(.+?)["']?\s*[.!?]?$/i,
+    /\bit'?s\s+(?:called|named)\s+["']?(.+?)["']?\s*[.!?]?$/i,
+    /\bmake\s+(?:the\s+)?(?:name|title)\s+["']?(.+?)["']?\s*[.!?]?$/i,
+  ];
+  for (const re of patterns) {
+    const m = t.match(re);
+    const raw = m?.[1]?.trim().replace(/[.!?]+$/, '').trim();
+    if (raw && raw.length >= 1 && raw.length <= 80) return raw;
+  }
+  return undefined;
+}
+
+function injectFocusedRename(
+  list: ChatAction[],
+  lastUserText: string | undefined,
+  talkFocus: TalkFocus | null | undefined
+): ChatAction[] {
+  if (!talkFocus?.id || !looksLikeFocusedRename(lastUserText)) return list;
+  const title = titleFromRenameUtterance(lastUserText);
+  if (!title) return list;
+
+  const next = list.filter((a) => {
+    if (a.type === 'add_habit' || a.type === 'add_expense' || a.type === 'add_subscription') {
+      return false;
+    }
+    if (a.type === 'add_class_pack' || a.type === 'add_item' || a.type === 'set_reminder') {
+      return false;
+    }
+    return true;
+  });
+
+  const patchExisting = (): boolean => {
+    for (const a of next) {
+      if (talkFocus.kind === 'habit' && a.type === 'update_habit') {
+        a.id = a.id || talkFocus.id;
+        a.patch = { ...a.patch, title: titleCase(title) };
+        return true;
+      }
+      if (talkFocus.kind === 'expense' && a.type === 'update_expense') {
+        a.id = a.id || talkFocus.id;
+        a.patch = { ...a.patch, title: titleCase(title) };
+        return true;
+      }
+      if (talkFocus.kind === 'subscription' && a.type === 'update_subscription') {
+        a.id = a.id || talkFocus.id;
+        a.patch = { ...a.patch, title: titleCase(title) };
+        return true;
+      }
+      if (talkFocus.kind === 'class' && a.type === 'update_class_pack') {
+        a.id = a.id || talkFocus.id;
+        a.patch = { ...a.patch, title: titleCase(title) };
+        return true;
+      }
+      if (talkFocus.kind === 'item' && a.type === 'update_item') {
+        a.id = a.id || talkFocus.id;
+        a.patch = { ...a.patch, name: titleCase(title) };
+        return true;
+      }
+      if (talkFocus.kind === 'lastDone' && a.type === 'update_last_done') {
+        a.id = a.id || talkFocus.id;
+        a.patch = { ...a.patch, label: titleCase(title) };
+        return true;
+      }
+    }
+    return false;
+  };
+
+  if (patchExisting()) return next;
+
+  switch (talkFocus.kind) {
+    case 'habit':
+      next.push({
+        type: 'update_habit',
+        id: talkFocus.id,
+        patch: { title: titleCase(title) },
+      });
+      break;
+    case 'expense':
+      next.push({
+        type: 'update_expense',
+        id: talkFocus.id,
+        patch: { title: titleCase(title) },
+      });
+      break;
+    case 'subscription':
+      next.push({
+        type: 'update_subscription',
+        id: talkFocus.id,
+        patch: { title: titleCase(title) },
+      });
+      break;
+    case 'class':
+      next.push({
+        type: 'update_class_pack',
+        id: talkFocus.id,
+        patch: { title: titleCase(title) },
+      });
+      break;
+    case 'item':
+      next.push({
+        type: 'update_item',
+        id: talkFocus.id,
+        patch: { name: titleCase(title) },
+      });
+      break;
+    case 'lastDone':
+      next.push({
+        type: 'update_last_done',
+        id: talkFocus.id,
+        patch: { label: titleCase(title) },
+      });
+      break;
+    default:
+      break;
+  }
+  return next;
+}
+
 function ensureTalkActions(
   actions: ChatAction[],
-  lastUserText?: string
+  lastUserText?: string,
+  opts?: { talkFocus?: TalkFocus | null; localDate?: string }
 ): ChatAction[] {
-  let list = actions.filter((a) => a && a.type !== 'none');
+  let list: ChatAction[] = actions.filter((a) => a && a.type !== 'none');
   if (looksLikeClassEnrollment(lastUserText)) {
     list = list.filter((a) => a.type !== 'habit_check_in');
+  }
+  if (looksLikeCreateHabit(lastUserText)) {
+    const why = habitDetailFromUtterance(lastUserText);
+    const spokenTitle = habitTitleFromCreateUtterance(lastUserText);
+    let converted = false;
+    list = list.map((a) => {
+      if (a.type !== 'habit_check_in') return a;
+      converted = true;
+      return {
+        type: 'add_habit',
+        title: spokenTitle || a.title,
+        why: ('why' in a && a.why) || why,
+        assignedTo: a.assignedTo,
+        personId: a.personId,
+      };
+    });
+    if (!converted && !list.some((a) => a.type === 'add_habit') && spokenTitle) {
+      list.push({ type: 'add_habit', title: spokenTitle, why });
+    }
   }
   const types = new Set(list.map((a) => a.type));
   if (looksLikeClassEnrollment(lastUserText) && !types.has('add_class_pack')) {
@@ -2050,9 +2464,32 @@ function ensureTalkActions(
   if (looksLikeReminderQuery(lastUserText)) {
     return list.length ? list.filter((a) => a.type !== 'set_reminder') : actions;
   }
+  if (looksLikeReminderDateUpdate(lastUserText)) {
+    list = list.filter((a) => a.type !== 'set_reminder');
+    const focusId =
+      opts?.talkFocus?.kind === 'lastDone' ? opts.talkFocus.id : undefined;
+    const spokenAt = remindAtFromUtterance(lastUserText);
+    const existing = list.find((a) => a.type === 'update_last_done');
+    if (existing && existing.type === 'update_last_done') {
+      if (spokenAt) existing.patch = { ...existing.patch, remindAt: spokenAt };
+      if (!existing.id && focusId) existing.id = focusId;
+    } else if (focusId || spokenAt) {
+      list.push({
+        type: 'update_last_done',
+        id: focusId,
+        patch: { remindAt: spokenAt },
+      });
+    }
+    return list.length ? list : actions;
+  }
+  if (looksLikeFocusedRename(lastUserText) && opts?.talkFocus?.id) {
+    list = injectFocusedRename(list, lastUserText, opts.talkFocus);
+    return list.length ? list : actions;
+  }
   if (looksLikeReminder(lastUserText) && !types.has('set_reminder')) {
     const recurring = parseRecurringWeekdayReminder(lastUserText);
-    const remindAt = remindAtFromUtterance(lastUserText);
+    // Default to today when the user didn't name a day — silent skip felt broken.
+    const remindAt = remindAtFromUtterance(lastUserText) || localDayKey();
     const label = reminderLabelFromUtterance(lastUserText) || 'Reminder';
     if (remindAt || recurring) {
       list.push({
@@ -2085,6 +2522,8 @@ function sanitizeReply(reply: string, actions: ChatAction[]) {
   if (types.includes('add_subscription')) return 'Added that subscription.';
   if (types.includes('update_subscription')) return 'Updated that subscription.';
   if (types.includes('remove_subscription')) return 'Removed that subscription.';
+  if (types.includes('add_habit')) return 'Added that habit.';
+  if (types.includes('update_habit')) return 'Updated that habit.';
   if (types.includes('habit_check_in')) return 'Got it.';
   if (types.includes('remove_habit')) return 'Removed that habit.';
   if (types.includes('add_class_pack')) return 'Added that class.';
@@ -2094,6 +2533,7 @@ function sanitizeReply(reply: string, actions: ChatAction[]) {
   if (types.includes('update_item')) return 'Updated.';
   if (types.includes('log_done')) return 'Marked that as done.';
   if (types.includes('set_reminder')) return 'Reminder set.';
+  if (types.includes('update_last_done')) return 'Updated that reminder.';
   if (types.includes('remove_last_done')) return 'Removed that activity.';
   if (types.includes('remove_item')) return 'Removed from your inventory.';
   return 'Anything else?';
@@ -2114,5 +2554,9 @@ export function normalizeAgentResponse(raw: unknown): ChatAgentResponse {
     typeof obj.reply === 'string'
       ? sanitizeReply(obj.reply, actions)
       : sanitizeReply('', actions);
-  return { reply, actions };
+  const aiAllowance =
+    obj.aiAllowance && typeof obj.aiAllowance === 'object'
+      ? (obj.aiAllowance as ChatAgentResponse['aiAllowance'])
+      : undefined;
+  return { reply, actions, aiAllowance };
 }

@@ -10,8 +10,6 @@ import { Check } from 'lucide-react-native';
 import { Screen } from '@/components/ui/Screen';
 import { KeyboardFormScroll } from '@/components/ui/KeyboardFormScroll';
 import {
-  DetailChip,
-  DetailChipRow,
   DetailField,
   DetailPrimaryButton,
   DetailSection,
@@ -24,6 +22,7 @@ import { useToast } from '@/lib/ToastContext';
 import { useInventory } from '@/lib/InventoryContext';
 import { useHousehold } from '@/lib/HouseholdContext';
 import { PersonChips } from '@/components/PersonChips';
+import { ThingLinkPicker } from '@/components/ThingLinkPicker';
 import { dayKey } from '@/lib/habits';
 import { type ThemeColors, fonts, radius, spacing } from '@/constants/theme';
 
@@ -48,7 +47,6 @@ export default function CreateHabitScreen() {
     () =>
       items
         .filter((i) => !i.isDocument)
-        .slice(0, 40)
         .sort((a, b) => a.name.localeCompare(b.name)),
     [items]
   );
@@ -141,27 +139,13 @@ export default function CreateHabitScreen() {
           </View>
         </Pressable>
 
-        {linkables.length ? (
-          <DetailSection label="About a Thing?">
-            <DetailChipRow>
-              <DetailChip
-                label="None"
-                selected={!linkId}
-                onPress={() => setLinkId(null)}
-                accent={accent}
-              />
-              {linkables.map((item) => (
-                <DetailChip
-                  key={item.id}
-                  label={item.name}
-                  selected={linkId === item.id}
-                  onPress={() => setLinkId(item.id)}
-                  accent={accent}
-                />
-              ))}
-            </DetailChipRow>
-          </DetailSection>
-        ) : null}
+        <DetailSection label="About a Thing?">
+          <ThingLinkPicker
+            items={linkables}
+            selectedId={linkId}
+            onSelect={setLinkId}
+          />
+        </DetailSection>
 
       </KeyboardFormScroll>
       <DetailStickyActions>

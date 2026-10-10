@@ -225,7 +225,7 @@ export default function DataSettingsScreen() {
           <Text variant="caption" style={{ color: colors.ink, marginTop: 4 }}>
             {loadFailures.length} store{loadFailures.length === 1 ? '' : 's'} failed to
             read this session. The original data was backed up on this phone and is
-            not lost — don’t wipe data, and contact support.
+            not lost. Don’t wipe data, and contact support.
           </Text>
         </View>
       ) : null}
@@ -251,13 +251,13 @@ export default function DataSettingsScreen() {
           <ListRow
             icon="package"
             title={busy ? 'Working…' : 'Backup now'}
-            subtitle="JSON snapshot — photos stay on this phone"
+            subtitle="JSON snapshot. Photos stay on this phone"
             onPress={() => void onSync()}
           />
           <ListRow
             icon="key"
             title={showCode ? 'Hide recovery code' : 'Show recovery code'}
-            subtitle="Needed to restore on a new phone — treat it like a password"
+            subtitle="Needed to restore on a new phone. Treat it like a password"
             onPress={() => setShowCode((v) => !v)}
             last
           />

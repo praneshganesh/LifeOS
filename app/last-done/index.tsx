@@ -1086,10 +1086,8 @@ function makeStyles(colors: ThemeColors) {
     fontSize: 16,
   },
   listCard: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
     overflow: 'hidden',
     ...shadows.soft,
   },
@@ -1134,13 +1132,11 @@ function makeStyles(colors: ThemeColors) {
     paddingVertical: spacing.md,
   },
   emptyList: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     borderRadius: radius.lg,
     paddingVertical: spacing.xxl,
     paddingHorizontal: spacing.lg,
     alignItems: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
   },
   emptyHint: {
     marginTop: spacing.sm,

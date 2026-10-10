@@ -155,14 +155,16 @@ export function ModuleSection({
   label,
   count,
   children,
+  style,
 }: {
   label: string;
   count?: number;
   children: ReactNode;
+  style?: object;
 }) {
   const { colors } = useTheme();
   return (
-    <View style={styles.section}>
+    <View style={[styles.section, style]}>
       <View style={styles.sectionHead}>
         <Text style={[styles.sectionLabel, { color: colors.ink }]}>
           {label}

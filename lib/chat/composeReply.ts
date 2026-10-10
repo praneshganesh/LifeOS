@@ -62,6 +62,11 @@ export function composeAppliedReply(params: {
   habitCheckInTitle?: string | null;
   habitStreak?: number | null;
   habitCheckInDays?: number | null;
+  addedHabitTitle?: string | null;
+  addedHabitWhy?: string | null;
+  addedHabitAlready?: boolean;
+  updatedHabit?: boolean;
+  updatedHabitTitle?: string | null;
   classPackTitle?: string | null;
   classPackRemaining?: number | null;
   classPackTotal?: number | null;
@@ -70,6 +75,7 @@ export function composeAppliedReply(params: {
   classLogAttemptFor?: string | null;
   reminderLabel?: string | null;
   reminderAt?: string | null;
+  updatedReminder?: boolean;
   removedLastDoneLabel?: string | null;
   updatedClassPack?: boolean;
   renamedPersonFrom?: string | null;
@@ -180,6 +186,22 @@ export function composeAppliedReply(params: {
     return 'Couldn’t update that subscription — name it first.';
   }
 
+  if (params.updatedHabitTitle?.trim()) {
+    return `Renamed habit to ${params.updatedHabitTitle.trim()}.`;
+  }
+  if (actions.some((a) => a?.type === 'update_habit')) {
+    return 'Couldn’t update that habit — open it first.';
+  }
+
+  if (params.addedHabitTitle?.trim()) {
+    const name = params.addedHabitTitle.trim();
+    if (params.addedHabitAlready) {
+      return `You already have ${name}. I didn’t mark today done.`;
+    }
+    const why = params.addedHabitWhy?.trim();
+    return why ? `Added ${name} — ${why}.` : `Added ${name}.`;
+  }
+
   if (params.habitCheckInTitle?.trim()) {
     const fromActions = actions.filter((a) => a?.type === 'habit_check_in').length;
     const days = Math.max(1, params.habitCheckInDays || fromActions || 1);
@@ -191,9 +213,18 @@ export function composeAppliedReply(params: {
 
   if (params.reminderLabel) {
     const when = formatRemindDay(params.reminderAt);
+    if (params.updatedReminder) {
+      return when
+        ? `Updated: ${params.reminderLabel} · due ${when}.`
+        : `Updated: ${params.reminderLabel}.`;
+    }
     return when
       ? `Reminder set: ${params.reminderLabel} · ${when}.`
       : `Reminder set: ${params.reminderLabel}.`;
+  }
+
+  if (actions.some((a) => a?.type === 'update_last_done')) {
+    return 'Couldn’t update that reminder — open it first.';
   }
 
   if (actions.some((a) => a?.type === 'set_reminder')) {

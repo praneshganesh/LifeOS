@@ -160,7 +160,7 @@ export default function SearchScreen() {
                     onPress={() => router.push(hit.href as Href)}
                     onEdit={
                       getById(hit.id)
-                        ? () => router.push(`/asset/edit/${hit.id}` as Href)
+                        ? () => router.push(`/asset/${hit.id}` as Href)
                         : undefined
                     }
                     onDelete={

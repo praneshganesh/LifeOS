@@ -29,7 +29,7 @@ export function corsHeaders(origin, allowlist) {
   return {
     'Access-Control-Allow-Origin': value,
     'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Saavi-Proxy-Token, X-Chat-Token',
     Vary: 'Origin',
   };
 }

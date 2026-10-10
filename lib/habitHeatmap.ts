@@ -51,16 +51,20 @@ export function daysInMonth(year: number, monthIndex: number): number {
 export function buildHabitYearCalendar(
   logs: HabitLog[],
   year: number,
-  opts?: { monthLabels?: readonly string[] }
+  opts?: { monthLabels?: readonly string[]; /** Only these months (0–11). */ months?: number[] }
 ): HabitYearCalendarModel {
   const done = new Set(
     logs.filter((l) => l.doneAt.startsWith(`${year}-`)).map((l) => l.doneAt)
   );
   const labels = opts?.monthLabels ?? MONTH_LABELS;
   const dayHeaders = Array.from({ length: CALENDAR_DAYS }, (_, i) => i + 1);
+  const monthIndexes =
+    opts?.months?.length
+      ? opts.months.filter((m) => m >= 0 && m < CALENDAR_MONTHS)
+      : Array.from({ length: CALENDAR_MONTHS }, (_, i) => i);
 
   const months: CalendarMonthRow[] = [];
-  for (let m = 0; m < CALENDAR_MONTHS; m++) {
+  for (const m of monthIndexes) {
     const dim = daysInMonth(year, m);
     const cells: CalendarCell[] = [];
     for (let day = 1; day <= CALENDAR_DAYS; day++) {
@@ -83,6 +87,18 @@ export function buildHabitYearCalendar(
   }
 
   return { year, months, dayHeaders };
+}
+
+/** Current calendar month only — default heatmap scope. */
+export function buildHabitMonthCalendar(
+  logs: HabitLog[],
+  when: Date = new Date(),
+  opts?: { monthLabels?: readonly string[] }
+): HabitYearCalendarModel {
+  return buildHabitYearCalendar(logs, when.getFullYear(), {
+    monthLabels: opts?.monthLabels,
+    months: [when.getMonth()],
+  });
 }
 
 /** Cell size that fits 31 columns (+ gaps) into a width. */

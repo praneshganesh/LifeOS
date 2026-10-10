@@ -10,6 +10,10 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.praneshganesh.lifeos",
+      "usesAppleSignIn": true,
+      "entitlements": {
+        "com.apple.developer.applesignin": ["Default"]
+      },
       "infoPlist": {
         "NSSpeechRecognitionUsageDescription": "Saavi uses on-device speech recognition for Talk.",
         "NSMicrophoneUsageDescription": "Saavi needs the microphone so you can add things by talking.",
@@ -42,6 +46,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-apple-authentication",
       [
         "expo-splash-screen",
         {

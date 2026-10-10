@@ -29,6 +29,8 @@ export type Subscription = {
   personId?: string;
   source?: 'manual' | 'talk' | 'capture';
   createdAt: string;
+  /** Last local mutation — LWW clock for row sync. */
+  updatedAt?: string;
 };
 
 export type NewSubscriptionInput = {
@@ -223,5 +225,6 @@ export function normalizeSubscription(raw: unknown): Subscription | null {
     personId: o.personId,
     source: o.source || 'manual',
     createdAt: o.createdAt || new Date().toISOString(),
+    updatedAt: typeof o.updatedAt === 'string' ? o.updatedAt : undefined,
   };
 }

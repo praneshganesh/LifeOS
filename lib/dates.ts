@@ -207,6 +207,9 @@ export function remindAtFromUtterance(text?: string, from = new Date()): string 
     d.setDate(d.getDate() + 1);
     return localDayKey(d);
   }
+  if (/\btoday\b/i.test(text)) {
+    return localDayKey(from);
+  }
   const inDays = text.match(/\bin\s+(\d{1,3})\s+days?\b/i);
   if (inDays) {
     const n = Number(inDays[1]);

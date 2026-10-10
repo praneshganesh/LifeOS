@@ -1,10 +1,10 @@
+import { useRouter, type Href } from 'expo-router';
 import { DETAIL_DOCK_PAD } from '@/components/ui/DetailKit';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { ListCard, ListRow } from '@/components/ui/ListKit';
-import { Text } from '@/components/ui/Text';
-import { spacing } from '@/constants/theme';
 
 export default function PrivacySettingsScreen() {
+  const router = useRouter();
   return (
     <ModuleScreen
       title="Privacy"
@@ -12,60 +12,69 @@ export default function PrivacySettingsScreen() {
       backFallbackHref="/settings"
       bottomExtra={DETAIL_DOCK_PAD}
     >
-      <Text variant="body" style={{ marginBottom: spacing.lg }}>
-        Saavi stores your inventory, family, spend, habits, and documents
-        securely in the cloud, so your data survives a lost phone and follows
-        you across devices. Talk and Ask send short text plus a compact summary
-        to the chat API so the assistant can answer — never your photos.
-      </Text>
-
-      <ModuleSection label="Your records">
+      <ModuleSection label="Your data">
         <ListCard>
           <ListRow
-            title="Things & spaces"
-            subtitle="Inventory, rooms, warranties"
-            meta="Cloud"
+            title="On your phone first"
+            subtitle="Works offline. Syncs when you’re signed in."
           />
           <ListRow
-            title="Money & habits"
-            subtitle="Expenses, subscriptions, habit logs"
-            meta="Cloud"
-          />
-          <ListRow
-            title="Family & Last Done"
-            subtitle="Household people, maintenance history"
-            meta="Cloud"
+            title="Photos & documents"
+            subtitle="Stay with your account for backup. Not used for ads."
             last
           />
         </ListCard>
       </ModuleSection>
 
-      <ModuleSection label="Sent when you use Talk / Ask">
+      <ModuleSection label="Capture">
         <ListCard>
           <ListRow
-            title="Chat messages"
-            subtitle="What you type or say in that turn"
-            meta="API"
+            title="Text reading"
+            subtitle="On-device only when AI is On."
           />
           <ListRow
-            title="Short inventory summary"
-            subtitle="Names, rooms, key dates — not photos"
-            meta="API"
+            title="Identify with AI"
+            subtitle="Only if you tap it. Off when AI is Off."
             last
           />
         </ListCard>
       </ModuleSection>
 
-      <ModuleSection label="Never">
+      <ModuleSection label="Talk & Ask">
         <ListCard>
-          <ListRow title="Gmail / email import" subtitle="Not required" meta="Off" />
-          <ListRow title="Bank / payment import" subtitle="Not required" meta="Off" />
           <ListRow
-            title="Product analytics"
-            subtitle="No content telemetry"
-            meta="Off"
+            title="What gets sent"
+            subtitle="That turn’s message plus a short summary of names, rooms, and dates."
+          />
+          <ListRow
+            title="What stays put"
+            subtitle="Your photos and full documents are not uploaded for chat."
             last
           />
+        </ListCard>
+      </ModuleSection>
+
+      <ModuleSection label="Policies">
+        <ListCard>
+          <ListRow
+            title="Privacy policy"
+            subtitle="What Saavi stores and what it sends"
+            onPress={() => router.push('/settings/privacy-policy' as Href)}
+          />
+          <ListRow
+            title="Terms"
+            subtitle="Subscription, trial, and the Apple license"
+            onPress={() => router.push('/settings/terms' as Href)}
+            last
+          />
+        </ListCard>
+      </ModuleSection>
+
+      <ModuleSection label="We never">
+        <ListCard>
+          <ListRow title="Link Gmail or your bank" />
+          <ListRow title="Sell your content" />
+          <ListRow title="Scan your camera roll in the background" last />
         </ListCard>
       </ModuleSection>
     </ModuleScreen>

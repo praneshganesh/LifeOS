@@ -25,8 +25,10 @@ export type Expense = {
   date: string;
   merchant?: string;
   note?: string;
-  /** Local receipt image URI */
+  /** Local receipt image URI (device only) */
   receiptUri?: string;
+  /** Private Storage path once the receipt is uploaded */
+  receiptPath?: string;
   /** POS slip / transaction id from OCR — used to block re-scans */
   receiptRef?: string;
   /** Optional link to a Thing */
@@ -34,6 +36,8 @@ export type Expense = {
   personId?: string;
   source?: 'manual' | 'talk' | 'capture' | 'apple_pay';
   createdAt: string;
+  /** Last local mutation — LWW clock for row sync */
+  updatedAt?: string;
 };
 
 export type NewExpenseInput = {
@@ -232,10 +236,12 @@ export function normalizeExpense(raw: unknown): Expense | null {
     merchant: o.merchant,
     note: o.note,
     receiptUri: o.receiptUri,
+    receiptPath: typeof o.receiptPath === 'string' && o.receiptPath ? o.receiptPath : undefined,
     receiptRef: o.receiptRef,
     inventoryItemId: o.inventoryItemId,
     personId: o.personId,
     source: o.source || 'manual',
     createdAt: o.createdAt || new Date().toISOString(),
+    updatedAt: typeof o.updatedAt === 'string' ? o.updatedAt : undefined,
   };
 }

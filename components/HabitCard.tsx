@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -10,7 +10,6 @@ import { Check } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import {
   paintHabitCategory,
-  completionRate,
   currentStreak,
   loggedOn,
   type Habit,
@@ -18,6 +17,7 @@ import {
 } from '@/lib/habits';
 import {
   CALENDAR_DAYS,
+  buildHabitMonthCalendar,
   buildHabitYearCalendar,
   cellSizeForWidth,
   type CalendarCell,
@@ -95,41 +95,50 @@ function DayCell({
   );
 }
 
+export type HabitHeatmapRange = 'month' | 'year';
+
 function HabitYearCalendar({
   habit,
   year,
+  range,
   interactive,
   onToggleDay,
-  compact,
+  showRangeToggle,
+  onRangeChange,
 }: {
   habit: Habit;
   year: number;
+  range: HabitHeatmapRange;
   interactive: boolean;
   onToggleDay?: (dateKey: string) => void;
-  compact?: boolean;
+  showRangeToggle?: boolean;
+  onRangeChange?: (next: HabitHeatmapRange) => void;
 }) {
   const { colors } = useTheme();
   const [innerW, setInnerW] = useState(0);
+  const now = useMemo(() => new Date(), []);
   const model = useMemo(
-    () => buildHabitYearCalendar(habit.logs, year),
-    [habit.logs, year]
+    () =>
+      range === 'month'
+        ? buildHabitMonthCalendar(habit.logs, new Date(year, now.getMonth(), 1))
+        : buildHabitYearCalendar(habit.logs, year),
+    [habit.logs, year, range, now]
   );
 
-  // Measure the days track only (month labels sit outside). Cells are heatmap
-  // squares, not text — they must shrink so all 31 columns fit the card.
+  // Measure the days track only (month labels sit outside).
   const trackBudget = Math.max(0, innerW - MONTH_LABEL_W);
   const cell = cellSizeForWidth(trackBudget, GAP, {
-    min: 4,
-    max: 14,
+    min: range === 'month' ? 8 : 4,
+    max: range === 'month' ? 18 : 14,
   });
   const trackW = daysTrackWidth(cell, GAP);
   const ready = trackBudget > 0;
-  // Chart axis micro-labels — must fit inside cell-height rows, so they scale
-  // with the grid instead of following the app-wide 16px text floor.
   const labelFs = Math.max(10, Math.min(13, cell + 3));
-  // Row pitch follows the label, not the cell: an 11px label in an 8px-tall
-  // row bleeds into its neighbors and clips descenders (Aug → "Aua").
   const rowH = Math.max(cell, labelFs + 4);
+  // Row header already shows the month — caption is legend only.
+  const caption = habit.logs.length
+    ? 'Filled = done'
+    : 'Tap a day to mark done';
 
   function onLayout(e: LayoutChangeEvent) {
     const w = Math.floor(e.nativeEvent.layout.width);
@@ -138,7 +147,9 @@ function HabitYearCalendar({
 
   return (
     <View style={styles.cal} onLayout={onLayout}>
-      {!ready ? <View style={{ height: 12 * 6 }} /> : null}
+      {!ready ? (
+        <View style={{ height: range === 'month' ? rowH + 24 : 12 * 6 }} />
+      ) : null}
       {ready ? (
         <>
           <View style={styles.calRow}>
@@ -180,7 +191,12 @@ function HabitYearCalendar({
                 allowFontScaling={false}
                 style={[
                   styles.monthLabel,
-                  { height: rowH, lineHeight: rowH, fontSize: labelFs, color: colors.mute },
+                  {
+                    height: rowH,
+                    lineHeight: rowH,
+                    fontSize: labelFs,
+                    color: colors.mute,
+                  },
                 ]}
               >
                 {row.label}
@@ -199,17 +215,42 @@ function HabitYearCalendar({
             </View>
           ))}
 
-          <RNText
-            allowFontScaling={false}
-            style={[
-              styles.yearCaption,
-              { fontSize: labelFs, lineHeight: labelFs + 4, color: colors.faint },
-            ]}
-          >
-            {habit.logs.length
-              ? `${year} · filled = done`
-              : `${year} · tap a day to mark done`}
-          </RNText>
+          <View style={styles.calFooter}>
+            <Text
+              variant="caption"
+              style={[styles.yearCaption, { color: colors.mute, flex: 1 }]}
+              numberOfLines={1}
+            >
+              {caption}
+            </Text>
+            {showRangeToggle && onRangeChange ? (
+              <Pressable
+                onPress={() =>
+                  onRangeChange(range === 'month' ? 'year' : 'month')
+                }
+                hitSlop={8}
+                style={({ pressed }) => [
+                  styles.rangeBtn,
+                  {
+                    borderColor: colors.lineStrong,
+                    backgroundColor: colors.surfaceSoft,
+                    opacity: pressed ? 0.85 : 1,
+                  },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  range === 'month' ? 'Show year heatmap' : 'Show this month'
+                }
+              >
+                <Text
+                  style={[styles.rangeBtnText, { color: colors.ink }]}
+                  numberOfLines={1}
+                >
+                  {range === 'month' ? 'Year' : 'Month'}
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
         </>
       ) : null}
     </View>
@@ -221,9 +262,14 @@ export function HabitCard({
   onCheckIn,
   onOpen,
   onToggleDay,
-  /** List: compact year glance. Detail: interactive year. */
+  /** List: compact glance. Detail: interactive. */
   interactive = false,
   year,
+  /** Default month. List filter or detail toggle. */
+  range = 'month',
+  /** Detail: small Month/Year control under the heatmap. */
+  showRangeToggle = false,
+  onRangeChange,
 }: {
   habit: Habit;
   onCheckIn?: () => void;
@@ -232,14 +278,20 @@ export function HabitCard({
   onToggleDay?: (dateKey: string) => void;
   interactive?: boolean;
   year?: number;
+  range?: HabitHeatmapRange;
+  showRangeToggle?: boolean;
+  onRangeChange?: (next: HabitHeatmapRange) => void;
 }) {
   const { colors } = useTheme();
   const { members } = useHousehold();
   const category = paintHabitCategory(habit.categoryId, colors);
   const viewYear = year ?? new Date().getFullYear();
+  const [localRange, setLocalRange] = useState<HabitHeatmapRange>(range);
+  useEffect(() => {
+    if (!showRangeToggle) setLocalRange(range);
+  }, [range, showRangeToggle]);
   const doneToday = loggedOn(habit);
   const streak = currentStreak(habit);
-  const rate = completionRate(habit, 30);
   // Habits can belong to any household member (a kid's reading habit, etc.).
   // Only show the owner when it's someone other than the user — your own
   // name on your own habit is noise.
@@ -251,6 +303,11 @@ export function HabitCard({
       !!self &&
       owner.trim().toLowerCase() === self.name.trim().toLowerCase());
   const ownerName = isOwn ? '' : owner;
+
+  const setRange = (next: HabitHeatmapRange) => {
+    setLocalRange(next);
+    onRangeChange?.(next);
+  };
 
   const body = (
     <>
@@ -271,12 +328,12 @@ export function HabitCard({
           ) : null}
         </View>
         <Text variant="caption" style={styles.meta}>
-          {streak > 0 ? `${streak}d` : `${rate}%`}
+          {streak === 1 ? '1 day streak' : `${streak} day streak`}
         </Text>
         {onCheckIn ? (
           <Pressable
             onPress={onCheckIn}
-            hitSlop={8}
+            hitSlop={10}
             style={({ pressed }) => [
               styles.logBtn,
               {
@@ -287,9 +344,9 @@ export function HabitCard({
             accessibilityLabel={doneToday ? 'Undo today' : 'Mark done today'}
           >
             <Check
-              size={12}
-              color={doneToday ? colors.forestOn : category.color}
-              strokeWidth={2.4}
+              size={11}
+              color={doneToday ? colors.accentOn : category.color}
+              strokeWidth={2.6}
             />
           </Pressable>
         ) : null}
@@ -298,9 +355,11 @@ export function HabitCard({
       <HabitYearCalendar
         habit={habit}
         year={viewYear}
+        range={showRangeToggle ? localRange : range}
         interactive={interactive}
         onToggleDay={onToggleDay}
-        compact={!interactive}
+        showRangeToggle={showRangeToggle}
+        onRangeChange={showRangeToggle ? setRange : undefined}
       />
     </>
   );
@@ -342,7 +401,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     paddingVertical: 10,
     paddingHorizontal: spacing.md,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
     borderWidth: StyleSheet.hairlineWidth,
     alignSelf: 'stretch',
     overflow: 'hidden',
@@ -368,12 +427,14 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   meta: {
-    fontSize: 16,
+    fontSize: 13,
+    marginRight: 4,
+    flexShrink: 0,
   },
   logBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: 8,
+    width: 18,
+    height: 18,
+    borderRadius: 5,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -408,9 +469,28 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
   },
   yearCaption: {
-    marginTop: 6,
+    marginTop: 0,
     fontFamily: fonts.sans,
-    includeFontPadding: false,
+    fontSize: 13,
+    lineHeight: 18,
+    letterSpacing: -0.1,
+  },
+  calFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 6,
+  },
+  rangeBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  rangeBtnText: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 12,
+    letterSpacing: -0.1,
   },
   catHead: {
     flexDirection: 'row',

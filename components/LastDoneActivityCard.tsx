@@ -309,7 +309,7 @@ export function LastDoneActivityCard({
       onPress={onOpen}
       style={({ pressed }) => [
         styles.card,
-        { backgroundColor: colors.surface, borderColor: colors.line },
+        { backgroundColor: colors.surface },
         pressed && onOpen && { opacity: 0.96 },
       ]}
       disabled={!onOpen}
@@ -385,7 +385,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: spacing.md,
     marginBottom: spacing.sm,
-    borderWidth: StyleSheet.hairlineWidth,
     alignSelf: 'stretch',
     overflow: 'hidden',
     ...shadows.soft,

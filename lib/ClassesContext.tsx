@@ -28,6 +28,8 @@ import {
   scheduleClassReminders,
   syncClassReminders,
 } from '@/lib/classNotifications';
+import { queueDelete, queueUpsert } from '@/lib/sync/outbox';
+import { subscribeSyncApplied } from '@/lib/sync/engine';
 
 const STORAGE_KEY = 'lifeos:classes:v1';
 const SCHEMA_VERSION = 1;
@@ -61,12 +63,30 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
 
   // Awaited commit: callers only resolve once the write is on disk, so a
   // failed write rejects instead of the UI reporting a save that never stuck.
-  const commit = useCallback(async (next: ClassPack[]) => {
-    const sorted = sortPacks(next);
+  // `touched` = rows to stamp + enqueue for row sync.
+  const commit = useCallback(async (next: ClassPack[], touched?: ClassPack[]) => {
+    const now = new Date().toISOString();
+    const touchedIds = new Set((touched ?? []).map((p) => p.id));
+    const stamped = next.map((p) => (touchedIds.has(p.id) ? { ...p, updatedAt: now } : p));
+    const sorted = sortPacks(stamped);
     packsRef.current = sorted;
     setPacks(sorted);
     await saveVersionedArray(STORAGE_KEY, SCHEMA_VERSION, sorted);
+    for (const p of sorted) if (touchedIds.has(p.id)) void queueUpsert('class_packs', p);
     return sorted;
+  }, []);
+
+  useEffect(() => {
+    return subscribeSyncApplied((tables) => {
+      if (!tables.includes('class_packs')) return;
+      void loadVersionedArray<ClassPack>(STORAGE_KEY, SCHEMA_VERSION, normalizeClassPack).then(
+        (loaded) => {
+          packsRef.current = sortPacks(loaded);
+          setPacks(packsRef.current);
+          void syncClassReminders(packsRef.current);
+        }
+      );
+    });
   }, []);
 
   useEffect(() => {
@@ -99,13 +119,14 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
         const merged = mergeClassPackUpdate(existing, input);
         if (!merged) return existing;
         await commit(
-          packsRef.current.map((p) => (p.id === existing.id ? merged : p))
+          packsRef.current.map((p) => (p.id === existing.id ? merged : p)),
+          [merged]
         );
         void scheduleClassReminders(merged);
         return merged;
       }
       const pack = createClassPack(input);
-      await commit([pack, ...packsRef.current]);
+      await commit([pack, ...packsRef.current], [pack]);
       void scheduleClassReminders(pack);
       return pack;
     },
@@ -120,7 +141,7 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
         updated = { ...p, ...patch, id: p.id };
         return updated;
       });
-      await commit(next);
+      await commit(next, updated ? [updated] : []);
       if (updated) {
         void scheduleClassReminders(updated);
       }
@@ -131,6 +152,7 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
   const removePack = useCallback(
     async (id: string) => {
       await commit(packsRef.current.filter((p) => p.id !== id));
+      void queueDelete('class_packs', id);
       void cancelClassReminders(id);
     },
     [commit]
@@ -144,7 +166,7 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
         updated = toggleLogForDay(p, date);
         return updated;
       });
-      await commit(next);
+      await commit(next, updated ? [updated] : []);
       if (updated) {
         void scheduleClassReminders(updated);
       }

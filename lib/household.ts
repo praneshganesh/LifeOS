@@ -17,6 +17,8 @@ export type HouseholdMember = {
   /** Sharing role stub — not enforced until multi-device sync */
   permission: SharingPermission;
   createdAt: string;
+  /** Last local mutation — LWW clock for row sync. */
+  updatedAt?: string;
 };
 
 export function avatarLetterFromName(name: string): string {
@@ -90,6 +92,7 @@ export function normalizeHouseholdMember(raw: unknown): HouseholdMember | null {
     permission,
     createdAt:
       typeof r.createdAt === 'string' ? r.createdAt : new Date().toISOString(),
+    updatedAt: typeof r.updatedAt === 'string' ? r.updatedAt : undefined,
   };
 }
 

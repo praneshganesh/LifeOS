@@ -26,6 +26,8 @@ import {
   loadVersioned,
   saveVersioned,
 } from '@/lib/storage/versioned';
+import { queueDelete, queueUpsert } from '@/lib/sync/outbox';
+import { subscribeSyncApplied } from '@/lib/sync/engine';
 
 const STORAGE_KEY = 'lifeos:spaces:v2';
 const LEGACY_STORAGE_KEY = 'lifeos:spaces:v1';
@@ -36,10 +38,13 @@ export type SpaceKind = Space['kind'];
 export type ManagedSpace = Space & {
   /** User-created (not from system defaults) */
   custom?: boolean;
+  /** Last local mutation — LWW clock for row sync. */
+  updatedAt?: string;
 };
 
 export type ManagedRoom = Room & {
   custom?: boolean;
+  updatedAt?: string;
 };
 
 type StoredPayload = {
@@ -229,15 +234,58 @@ export function SpacesProvider({ children }: { children: ReactNode }) {
     return () => setCaptureSpacesLookup(null);
   }, []);
 
-  const persist = useCallback(async (nextSpaces: ManagedSpace[], nextRooms: ManagedRoom[]) => {
-    setSpaces(nextSpaces);
-    setRooms(nextRooms);
-    spacesRef.current = nextSpaces;
-    roomsRef.current = nextRooms;
-    setCaptureSpacesLookup(nextSpaces);
-    const payload: StoredPayload = { spaces: nextSpaces, rooms: nextRooms };
-    await saveVersioned(STORAGE_KEY, SCHEMA_VERSION, payload);
+  // Reload when the sync engine merges remote rows into the local store.
+  useEffect(() => {
+    return subscribeSyncApplied((tables) => {
+      if (!tables.includes('spaces') && !tables.includes('rooms')) return;
+      void loadPayload().then((payload) => {
+        spacesRef.current = payload.spaces;
+        roomsRef.current = payload.rooms;
+        setSpaces(payload.spaces);
+        setRooms(payload.rooms);
+        setCaptureSpacesLookup(payload.spaces);
+      });
+    });
   }, []);
+
+  /**
+   * Persist + enqueue row sync for the changed rows only (spaces and rooms
+   * share one local payload but are separate cloud tables).
+   */
+  const persist = useCallback(
+    async (
+      nextSpaces: ManagedSpace[],
+      nextRooms: ManagedRoom[],
+      touched?: {
+        spaces?: ManagedSpace[];
+        rooms?: ManagedRoom[];
+        deletedSpaceIds?: string[];
+        deletedRoomIds?: string[];
+      }
+    ) => {
+      const now = new Date().toISOString();
+      const touchedSpaceIds = new Set((touched?.spaces ?? []).map((s) => s.id));
+      const touchedRoomIds = new Set((touched?.rooms ?? []).map((r) => r.id));
+      const stampedSpaces = nextSpaces.map((s) =>
+        touchedSpaceIds.has(s.id) ? { ...s, updatedAt: now } : s
+      );
+      const stampedRooms = nextRooms.map((r) =>
+        touchedRoomIds.has(r.id) ? { ...r, updatedAt: now } : r
+      );
+      setSpaces(stampedSpaces);
+      setRooms(stampedRooms);
+      spacesRef.current = stampedSpaces;
+      roomsRef.current = stampedRooms;
+      setCaptureSpacesLookup(stampedSpaces);
+      const payload: StoredPayload = { spaces: stampedSpaces, rooms: stampedRooms };
+      await saveVersioned(STORAGE_KEY, SCHEMA_VERSION, payload);
+      for (const s of stampedSpaces) if (touchedSpaceIds.has(s.id)) void queueUpsert('spaces', s);
+      for (const r of stampedRooms) if (touchedRoomIds.has(r.id)) void queueUpsert('rooms', r);
+      for (const id of touched?.deletedSpaceIds ?? []) void queueDelete('spaces', id);
+      for (const id of touched?.deletedRoomIds ?? []) void queueDelete('rooms', id);
+    },
+    []
+  );
 
   const addSpace = useCallback(
     async (input: {
@@ -277,7 +325,10 @@ export function SpacesProvider({ children }: { children: ReactNode }) {
         }));
         nextRooms = [...extras, ...roomsRef.current];
       }
-      await persist([space, ...spacesRef.current], nextRooms);
+      await persist([space, ...spacesRef.current], nextRooms, {
+        spaces: [space],
+        rooms: nextRooms.filter((r) => r.spaceId === id),
+      });
       return space;
     },
     [persist]
@@ -288,9 +339,15 @@ export function SpacesProvider({ children }: { children: ReactNode }) {
       id: string,
       patch: Partial<Pick<ManagedSpace, 'name' | 'meta' | 'kind' | 'icon' | 'items'>>
     ) => {
+      let updated: ManagedSpace | null = null;
       await persist(
-        spaces.map((s) => (s.id === id ? { ...s, ...patch } : s)),
-        rooms
+        spaces.map((s) => {
+          if (s.id !== id) return s;
+          updated = { ...s, ...patch };
+          return updated;
+        }),
+        rooms,
+        { spaces: updated ? [updated] : [] }
       );
     },
     [spaces, rooms, persist]
@@ -298,9 +355,11 @@ export function SpacesProvider({ children }: { children: ReactNode }) {
 
   const removeSpace = useCallback(
     async (id: string) => {
+      const goneRooms = rooms.filter((r) => r.spaceId === id).map((r) => r.id);
       await persist(
         spaces.filter((s) => s.id !== id),
-        rooms.filter((r) => r.spaceId !== id)
+        rooms.filter((r) => r.spaceId !== id),
+        { deletedSpaceIds: [id], deletedRoomIds: goneRooms }
       );
     },
     [spaces, rooms, persist]
@@ -316,7 +375,7 @@ export function SpacesProvider({ children }: { children: ReactNode }) {
         assetIds: [],
         custom: true,
       };
-      await persist(spaces, [room, ...rooms]);
+      await persist(spaces, [room, ...rooms], { rooms: [room] });
       return room;
     },
     [spaces, rooms, persist]
@@ -324,9 +383,15 @@ export function SpacesProvider({ children }: { children: ReactNode }) {
 
   const updateRoom = useCallback(
     async (id: string, patch: Partial<Pick<ManagedRoom, 'name' | 'icon'>>) => {
+      let updated: ManagedRoom | null = null;
       await persist(
         spaces,
-        rooms.map((r) => (r.id === id ? { ...r, ...patch } : r))
+        rooms.map((r) => {
+          if (r.id !== id) return r;
+          updated = { ...r, ...patch };
+          return updated;
+        }),
+        { rooms: updated ? [updated] : [] }
       );
     },
     [spaces, rooms, persist]
@@ -336,7 +401,8 @@ export function SpacesProvider({ children }: { children: ReactNode }) {
     async (id: string) => {
       await persist(
         spaces,
-        rooms.filter((r) => r.id !== id)
+        rooms.filter((r) => r.id !== id),
+        { deletedRoomIds: [id] }
       );
     },
     [spaces, rooms, persist]

@@ -39,7 +39,7 @@ export default function OnboardingQuietHours() {
           ? DEFAULT_NOTIFICATION_PREFS.quietHoursEnd
           : normalizeQuietHoursTime(end, DEFAULT_NOTIFICATION_PREFS.quietHoursEnd),
       });
-      router.push('/onboarding/capture');
+      router.push('/onboarding/how-it-works');
     } finally {
       setSaving(false);
     }
@@ -48,9 +48,12 @@ export default function OnboardingQuietHours() {
   return (
     <View style={[styles.root, { paddingBottom: Math.max(insets.bottom, 16) + 8 }]}>
       <ScrollView contentContainerStyle={styles.body}>
-        <Text style={styles.step}>Step 4 of 6</Text>
+        <Text style={styles.step}>Step 4 of 5</Text>
         <Text style={styles.title}>Quiet hours</Text>
-        <Text style={styles.lead}>No alerts between these times.</Text>
+        <Text style={styles.lead}>
+          No reminder alerts between these times. You can change this later in
+          Settings.
+        </Text>
 
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
           <TimeField label="From" value={start} onChange={setStart} />

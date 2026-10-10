@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 import 'react-native-gesture-handler';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import {
@@ -94,6 +95,8 @@ function RootNavigation({
         <Stack.Screen name="profile/index" options={{ headerShown: false }} />
         <Stack.Screen name="settings/index" options={{ headerShown: false }} />
         <Stack.Screen name="settings/privacy" options={{ headerShown: false }} />
+        <Stack.Screen name="settings/privacy-policy" options={{ headerShown: false }} />
+        <Stack.Screen name="settings/terms" options={{ headerShown: false }} />
         <Stack.Screen name="settings/security" options={{ headerShown: false }} />
         <Stack.Screen name="settings/notifications" options={{ headerShown: false }} />
         <Stack.Screen name="settings/plan" options={{ headerShown: false }} />
@@ -153,6 +156,7 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#0D0D0F' }}>
+      <KeyboardProvider>
       <ThemeProvider>
         <CloudGate>
         <PlanProvider>
@@ -191,6 +195,7 @@ export default function RootLayout() {
         </PlanProvider>
         </CloudGate>
       </ThemeProvider>
+      </KeyboardProvider>
     </GestureHandlerRootView>
   );
 }

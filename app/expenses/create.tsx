@@ -1,16 +1,19 @@
 import { useTheme } from '@/lib/ThemeContext';
 import { useMemo, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
+import { Redirect, Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { Screen } from '@/components/ui/Screen';
+import { ModuleScreen } from '@/components/ui/ModuleScreen';
 import { KeyboardFormScroll } from '@/components/ui/KeyboardFormScroll';
 import {
   DetailChip,
   DetailChipRow,
   DetailField,
+  DetailHero,
   DetailPrimaryButton,
   DetailSection,
   DetailStickyActions,
+  DetailTrashButton,
   DETAIL_STICKY_PAD,
 } from '@/components/ui/DetailKit';
 import { Text } from '@/components/ui/Text';
@@ -19,27 +22,37 @@ import { useExpenses } from '@/lib/ExpensesContext';
 import { useToast } from '@/lib/ToastContext';
 import { useCurrency } from '@/lib/CurrencyContext';
 import { sanitizeAmountInput } from '@/lib/currency';
+import { confirmDelete } from '@/lib/confirmDelete';
+import { MODULE_TONE_FALLBACK, moduleTone } from '@/lib/moduleTone';
 import {
   EXPENSE_CATEGORIES,
+  labelForCategory,
   parseAmount,
   type ExpenseCategory,
 } from '@/lib/expenses';
 import { localDayKey } from '@/lib/dates';
 import { type ThemeColors, spacing } from '@/constants/theme';
 
-export default function ExpenseFormScreen() {
-  const { colors } = useTheme();
+export function ExpenseForm({
+  expenseId,
+  inline = false,
+}: {
+  expenseId?: string;
+  inline?: boolean;
+}) {
+  const { colors, resolved } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
   const { editId: editParam } = useLocalSearchParams<{ editId?: string }>();
-  const editId = Array.isArray(editParam) ? editParam[0] : editParam;
-  const { addExpense, updateExpense, getById } = useExpenses();
+  const paramEdit = Array.isArray(editParam) ? editParam[0] : editParam;
+  const editId = expenseId || paramEdit;
+  const { addExpense, updateExpense, removeExpense, getById } = useExpenses();
   const { showToast, showError } = useToast();
   const { currency: defaultCurrency } = useCurrency();
   const existing = editId ? getById(editId) : undefined;
   const editing = Boolean(existing);
   const currency = existing?.currency || defaultCurrency;
-  const accent = colors.forest;
+  const tone = moduleTone('expenses', colors, resolved === 'light');
 
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
@@ -84,7 +97,7 @@ export default function ExpenseFormScreen() {
           note: note.trim() || undefined,
         });
         showToast('Expense updated');
-        router.replace(`/expenses/${existing.id}` as Href);
+        if (!inline) router.replace(`/expenses/${existing.id}` as Href);
       } else {
         const expense = await addExpense({
           title: title.trim(),
@@ -106,10 +119,135 @@ export default function ExpenseFormScreen() {
     }
   }
 
+  async function onDelete() {
+    if (!existing) return;
+    const ok = await confirmDelete(existing.title);
+    if (!ok) return;
+    try {
+      await removeExpense(existing.id);
+    } catch {
+      showError('Couldn’t delete — try again.');
+      return;
+    }
+    if (router.canGoBack()) router.back();
+    else router.replace('/expenses' as Href);
+  }
+
+  const fields = (
+    <>
+      {!inline ? (
+        <DetailSection label="What for">
+          <DetailField
+            value={title}
+            onChangeText={setTitle}
+            placeholder="e.g. Groceries"
+            autoFocus={!editing}
+          />
+        </DetailSection>
+      ) : null}
+
+      <DetailSection label={`Amount (${currency})`}>
+        <DetailField
+          value={amount}
+          onChangeText={(t) => setAmount(sanitizeAmountInput(t))}
+          placeholder="0.00"
+          keyboardType="decimal-pad"
+        />
+      </DetailSection>
+
+      <DetailSection label="Merchant">
+        <DetailField
+          value={merchant}
+          onChangeText={setMerchant}
+          placeholder="e.g. Carrefour"
+        />
+      </DetailSection>
+
+      <DetailSection label="Date">
+        <DateField value={date} onChange={setDate} />
+      </DetailSection>
+
+      <DetailSection label="Note">
+        <DetailField
+          value={note}
+          onChangeText={setNote}
+          placeholder="e.g. Split with Maya"
+        />
+      </DetailSection>
+
+      <DetailSection label="Category">
+        <DetailChipRow>
+          {EXPENSE_CATEGORIES.map((c) => (
+            <DetailChip
+              key={c.id}
+              label={c.label}
+              selected={category === c.id}
+              onPress={() => setCategory(c.id)}
+              accent={colors.accent}
+            />
+          ))}
+        </DetailChipRow>
+      </DetailSection>
+    </>
+  );
+
+  const saveBar = (
+    <DetailStickyActions>
+      <DetailPrimaryButton
+        label={saving ? 'Saving…' : editing ? 'Save changes' : 'Save expense'}
+        disabled={!canSave || saving}
+        onPress={() => void save()}
+      />
+    </DetailStickyActions>
+  );
+
+  if (inline) {
+    if (!hydrated) {
+      return (
+        <ModuleScreen title="Expense" backLabel="Expenses" backFallbackHref="/expenses">
+          <Stack.Screen options={{ headerShown: false }} />
+        </ModuleScreen>
+      );
+    }
+    if (!existing) {
+      return (
+        <ModuleScreen title="Not found" backLabel="Expenses" backFallbackHref="/expenses">
+          <Stack.Screen options={{ headerShown: false }} />
+          <Text variant="body">Expense not found.</Text>
+        </ModuleScreen>
+      );
+    }
+    return (
+      <ModuleScreen
+        title={title.trim() || existing.title}
+        backLabel="Expenses"
+        backFallbackHref="/expenses"
+        bottomExtra={DETAIL_STICKY_PAD}
+        right={<DetailTrashButton onPress={() => void onDelete()} />}
+        footer={saveBar}
+        hero={
+          <DetailHero
+            eyebrow="Expense"
+            editableTitle
+            titleValue={title}
+            onTitleChange={setTitle}
+            titlePlaceholder="What for"
+            meta={amount.trim() ? `${currency} ${amount}` : labelForCategory(category)}
+            accent={tone.accent}
+            vividFallback={MODULE_TONE_FALLBACK.expenses}
+          />
+        }
+      >
+        <Stack.Screen options={{ headerShown: false }} />
+        {fields}
+      </ModuleScreen>
+    );
+  }
+
   if (editId && hydrated && !existing) {
     return (
       <Screen>
-        <Stack.Screen options={{ title: 'Edit expense' }} />
+        <Stack.Screen options={{ title: 'Add expense' }} />
         <View style={{ padding: spacing.lg }}>
           <Text variant="body">Expense not found.</Text>
         </View>
@@ -120,78 +258,29 @@ export default function ExpenseFormScreen() {
   if (!hydrated) {
     return (
       <Screen>
-        <Stack.Screen options={{ title: editing ? 'Edit expense' : 'Add expense' }} />
+        <Stack.Screen options={{ title: 'Add expense' }} />
       </Screen>
     );
   }
 
   return (
     <Screen>
-      <Stack.Screen options={{ title: editing ? 'Edit expense' : 'Add expense' }} />
+      <Stack.Screen options={{ title: 'Add expense' }} />
       <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={DETAIL_STICKY_PAD}>
-        <DetailSection label="What for">
-          <DetailField
-            value={title}
-            onChangeText={setTitle}
-            placeholder="e.g. Groceries"
-            autoFocus={!editing}
-          />
-        </DetailSection>
-
-        <DetailSection label={`Amount (${currency})`}>
-          <DetailField
-            value={amount}
-            onChangeText={(t) => setAmount(sanitizeAmountInput(t))}
-            placeholder="0.00"
-            keyboardType="decimal-pad"
-          />
-        </DetailSection>
-
-        <DetailSection label="Merchant">
-          <DetailField
-            value={merchant}
-            onChangeText={setMerchant}
-            placeholder="e.g. Carrefour"
-          />
-        </DetailSection>
-
-        <DetailSection label="Date">
-          <DateField value={date} onChange={setDate} />
-        </DetailSection>
-
-        <DetailSection label="Note">
-          <DetailField
-            value={note}
-            onChangeText={setNote}
-            placeholder="e.g. Split with Maya"
-          />
-        </DetailSection>
-
-        <DetailSection label="Category">
-          <DetailChipRow>
-            {EXPENSE_CATEGORIES.map((c) => (
-              <DetailChip
-                key={c.id}
-                label={c.label}
-                selected={category === c.id}
-                onPress={() => setCategory(c.id)}
-                accent={accent}
-              />
-            ))}
-          </DetailChipRow>
-        </DetailSection>
-
+        {fields}
       </KeyboardFormScroll>
-      <DetailStickyActions>
-        <DetailPrimaryButton
-          label={saving ? 'Saving…' : editing ? 'Save changes' : 'Save expense'}
-          accent={accent}
-          disabled={!canSave || saving}
-          onPress={() => void save()}
-        />
-      </DetailStickyActions>
+      {saveBar}
     </Screen>
   );
+}
+
+export default function ExpenseFormScreen() {
+  const { editId: editParam } = useLocalSearchParams<{ editId?: string }>();
+  const editId = Array.isArray(editParam) ? editParam[0] : editParam;
+  if (editId) {
+    return <Redirect href={`/expenses/${editId}` as Href} />;
+  }
+  return <ExpenseForm />;
 }
 
 function makeStyles(_colors: ThemeColors) {

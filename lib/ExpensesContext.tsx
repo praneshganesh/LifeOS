@@ -19,6 +19,8 @@ import {
   loadVersionedArray,
   saveVersionedArray,
 } from '@/lib/storage/versioned';
+import { queueDelete, queueUpsert } from '@/lib/sync/outbox';
+import { subscribeSyncApplied } from '@/lib/sync/engine';
 
 const STORAGE_KEY = 'lifeos:expenses:v1';
 const SCHEMA_VERSION = 1;
@@ -64,6 +66,19 @@ export function ExpensesProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
+  // Reload when the sync engine merges remote rows into the local store.
+  useEffect(() => {
+    return subscribeSyncApplied((tables) => {
+      if (!tables.includes('expenses')) return;
+      void loadVersionedArray<Expense>(STORAGE_KEY, SCHEMA_VERSION, normalizeExpense).then(
+        (loaded) => {
+          expensesRef.current = sortExpenses(loaded);
+          setExpenses(expensesRef.current);
+        }
+      );
+    });
+  }, []);
+
   // Awaited persist: callers only resolve once the write is on disk, so a
   // failed write rejects instead of the UI reporting a save that never stuck.
   const persist = async (next: Expense[]) => {
@@ -73,23 +88,31 @@ export function ExpensesProvider({ children }: { children: ReactNode }) {
   };
 
   const addExpense = useCallback(async (input: NewExpenseInput) => {
-    const created = createExpense(input);
+    const created: Expense = { ...createExpense(input), updatedAt: new Date().toISOString() };
     const dup = findDuplicateExpense(expensesRef.current, created);
     if (dup) return dup;
     await persist(sortExpenses([created, ...expensesRef.current]));
+    void queueUpsert('expenses', created);
     return created;
   }, []);
 
   const updateExpense = useCallback(async (id: string, patch: Partial<Expense>) => {
+    let updated: Expense | null = null;
     await persist(
       sortExpenses(
-        expensesRef.current.map((e) => (e.id === id ? { ...e, ...patch, id: e.id } : e))
+        expensesRef.current.map((e) => {
+          if (e.id !== id) return e;
+          updated = { ...e, ...patch, id: e.id, updatedAt: new Date().toISOString() };
+          return updated;
+        })
       )
     );
+    if (updated) void queueUpsert('expenses', updated);
   }, []);
 
   const removeExpense = useCallback(async (id: string) => {
     await persist(expensesRef.current.filter((e) => e.id !== id));
+    void queueDelete('expenses', id);
   }, []);
 
   const getById = useCallback(

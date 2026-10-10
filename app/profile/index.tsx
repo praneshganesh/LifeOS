@@ -9,10 +9,7 @@ import { ChevronRight } from 'lucide-react-native';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { ListCard, ListRow, StatStrip } from '@/components/ui/ListKit';
 import {
-  DetailField,
   DetailHero,
-  DetailPrimaryButton,
-  DetailSection,
   DETAIL_DOCK_PAD,
 } from '@/components/ui/DetailKit';
 import { Text } from '@/components/ui/Text';
@@ -25,11 +22,13 @@ import {
   DEFAULT_PROFILE,
   loadLocalProfile,
   saveLocalProfile,
+  type LocalProfile,
 } from '@/lib/profile';
 import {
   loadPlanPrefs,
   planById,
   trialDaysLeft,
+  TRIAL_DAYS,
   type PlanPrefs,
 } from '@/lib/planLimits';
 import { moduleHref } from '@/lib/moduleNav';
@@ -43,14 +42,12 @@ export default function ProfileScreen() {
   const { items } = useInventory();
   const { spaces } = useSpaces();
   const { members } = useHousehold();
-  const { showToast, showError } = useToast();
+  const { showError } = useToast();
   const [name, setName] = useState(DEFAULT_PROFILE.displayName);
-  const [locale, setLocale] = useState(DEFAULT_PROFILE.locale || '');
+  const [profile, setProfile] = useState<LocalProfile>(DEFAULT_PROFILE);
   const [ready, setReady] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [editing, setEditing] = useState(false);
   const [planPrefs, setPlanPrefs] = useState<PlanPrefs>({ planId: 'trial' });
-  const accent = colors.amber;
 
   const documentsSpaceId = spaceIdByKind(spaces, 'documents');
   const homes = spaces.filter((s) => s.kind === 'home').length;
@@ -60,36 +57,33 @@ export default function ProfileScreen() {
   );
 
   // Reload on focus so changes made elsewhere show when navigating back.
-  // Skipped while the inline name editor is open to not clobber typing.
   useFocusEffect(
     useCallback(() => {
       let live = true;
-      if (!editing) {
-        void loadLocalProfile().then((p) => {
-          if (!live) return;
-          setName(resolveSelfDisplayName(p.displayName, members) || p.displayName);
-          setLocale(p.locale || '');
-          setReady(true);
-        });
-      }
+      void loadLocalProfile().then((p) => {
+        if (!live) return;
+        setProfile(p);
+        setName(resolveSelfDisplayName(p.displayName, members) || p.displayName);
+        setReady(true);
+      });
       void loadPlanPrefs().then((prefs) => {
         if (live) setPlanPrefs(prefs);
       });
       return () => {
         live = false;
       };
-    }, [members, editing])
+    }, [members])
   );
 
   async function save() {
-    if (saving) return;
+    if (saving || !ready) return;
     setSaving(true);
     try {
-      await saveLocalProfile({ displayName: name, locale });
-      showToast('Profile saved');
-      setEditing(false);
+      const next = { ...profile, displayName: name };
+      await saveLocalProfile(next);
+      setProfile(next);
     } catch {
-      showError('Couldn’t save your profile — try again.');
+      showError('Couldn’t save your profile. Try again.');
     } finally {
       setSaving(false);
     }
@@ -104,70 +98,48 @@ export default function ProfileScreen() {
         ? `Trial · ${daysLeft}d left`
         : daysLeft === 0 || (daysLeft != null && daysLeft <= 0)
           ? 'Trial ended'
-          : 'Trial · 14 days'
+          : `Trial · ${TRIAL_DAYS} days`
       : plan.name;
 
   return (
     <ModuleScreen
       title="Profile"
-      subtitle={locale || 'Your account'}
+      subtitle="Your account"
       defaultOrigin="today"
       bottomExtra={DETAIL_DOCK_PAD}
       hero={
         <DetailHero
           eyebrow={letter ? `${letter} · You` : 'You'}
-          title={name.trim() || 'You'}
-          meta={planLabel}
-          subtitle={locale || undefined}
-          accent={accent}
-          vividFallback="#A8884A"
+          accent={colors.ink}
+          vividFallback="#3A342E"
+          editableTitle
+          titleValue={name}
+          onTitleChange={setName}
+          onTitleCommit={() => void save()}
+          titlePlaceholder="Your name"
+          compact
         >
           <Pressable
-            onPress={() => setEditing((v) => !v)}
-            hitSlop={8}
-            style={[styles.editChip, { backgroundColor: colors.surfaceSoft }]}
-            accessibilityLabel={editing ? 'Stop editing profile' : 'Edit profile'}
+            onPress={() => router.push('/settings/plan' as Href)}
+            style={[styles.billingRow, { backgroundColor: 'rgba(0,0,0,0.28)' }]}
+            accessibilityRole="button"
+            accessibilityLabel="Plan and billing"
           >
-            <Text style={[styles.editChipText, { color: colors.slate }]}>
-              {editing ? 'Cancel' : 'Edit'}
-            </Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.billingTitle, { color: colors.ink }]}>
+                Plan
+              </Text>
+              <Text style={[styles.billingSub, { color: colors.slate }]}>
+                {planLabel}
+              </Text>
+            </View>
+            <ChevronRight size={18} color={colors.ink} />
           </Pressable>
         </DetailHero>
       }
     >
-      {editing ? (
-        <>
-          <DetailSection label="Display name">
-            <DetailField
-              value={name}
-              onChangeText={setName}
-              placeholder="Your name"
-              autoCorrect={false}
-              spellCheck={false}
-              autoComplete="off"
-              textContentType="none"
-              autoCapitalize="words"
-              editable={ready}
-            />
-          </DetailSection>
-          <DetailSection label="Locale note">
-            <DetailField
-              value={locale}
-              onChangeText={setLocale}
-              placeholder="e.g. Dubai"
-              editable={ready}
-            />
-          </DetailSection>
-          <DetailPrimaryButton
-            label={saving ? 'Saving…' : 'Save'}
-            accent={accent}
-            disabled={saving || !ready}
-            onPress={() => void save()}
-          />
-        </>
-      ) : null}
-
       <StatStrip
+        style={{ marginBottom: spacing.sm }}
         items={[
           { label: 'Homes', value: String(homes) },
           { label: 'Things', value: String(items.length) },
@@ -175,7 +147,7 @@ export default function ProfileScreen() {
         ]}
       />
 
-      <ModuleSection label="Household" count={members.length}>
+      <ModuleSection label="Household" count={members.length} style={styles.section}>
         <ListCard>
           <ListRow
             icon="family"
@@ -187,7 +159,7 @@ export default function ProfileScreen() {
         </ListCard>
       </ModuleSection>
 
-      <ModuleSection label="Saavi">
+      <ModuleSection label="Saavi" style={styles.section}>
         <ListCard>
           <ListRow
             icon="bell"
@@ -212,15 +184,16 @@ export default function ProfileScreen() {
         onPress={() => router.push('/settings/plan' as Href)}
         style={[
           styles.upgrade,
-          { backgroundColor: colors.surfaceSoft, borderColor: colors.line },
+          { backgroundColor: colors.surface },
         ]}
+        accessibilityLabel="Plan and billing"
       >
         <View style={{ flex: 1 }}>
-          <Text style={[styles.upgradeTitle, { color: colors.ink }]}>Plan</Text>
+          <Text style={[styles.upgradeTitle, { color: colors.ink }]}>Plan & billing</Text>
           <Text variant="caption">
             {plan.id === 'trial'
-              ? 'Full Pro while trial lasts — billing comes later'
-              : `${plan.name} — billing comes later`}
+              ? `Trial · manage subscription`
+              : `${plan.name} · manage subscription`}
           </Text>
         </View>
         <ChevronRight size={16} color={colors.faint} />
@@ -230,19 +203,26 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  editChip: {
-    alignSelf: 'flex-start',
-    marginTop: spacing.sm,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+  billingRow: {
+    marginTop: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
     borderRadius: radius.md,
-    minHeight: 40,
-    justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
-  editChipText: {
+  billingTitle: {
     fontFamily: fonts.sansSemi,
-    fontSize: 15,
-    letterSpacing: -0.2,
+    fontSize: 16,
+  },
+  billingSub: {
+    fontFamily: fonts.sans,
+    fontSize: 14,
+    marginTop: 2,
+  },
+  section: {
+    marginBottom: spacing.sm,
   },
   upgrade: {
     flexDirection: 'row',
@@ -250,7 +230,6 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     borderRadius: radius.md,
     padding: spacing.lg,
-    borderWidth: 1.5,
     marginBottom: spacing.xl,
   },
   upgradeTitle: {

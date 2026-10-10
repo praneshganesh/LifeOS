@@ -14,7 +14,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, Trash2, Bell } from 'lucide-react-native';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
-import { DetailPrimaryButton, DetailStickyActions, DetailTrashButton } from '@/components/ui/DetailKit';
+import {
+  DETAIL_DOCK_PAD,
+  DetailPrimaryButton,
+  DetailStickyActions,
+  DetailTrashButton,
+} from '@/components/ui/DetailKit';
 import { DotField, hubCardBg } from '@/components/ui/DotField';
 import { LastDoneActivityCard } from '@/components/LastDoneActivityCard';
 import { useLastDone } from '@/lib/LastDoneContext';
@@ -462,7 +467,7 @@ export default function LastDoneDetailScreen() {
           styles.content,
           {
             paddingTop: Math.max(insets.top, 12) + spacing.xs,
-            paddingBottom: 88,
+            paddingBottom: DETAIL_DOCK_PAD + insets.bottom,
           },
         ]}
         showsVerticalScrollIndicator={false}
@@ -488,7 +493,7 @@ export default function LastDoneDetailScreen() {
         <View style={[styles.hero, { borderColor: colors.line }]}>
           <DotField tone={heroTone} />
           <View style={styles.heroFill}>
-            <Text style={[styles.heroEyebrow, { color: category.color }]}>
+            <Text style={[styles.heroEyebrow, { color: colors.mute }]}>
               {category.emoji}  {category.name}
             </Text>
             <TextInput
@@ -504,7 +509,7 @@ export default function LastDoneDetailScreen() {
               accessibilityLabel="Activity name"
             />
             {scheduleLine ? (
-              <Text style={[styles.heroSchedule, { color: colors.slate }]}>
+              <Text style={[styles.heroSchedule, { color: colors.mute }]}>
                 {scheduleLine}
               </Text>
             ) : null}
@@ -1142,39 +1147,39 @@ function makeStyles(colors: ThemeColors) {
       color: colors.forest,
     },
     hero: {
-      borderRadius: radius.lg,
+      borderRadius: radius.md,
       overflow: 'hidden',
       borderWidth: StyleSheet.hairlineWidth,
       marginBottom: spacing.md,
-      minHeight: 168,
+      minHeight: 0,
       ...shadows.soft,
     },
     heroFill: {
       paddingHorizontal: spacing.lg,
-      paddingTop: spacing.lg,
-      paddingBottom: spacing.lg + 4,
-      gap: 6,
+      paddingTop: spacing.md,
+      paddingBottom: spacing.md,
+      gap: 4,
     },
     heroEyebrow: {
       fontFamily: fonts.sansMedium,
       fontSize: 13,
       letterSpacing: 0.2,
-      marginBottom: 4,
+      marginBottom: 0,
     },
     heroTitle: {
       fontFamily: fonts.sansSemi,
-      fontSize: 26,
-      lineHeight: 32,
-      letterSpacing: -0.6,
+      fontSize: 24,
+      lineHeight: 30,
+      letterSpacing: -0.5,
       padding: 0,
       margin: 0,
       backgroundColor: 'transparent',
     },
     heroSchedule: {
       fontFamily: fonts.sans,
-      fontSize: 15,
-      lineHeight: 21,
-      marginTop: 6,
+      fontSize: 14,
+      lineHeight: 20,
+      marginTop: 2,
     },
     notesField: {
       borderRadius: radius.md,

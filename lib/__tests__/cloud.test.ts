@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  CLOUD_PREF_KEYS,
+  LEGACY_DOMAIN_KEYS,
   buildCloudBody,
   formatRecoveryCode,
   generateRecoveryCode,
@@ -47,6 +49,33 @@ describe('cloud payload', () => {
     const items = body.stores['lifeos:inventory:v1'] as { name: string; imageUri?: string }[];
     assert.equal(items[0]!.name, 'TV');
     assert.equal(items[0]!.imageUri, undefined);
+  });
+
+  it('strips expense receipt URIs too', () => {
+    const next = stripLocalMedia({
+      title: 'Groceries',
+      receiptUri: 'file:///var/mobile/receipts/1.jpg',
+      receiptPath: 'hh/abc.jpg',
+    }) as Record<string, unknown>;
+    assert.equal(next.receiptUri, undefined);
+    assert.equal(next.receiptPath, 'hh/abc.jpg');
+  });
+
+  it('prefs-only snapshot leaves domain rows to row sync', () => {
+    const body = buildCloudBody(
+      {
+        'lifeos:inventory:v1': [{ name: 'TV' }],
+        'lifeos:expenses:v1': [{ title: 'Groceries' }],
+        'lifeos:notif-prefs:v1': { quietHours: true },
+      },
+      '2026-08-15T00:00:00.000Z',
+      CLOUD_PREF_KEYS
+    );
+    assert.equal(body.stores['lifeos:inventory:v1'], undefined);
+    assert.equal(body.stores['lifeos:expenses:v1'], undefined);
+    for (const k of LEGACY_DOMAIN_KEYS) assert.equal(body.stores[k], undefined, k);
+    assert.ok(CLOUD_PREF_KEYS.includes('lifeos:notif-prefs:v1' as never));
+    assert.deepEqual(body.stores['lifeos:notif-prefs:v1'], { quietHours: true });
   });
 
   it('generates a 16-character grouped code', () => {

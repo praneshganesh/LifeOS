@@ -299,7 +299,7 @@ export default function FamilyMemberScreen() {
               icon={d.icon}
               subtitle={[d.brand, d.room].filter(Boolean).join(' · ')}
               onPress={() => router.push(`/asset/${d.id}` as Href)}
-              onEdit={() => router.push(`/asset/edit/${d.id}` as Href)}
+              onEdit={() => router.push(`/asset/${d.id}` as Href)}
               onDelete={() => void onDeleteThing(d.id, d.name)}
             />
           ))}

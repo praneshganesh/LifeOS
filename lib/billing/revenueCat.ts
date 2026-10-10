@@ -1,6 +1,22 @@
 import { Platform } from 'react-native';
 import type { CustomerInfo, PurchasesPackage } from 'react-native-purchases';
 import type { PlanId } from '@/lib/planLimits';
+import {
+  pendingProductAfterPurchase,
+  productMatchesPlanCadence,
+  subscriptionFromEntitlements,
+  type SubscriptionSnapshot,
+} from '@/lib/billing/subscriptionSnapshot';
+
+export type { BillingCadence, SubscriptionSnapshot } from '@/lib/billing/subscriptionSnapshot';
+export {
+  cadenceFromProductId,
+  formatRenewalDate,
+  pendingProductAfterPurchase,
+  pendingSwitchLine,
+  productMatchesPlanCadence,
+  subscriptionDetailLine,
+} from '@/lib/billing/subscriptionSnapshot';
 
 export const RC_ENTITLEMENT_PRO = 'pro';
 export const RC_ENTITLEMENT_FAMILY = 'family';
@@ -78,20 +94,46 @@ export async function configureRevenueCat(appUserId?: string | null): Promise<bo
 
 export function planIdFromCustomerInfo(info: CustomerInfo): PlanId | null {
   const active = info.entitlements.active;
-  if (active[RC_ENTITLEMENT_FAMILY]) return 'family';
-  if (active[RC_ENTITLEMENT_PRO]) return 'pro';
+  // Launch sells Pro only. A leftover Family entitlement is Pro access.
+  if (active[RC_ENTITLEMENT_PRO] || active[RC_ENTITLEMENT_FAMILY]) return 'pro';
   return null;
 }
 
+export function subscriptionFromCustomerInfo(info: CustomerInfo): SubscriptionSnapshot | null {
+  return subscriptionFromEntitlements(info.entitlements.active);
+}
+
 export async function fetchCustomerPlanId(): Promise<PlanId | null> {
-  if (!configured && !(await configureRevenueCat())) return null;
+  const snap = await fetchSubscriptionSnapshot();
+  return snap?.planId ?? null;
+}
+
+export type CustomerBilling =
+  | { status: 'unavailable' }
+  | { status: 'none' }
+  | { status: 'active'; snap: SubscriptionSnapshot };
+
+/**
+ * Successful lookup with no Pro/Family entitlement is `none` (paid access ended).
+ * A network or SDK failure is `unavailable` and must not lapse the local plan.
+ */
+export async function fetchCustomerBilling(): Promise<CustomerBilling> {
+  if (!configured && !(await configureRevenueCat())) return { status: 'unavailable' };
   try {
     const Purchases = (await import('react-native-purchases')).default;
     const info = await Purchases.getCustomerInfo();
-    return planIdFromCustomerInfo(info);
+    const snap = subscriptionFromCustomerInfo(info);
+    if (!snap) return { status: 'none' };
+    return { status: 'active', snap };
   } catch {
-    return null;
+    return { status: 'unavailable' };
   }
+}
+
+/** Active store subscription: plan, monthly/yearly, and the next renewal date. */
+export async function fetchSubscriptionSnapshot(): Promise<SubscriptionSnapshot | null> {
+  const billing = await fetchCustomerBilling();
+  return billing.status === 'active' ? billing.snap : null;
 }
 
 function mapPackage(pkg: PurchasesPackage): OfferSummary {
@@ -115,7 +157,9 @@ export async function fetchPaywallOffers(): Promise<OfferSummary[]> {
     const offerings = await Purchases.getOfferings();
     const current = offerings.current;
     if (!current) return [];
-    return current.availablePackages.map(mapPackage);
+    return current.availablePackages
+      .map(mapPackage)
+      .filter((offer) => !offer.productId.toLowerCase().includes('family'));
   } catch (e) {
     if (__DEV__) console.warn('[RevenueCat] getOfferings failed', e);
     return [];
@@ -126,27 +170,39 @@ export function pickOffer(
   offers: OfferSummary[],
   want: 'pro_monthly' | 'pro_yearly' | 'family_monthly' | 'family_yearly'
 ): OfferSummary | undefined {
-  const byId: Record<typeof want, string[]> = {
-    pro_monthly: ['$rc_monthly', 'monthly'],
-    pro_yearly: ['$rc_annual', 'annual', 'yearly'],
-    family_monthly: ['family_monthly'],
-    family_yearly: ['family_annual', 'family', 'family_yearly'],
-  };
-  const ids = byId[want];
-  return (
-    offers.find((o) => ids.includes(o.identifier)) ||
-    offers.find((o) => {
-      if (want === 'pro_monthly') return o.productId.includes('pro_monthly');
-      if (want === 'pro_yearly') return o.productId.includes('pro_yearly');
-      if (want === 'family_monthly') return o.productId.includes('family_monthly');
-      return o.productId.includes('family_yearly');
-    })
-  );
+  return offers.find((o) => productMatchesPlanCadence(o.productId, want));
 }
 
 export type PurchaseResult =
-  | { ok: true; planId: PlanId }
+  | {
+      ok: true;
+      planId: PlanId;
+      productId: string | null;
+      cadence: SubscriptionSnapshot['cadence'];
+      renewsAt: string | null;
+      /** Set when the tapped product is not the one Apple left active. */
+      pendingProductId: string | null;
+    }
   | { ok: false; cancelled?: boolean; error: string };
+
+function purchaseSuccess(info: CustomerInfo, requestedProductId: string): PurchaseResult {
+  const planId = planIdFromCustomerInfo(info);
+  if (!planId) {
+    return {
+      ok: false,
+      error: 'Purchase completed but no Pro/Family entitlement yet. Try Restore.',
+    };
+  }
+  const snap = subscriptionFromCustomerInfo(info);
+  return {
+    ok: true,
+    planId,
+    productId: snap?.productId ?? null,
+    cadence: snap?.cadence ?? null,
+    renewsAt: snap?.renewsAt ?? null,
+    pendingProductId: pendingProductAfterPurchase(requestedProductId, snap?.productId),
+  };
+}
 
 export async function purchaseOffer(offer: OfferSummary): Promise<PurchaseResult> {
   if (!configured && !(await configureRevenueCat())) {
@@ -155,14 +211,7 @@ export async function purchaseOffer(offer: OfferSummary): Promise<PurchaseResult
   try {
     const Purchases = (await import('react-native-purchases')).default;
     const { customerInfo } = await Purchases.purchasePackage(offer.raw);
-    const planId = planIdFromCustomerInfo(customerInfo);
-    if (!planId) {
-      return {
-        ok: false,
-        error: 'Purchase completed but no Pro/Family entitlement yet. Try Restore.',
-      };
-    }
-    return { ok: true, planId };
+    return purchaseSuccess(customerInfo, offer.productId);
   } catch (e: unknown) {
     const err = e as { userCancelled?: boolean; message?: string };
     if (err?.userCancelled) {
@@ -186,7 +235,15 @@ export async function restorePurchases(): Promise<PurchaseResult> {
     if (!planId) {
       return { ok: false, error: 'No active subscription found for this Apple ID.' };
     }
-    return { ok: true, planId };
+    const snap = subscriptionFromCustomerInfo(info);
+    return {
+      ok: true,
+      planId,
+      productId: snap?.productId ?? null,
+      cadence: snap?.cadence ?? null,
+      renewsAt: snap?.renewsAt ?? null,
+      pendingProductId: null,
+    };
   } catch (e: unknown) {
     const err = e as { message?: string };
     return { ok: false, error: err?.message || 'Restore failed' };

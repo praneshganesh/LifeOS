@@ -36,8 +36,10 @@ export type InventoryItem = {
   room: string;
   spaceId: string;
   icon: Icon3DName;
-  /** Local file URI — never uploaded */
+  /** On-device file URI (never leaves the phone in a row body). */
   imageUri?: string;
+  /** Private Storage path `{household}/{uuid}.jpg` once uploaded. */
+  imagePath?: string;
   purchaseDate: string;
   price: string;
   /** Retailer / marketplace — e.g. Amazon, Sharaf DG (not talk|capture source) */

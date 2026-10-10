@@ -1,13 +1,11 @@
 import { useTheme } from '@/lib/ThemeContext';
 import { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Switch, View } from 'react-native';
+import { StyleSheet, Switch, Pressable, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
+import { Check } from 'lucide-react-native';
 import { ModuleScreen } from '@/components/ui/ModuleScreen';
 import {
   DetailChip,
-  DetailChipRow,
-  DetailFact,
-  DetailFacts,
   DetailField,
   DetailHero,
   DetailPrimaryButton,
@@ -23,9 +21,9 @@ import { useInventory } from '@/lib/InventoryContext';
 import { useLastDone } from '@/lib/LastDoneContext';
 import { useHousehold } from '@/lib/HouseholdContext';
 import { PersonChips } from '@/components/PersonChips';
+import { ThingLinkPicker } from '@/components/ThingLinkPicker';
 import {
   categorizeHabit,
-  completionRate,
   currentStreak,
   dayKey,
   loggedOn,
@@ -34,12 +32,12 @@ import {
 } from '@/lib/habits';
 import { confirmDelete } from '@/lib/confirmDelete';
 import { useToast } from '@/lib/ToastContext';
-import { type ThemeColors, fonts, radius, spacing } from '@/constants/theme';
+import { fonts, radius, spacing } from '@/constants/theme';
 import CreateHabitScreen from './create';
 
 export default function HabitDetailScreen() {
   const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const styles = useMemo(() => makeStyles(), []);
   const { id: idParam } = useLocalSearchParams<{ id: string }>();
   const id = Array.isArray(idParam) ? idParam[0] : idParam;
   const router = useRouter();
@@ -54,7 +52,6 @@ export default function HabitDetailScreen() {
     () =>
       items
         .filter((i) => !i.isDocument)
-        .slice(0, 30)
         .sort((a, b) => a.name.localeCompare(b.name)),
     [items]
   );
@@ -147,7 +144,6 @@ export default function HabitDetailScreen() {
   const cat = paintHabitCategory(habit.categoryId, colors);
   const accent = cat.color;
   const streak = currentStreak(habit);
-  const rate = completionRate(habit, 30);
 
   return (
     <ModuleScreen
@@ -175,12 +171,12 @@ export default function HabitDetailScreen() {
           titleValue={title}
           onTitleChange={setTitle}
           titlePlaceholder="Habit name"
-          subtitle={
-            streak
-              ? `${streak}-day streak · ${rate}% last 30 days`
-              : `${rate}% last 30 days`
+          trailing={
+            <View style={styles.stat} accessibilityLabel={`${streak}-day streak`}>
+              <Text style={[styles.statValue, { color: colors.ink }]}>{streak}</Text>
+              <Text style={[styles.statLabel, { color: colors.ink }]}>day streak</Text>
+            </View>
           }
-          meta={loggedOn(habit) ? 'Done today' : 'Not today'}
         />
       }
     >
@@ -189,9 +185,42 @@ export default function HabitDetailScreen() {
       <HabitCard
         habit={habit}
         interactive
+        showRangeToggle
         onCheckIn={() => void onCheckIn()}
         onToggleDay={(date) => void onToggleDay(date)}
       />
+
+      <Pressable
+        onPress={() => void onCheckIn()}
+        style={({ pressed }) => [
+          styles.todayRow,
+          {
+            backgroundColor: loggedOn(habit) ? colors.accentSoft : colors.surfaceSoft,
+            borderColor: loggedOn(habit) ? colors.accent : colors.lineStrong,
+            opacity: pressed ? 0.9 : 1,
+          },
+        ]}
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: loggedOn(habit) }}
+        accessibilityLabel={loggedOn(habit) ? 'Done today. Tap to undo.' : 'Not done today. Tap to mark done.'}
+      >
+        <View
+          style={[
+            styles.todayBox,
+            {
+              borderColor: loggedOn(habit) ? colors.accent : colors.lineStrong,
+              backgroundColor: loggedOn(habit) ? colors.accent : colors.surface,
+            },
+          ]}
+        >
+          {loggedOn(habit) ? (
+            <Check size={11} color={colors.accentOn} strokeWidth={3} />
+          ) : null}
+        </View>
+        <Text style={[styles.todayTitle, { color: colors.ink }]}>
+          {loggedOn(habit) ? 'Done today' : 'Mark done today'}
+        </Text>
+      </Pressable>
 
       <DetailSection label="Why">
         <DetailField
@@ -204,6 +233,7 @@ export default function HabitDetailScreen() {
 
       <DetailSection label="Who">
         <PersonChips
+          label=""
           members={members}
           personId={habit.personId ?? null}
           onChange={(personId) => {
@@ -217,24 +247,6 @@ export default function HabitDetailScreen() {
         />
       </DetailSection>
 
-      <DetailFacts>
-        <DetailFact label="Category" value={`${cat.emoji} ${cat.name}`} />
-        <DetailFact label="Streak" value={streak ? `${streak} days` : '—'} />
-        <DetailFact label="Last 30 days" value={`${rate}%`} />
-        <DetailFact
-          label="Today"
-          value={loggedOn(habit) ? 'Done' : 'Not today'}
-          last={!linked}
-        />
-        {linked ? (
-          <DetailFact
-            label="Linked Thing"
-            value={linked.name}
-            last
-          />
-        ) : null}
-      </DetailFacts>
-
       {linked ? (
         <DetailChip
           label={`Open ${linked.name}`}
@@ -243,38 +255,19 @@ export default function HabitDetailScreen() {
         />
       ) : null}
 
-      {linkables.length ? (
-        <DetailSection label="About a Thing?" style={{ marginTop: spacing.md }}>
-          <Text variant="caption" style={{ color: colors.mute, marginBottom: 2 }}>
-            Optional — link to something you own.
-          </Text>
-          <DetailChipRow>
-            <DetailChip
-              label="None"
-              selected={!habit.inventoryItemId}
-              accent={accent}
-              onPress={() =>
-                void updateHabit(habit.id, {
-                  inventoryItemId: undefined,
-                  syncLastDone: undefined,
-                }).catch(saveFailed)
-              }
-            />
-            {linkables.map((item) => (
-              <DetailChip
-                key={item.id}
-                label={item.name}
-                selected={habit.inventoryItemId === item.id}
-                accent={accent}
-                onPress={() =>
-                  void updateHabit(habit.id, {
-                    inventoryItemId: item.id,
-                    syncLastDone: habit.syncLastDone ?? true,
-                  }).catch(saveFailed)
-                }
-              />
-            ))}
-          </DetailChipRow>
+      {linkables.length || habit.inventoryItemId ? (
+        <DetailSection label="About a Thing?">
+          <ThingLinkPicker
+            items={linkables}
+            selectedId={habit.inventoryItemId}
+            selectedName={linked?.name}
+            onSelect={(next) =>
+              void updateHabit(habit.id, {
+                inventoryItemId: next ?? undefined,
+                syncLastDone: next ? (habit.syncLastDone ?? true) : undefined,
+              }).catch(saveFailed)
+            }
+          />
 
           {habit.inventoryItemId ? (
             <View style={[styles.syncRow, { backgroundColor: colors.surfaceSoft }]}>
@@ -302,8 +295,50 @@ export default function HabitDetailScreen() {
   );
 }
 
-function makeStyles(colors: ThemeColors) {
+function makeStyles() {
   return StyleSheet.create({
+    stat: {
+      alignItems: 'flex-end',
+      flexShrink: 0,
+      minWidth: 72,
+    },
+    statValue: {
+      fontFamily: fonts.sansSemi,
+      fontSize: 34,
+      lineHeight: 36,
+      letterSpacing: -1,
+    },
+    statLabel: {
+      fontFamily: fonts.sansMedium,
+      fontSize: 11,
+      letterSpacing: -0.1,
+      opacity: 0.72,
+      marginTop: 1,
+    },
+    todayRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      borderWidth: 1.5,
+      borderRadius: radius.md,
+      paddingHorizontal: spacing.md,
+      paddingVertical: 12,
+      marginTop: spacing.xs,
+      marginBottom: spacing.xl,
+    },
+    todayBox: {
+      width: 18,
+      height: 18,
+      borderRadius: 5,
+      borderWidth: 1.5,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    todayTitle: {
+      fontFamily: fonts.sansMedium,
+      fontSize: 15,
+      letterSpacing: -0.2,
+    },
     syncRow: {
       marginTop: spacing.sm,
       flexDirection: 'row',

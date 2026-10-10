@@ -17,7 +17,7 @@ export function Card({
   const shade = shadowsFor(resolved);
   const base = [
     styles.card,
-    { backgroundColor: colors.surface, borderColor: colors.lineStrong },
+    { backgroundColor: colors.surface },
     elevated ? shade.float : shade.card,
     style,
   ];
@@ -44,6 +44,5 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: radius.md,
     padding: spacing.lg,
-    borderWidth: 1.5,
   },
 });

@@ -3,7 +3,7 @@ import { View, StyleSheet, Pressable } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import { Plus } from 'lucide-react-native';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
-import { ListCard, ListRow, StatStrip } from '@/components/ui/ListKit';
+import { ListCard, StatStrip } from '@/components/ui/ListKit';
 import { Text } from '@/components/ui/Text';
 import { CaptureContextButton } from '@/components/CaptureContextButton';
 import { useHousehold } from '@/lib/HouseholdContext';
@@ -130,23 +130,6 @@ export default function FamilyScreen() {
         )}
       </ModuleSection>
 
-      <ModuleSection label="Sharing">
-        <ListCard>
-          <ListRow
-            icon="family"
-            title="Permissions"
-            subtitle="Owner, editor, viewer"
-            onPress={() => router.push('/settings/sharing' as Href)}
-          />
-          <ListRow
-            icon="house"
-            title="Shared homes"
-            subtitle="From Spaces"
-            onPress={() => router.push('/(tabs)/spaces' as Href)}
-            last
-          />
-        </ListCard>
-      </ModuleSection>
     </ModuleScreen>
   );
 }

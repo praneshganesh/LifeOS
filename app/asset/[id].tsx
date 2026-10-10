@@ -29,13 +29,14 @@ import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import {
   DETAIL_DOCK_PAD,
-  DetailEditButton,
   DetailFact,
   DetailFacts,
   DetailHero,
   DetailSection,
   DetailTrashButton,
 } from '@/components/ui/DetailKit';
+import { AssetEditor } from '@/app/asset/edit/[id]';
+import { MODULE_TONE_FALLBACK, moduleTone } from '@/lib/moduleTone';
 import { useInventory } from '@/lib/InventoryContext';
 import { useLastDone } from '@/lib/LastDoneContext';
 import { forInventoryItem, formatRelativeDone, getLastDoneAt } from '@/lib/lastDone';
@@ -51,7 +52,7 @@ import { type ThemeColors, fonts, radius, spacing, shadows } from '@/constants/t
 const CHROME_TOP = 18;
 
 export default function AssetDetailScreen() {
-  const { colors } = useTheme();
+  const { colors, resolved } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
@@ -173,8 +174,9 @@ export default function AssetDetailScreen() {
     );
 
   const showManual = Boolean(manual) && !isDoc;
-  const accent = isDoc ? colors.sky : colors.accent;
-  const vividFallback = isDoc ? colors.sky : colors.forest;
+  const thingsTone = moduleTone('things', colors, resolved === 'light');
+  const accent = isDoc ? colors.sky : thingsTone.accent;
+  const vividFallback = isDoc ? '#5E7A8C' : MODULE_TONE_FALLBACK.things;
 
   // Subtitle is brand · person only — category / document kind lives in the
   // hero eyebrow (or photo chrome), so it isn’t repeated on this line.
@@ -278,8 +280,6 @@ export default function AssetDetailScreen() {
       !/^unknown$/i.test(row.value!)
   );
 
-  const editHref = `/asset/edit/${asset.id}` as Href;
-
   return (
     <Screen>
       <Stack.Screen options={{ headerShown: false }} />
@@ -305,16 +305,7 @@ export default function AssetDetailScreen() {
             <ChevronLeft size={22} color={colors.ink} strokeWidth={2.2} />
           </Pressable>
           {isUserItem ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <DetailTrashButton onPress={() => void onDelete()} />
-              <DetailEditButton
-                accent={accent}
-                onPress={() => {
-                  blurActiveElement();
-                  router.push(editHref);
-                }}
-              />
-            </View>
+            <DetailTrashButton onPress={() => void onDelete()} />
           ) : null}
         </View>
       ) : null}
@@ -370,16 +361,7 @@ export default function AssetDetailScreen() {
                 <Text style={styles.backLabel}>Back</Text>
               </Pressable>
               {isUserItem ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <DetailTrashButton onPress={() => void onDelete()} />
-                  <DetailEditButton
-                    accent={accent}
-                    onPress={() => {
-                      blurActiveElement();
-                      router.push(editHref);
-                    }}
-                  />
-                </View>
+                <DetailTrashButton onPress={() => void onDelete()} />
               ) : null}
             </View>
           ) : null}
@@ -411,7 +393,7 @@ export default function AssetDetailScreen() {
           >
             {isUserItem && isDoc ? (
               <QuickAction
-                icon={<Share2 size={19} color={colors.pure} strokeWidth={2.2} />}
+                icon={<Share2 size={19} color={colors.accentOn} strokeWidth={2.2} />}
                 label="Share"
                 accent={accent}
                 onPress={() => void onShare()}
@@ -420,14 +402,14 @@ export default function AssetDetailScreen() {
             {isUserItem ? (
               <>
                 <QuickAction
-                  icon={<Camera size={19} color={colors.pure} strokeWidth={2.2} />}
+                  icon={<Camera size={19} color={colors.accentOn} strokeWidth={2.2} />}
                   label={hasPhoto ? 'Photo' : 'Add photo'}
                   accent={accent}
                   onPress={() => openAttach('photo')}
                 />
                 {!isDoc ? (
                   <QuickAction
-                    icon={<FileText size={19} color={colors.pure} strokeWidth={2.2} />}
+                    icon={<FileText size={19} color={colors.accentOn} strokeWidth={2.2} />}
                     label="Receipt"
                     accent={accent}
                     onPress={() => openAttach('receipt')}
@@ -437,7 +419,7 @@ export default function AssetDetailScreen() {
             ) : null}
             {showManual && manual ? (
               <QuickAction
-                icon={<BookOpen size={19} color={colors.pure} strokeWidth={2.2} />}
+                icon={<BookOpen size={19} color={colors.accentOn} strokeWidth={2.2} />}
                 label="Manual"
                 accent={accent}
                 onPress={() => {
@@ -447,7 +429,7 @@ export default function AssetDetailScreen() {
             ) : null}
             {!isDoc ? (
               <QuickAction
-                icon={<Wrench size={19} color={colors.pure} strokeWidth={2.2} />}
+                icon={<Wrench size={19} color={colors.accentOn} strokeWidth={2.2} />}
                 label="Maintain"
                 accent={accent}
                 onPress={() =>
@@ -458,31 +440,35 @@ export default function AssetDetailScreen() {
           </Animated.View>
 
           <Animated.View entering={FadeInDown.delay(120).springify().damping(18)}>
-            <DetailFacts>
-              {glance.map((g, i) => (
-                <View
-                  key={g.label}
-                  style={[
-                    styles.glanceFact,
-                    i < glance.length - 1 && {
-                      borderBottomWidth: StyleSheet.hairlineWidth,
-                      borderBottomColor: colors.line,
-                    },
-                  ]}
-                >
-                  <Text style={[styles.glanceLabel, { color: colors.mute }]}>{g.label}</Text>
-                  <Text
+            {isUserItem ? (
+              <AssetEditor assetId={asset.id} />
+            ) : (
+              <DetailFacts>
+                {glance.map((g, i) => (
+                  <View
+                    key={g.label}
                     style={[
-                      styles.glanceValue,
-                      { color: g.tint ?? colors.ink },
+                      styles.glanceFact,
+                      i < glance.length - 1 && {
+                        borderBottomWidth: StyleSheet.hairlineWidth,
+                        borderBottomColor: colors.line,
+                      },
                     ]}
-                    numberOfLines={1}
                   >
-                    {g.value}
-                  </Text>
-                </View>
-              ))}
-            </DetailFacts>
+                    <Text style={[styles.glanceLabel, { color: colors.mute }]}>{g.label}</Text>
+                    <Text
+                      style={[
+                        styles.glanceValue,
+                        { color: g.tint ?? colors.ink },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {g.value}
+                    </Text>
+                  </View>
+                ))}
+              </DetailFacts>
+            )}
 
             {linkedService ? (
               <Pressable
@@ -525,7 +511,7 @@ export default function AssetDetailScreen() {
               </View>
             ) : null}
 
-            {detailRows.length ? (
+            {!isUserItem && detailRows.length ? (
               <DetailSection label="Details">
                 <DetailFacts>
                   {detailRows.map((row, i) => (

@@ -95,6 +95,8 @@ export type Habit = {
   /** When true (default if linked), check-in appends a Last Done log for the linked Thing. */
   syncLastDone?: boolean;
   createdAt: string;
+  /** Last local mutation — LWW clock for row sync */
+  updatedAt?: string;
 };
 
 export type NewHabitInput = {
@@ -188,6 +190,7 @@ export function normalizeHabit(raw: unknown): Habit | null {
           ? true
           : undefined,
     createdAt: o.createdAt || new Date().toISOString(),
+    updatedAt: typeof o.updatedAt === 'string' ? o.updatedAt : undefined,
   };
 }
 

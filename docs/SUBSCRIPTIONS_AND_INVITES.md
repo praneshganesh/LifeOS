@@ -1,12 +1,14 @@
 # Subscriptions, trial gate & Family invites
 
+> Launch note: the app sells Pro only. Family invites are closed. See [`FAMILY.md`](./FAMILY.md).
+
 Product rules for Saavi billing and shared logins (v1).
 
 ## Plans
 
 | Plan | Logins | Person tags | Notes |
 |------|--------|-------------|--------|
-| **Trial** | 1 | Unlimited | 14 days from `trialStartedAt`, then paywall |
+| **Trial** | 1 | Unlimited | `TRIAL_DAYS` (default 7, override `EXPO_PUBLIC_TRIAL_DAYS`) from `trialStartedAt`, then paywall |
 | **Pro** | 1 | Unlimited | Solo. Invite login → upgrade to Family |
 | **Family** | 4 (owner + 3) | Unlimited | Owner pays; invitees ride the plan |
 | **Member** | — | — | Joined via invite; no separate subscription |
@@ -54,6 +56,8 @@ Until (2)–(4) are done, `billingReady` is false or offers are empty → paywal
 
 ## Family invite (mobile)
 
+The steps below are the intended button flow. What the code does today, and the scenarios Family has to pass, are in [`FAMILY_SHARING.md`](./FAMILY_SHARING.md).
+
 ### Owner on Pro / Trial
 **Invite to Family** → sheet: upgrade to Family (stub subscribe) → then create + share invite.
 
@@ -64,9 +68,13 @@ Until (2)–(4) are done, `billingReady` is false or offers are empty → paywal
 
 ### Invitee (iOS / Android)
 1. Opens link → `/invite/[code]` (or enters code on `/invite`)
-2. Accept → `joinAsMember` (one household on this login)
-3. Onboarding if needed → home
-4. They are **not** charged; they ride the owner’s Family plan
+2. App ensures a Supabase session (`ensureCloudSession`) — required for a seat
+3. Accept → `joinAsMember` (one household on this login)
+4. Soft nudge **Save with Apple** so the seat survives reinstall (Settings → Account later)
+5. Onboarding if needed → home
+6. They are **not** charged; they ride the owner’s Family plan
+
+See also [`AUTH_APPLE.md`](./AUTH_APPLE.md) for ASC + Supabase Apple provider setup.
 
 ### Seats full
 Block invite; message to free a seat / add-on (add-ons later).
@@ -78,6 +86,8 @@ Block invite; message to free a seat / add-on (add-ons later).
 | Entitlements | `lib/entitlements.ts` |
 | Plan context | `lib/PlanContext.tsx` |
 | Gate | `components/PlanGate.tsx` |
+| Sign in with Apple | `lib/auth/apple.ts`, `app/settings/account.tsx`, `docs/AUTH_APPLE.md` |
+| Save-with-Apple nudge | `lib/auth/appleNudge.ts` (paywall, plan, invite) |
 | Paywall | `app/paywall.tsx` |
 | Invite API | `lib/invites/api.ts` |
 | Membership / seats | `lib/invites/membership.ts` |

@@ -5,9 +5,36 @@
  */
 import type { InventoryItem } from '@/lib/InventoryContext';
 import type { LastDoneItem } from '@/lib/lastDone';
+import type { Expense } from '@/lib/expenses';
+import type { Subscription } from '@/lib/subscriptions';
+import type { Habit } from '@/lib/habits';
+import type { ClassPack } from '@/lib/classes';
+import type { HouseholdMember } from '@/lib/household';
 import { isUuid } from '@/lib/ids';
 
-export type SyncTable = 'things' | 'reminders';
+export type SyncTable =
+  | 'household_people'
+  | 'spaces'
+  | 'rooms'
+  | 'things'
+  | 'reminders'
+  | 'expenses'
+  | 'subscriptions'
+  | 'habits'
+  | 'class_packs';
+
+/** Push order: referenced rows before rows that point at them. */
+export const SYNC_TABLE_ORDER: readonly SyncTable[] = [
+  'household_people',
+  'spaces',
+  'rooms',
+  'things',
+  'reminders',
+  'expenses',
+  'subscriptions',
+  'habits',
+  'class_packs',
+] as const;
 
 export type OutboxOp = {
   /** Local id of the mutated row (legacy prefix ids allowed; mapped at push). */
@@ -19,6 +46,11 @@ export type OutboxOp = {
   queuedAt: string;
   attempts: number;
   lastError?: string;
+  /**
+   * First-sync import of pre-existing local rows. Pushed with
+   * ON CONFLICT DO NOTHING so a fresh device never clobbers newer cloud rows.
+   */
+  backfill?: boolean;
 };
 
 /**
@@ -34,8 +66,8 @@ export function coalesceOutbox(queue: OutboxOp[], next: OutboxOp): OutboxOp[] {
 
 /**
  * Bidirectional local-id ↔ sync-uuid resolver. UUID local ids map to
- * themselves; legacy prefix ids (`inv-…`, `ld-…`) get a persistent
- * generated uuid (engine supplies the persistence).
+ * themselves; legacy prefix ids (`inv-…`, `ld-…`, `s1`) get a deterministic
+ * uuid (engine supplies the persistence).
  */
 export type IdResolver = {
   /** Local id → sync uuid (allocates for legacy ids). */
@@ -77,30 +109,84 @@ export type ReminderRow = RowCommon & {
   remind_interval: Record<string, unknown> | null;
 };
 
+/** expenses / subscriptions / habits / class_packs / spaces / rooms */
+export type GenericRow = RowCommon & {
+  person_id: string | null;
+  title: string;
+};
+
+export type PersonRow = RowCommon & {
+  name: string;
+  role: string;
+  relation: string | null;
+};
+
 function isoDateOrNull(value: string | undefined): string | null {
   if (!value) return null;
   const m = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
   return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
 }
 
+/** Device-only URIs never belong in a cloud row body. */
+export const LOCAL_MEDIA_FIELDS = ['imageUri', 'receiptUri', 'photoUri', 'localUri', 'fileUri'] as const;
+
+export function isLocalMediaUri(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  const v = value.trim().toLowerCase();
+  return (
+    v.startsWith('file:') ||
+    v.startsWith('content:') ||
+    v.startsWith('ph://') ||
+    v.startsWith('assets-library:') ||
+    v.startsWith('blob:') ||
+    v.startsWith('data:image/')
+  );
+}
+
+/** Ids inside items that point at other synced rows. */
+const REF_FIELDS = ['personId', 'inventoryItemId', 'spaceId'] as const;
+
 /**
- * body = full local item with reference ids rewritten to sync uuids, so a
- * second device reconstructs working links without our legacy-id map.
+ * body = full local item with reference ids rewritten to sync uuids and
+ * local media URIs removed (the durable `imagePath` / `receiptPath` stay).
  */
+export function itemToBody<T extends { id: string }>(
+  item: T,
+  ids: IdResolver
+): Record<string, unknown> {
+  const body: Record<string, unknown> = { ...item, id: ids.toSync(item.id) };
+  for (const key of REF_FIELDS) {
+    const v = body[key];
+    if (typeof v === 'string' && v) body[key] = ids.toSync(v);
+  }
+  for (const key of LOCAL_MEDIA_FIELDS) {
+    if (isLocalMediaUri(body[key])) delete body[key];
+  }
+  return body;
+}
+
+export function bodyToItem<T extends { id: string }>(
+  row: { id: string; body: Record<string, unknown> },
+  ids: IdResolver
+): T {
+  const body = { ...(row.body ?? {}) } as Record<string, unknown>;
+  body.id = ids.toLocal(row.id);
+  for (const key of REF_FIELDS) {
+    const v = body[key];
+    if (typeof v === 'string' && v) body[key] = ids.toLocal(v);
+  }
+  return body as T;
+}
+
 export function thingToRow(
   item: InventoryItem,
   householdId: string,
   ids: IdResolver
 ): ThingRow {
-  const body: Record<string, unknown> = {
-    ...item,
-    id: ids.toSync(item.id),
-    ...(item.personId ? { personId: ids.toSync(item.personId) } : {}),
-  };
   return {
     id: ids.toSync(item.id),
     household_id: householdId,
-    // household_people are not row-synced yet; FK stays null until they are.
+    // FK stays null; the link lives in body.personId (no dangling-FK failures).
     person_id: null,
     name: item.name ?? '',
     category: item.category ?? null,
@@ -109,23 +195,17 @@ export function thingToRow(
     is_document: Boolean(item.isDocument),
     document_kind: item.documentKind && item.documentKind !== 'unknown' ? item.documentKind : null,
     expiry_date: isoDateOrNull(item.expiryDate),
-    body,
+    body: itemToBody(item, ids),
     client_mutated_at: item.updatedAt ?? null,
     deleted_at: null,
   };
 }
 
 export function rowToThing(row: ThingRow, ids: IdResolver): InventoryItem {
-  const body = (row.body ?? {}) as Partial<InventoryItem> & Record<string, unknown>;
-  const personId =
-    typeof body.personId === 'string' && body.personId
-      ? ids.toLocal(body.personId)
-      : undefined;
+  const item = bodyToItem<InventoryItem>(row, ids);
   return {
-    ...(body as InventoryItem),
-    id: ids.toLocal(row.id),
-    ...(personId ? { personId } : {}),
-    name: typeof body.name === 'string' && body.name ? body.name : row.name,
+    ...item,
+    name: typeof item.name === 'string' && item.name ? item.name : row.name,
   };
 }
 
@@ -134,14 +214,6 @@ export function reminderToRow(
   householdId: string,
   ids: IdResolver
 ): ReminderRow {
-  const body: Record<string, unknown> = {
-    ...item,
-    id: ids.toSync(item.id),
-    ...(item.inventoryItemId
-      ? { inventoryItemId: ids.toSync(item.inventoryItemId) }
-      : {}),
-    ...(item.personId ? { personId: ids.toSync(item.personId) } : {}),
-  };
   const thingSyncId = item.inventoryItemId ? ids.toSync(item.inventoryItemId) : null;
   return {
     id: ids.toSync(item.id),
@@ -153,30 +225,110 @@ export function reminderToRow(
     label: item.label ?? '',
     remind_at: item.remindAt ?? null,
     remind_interval: (item.remindInterval as Record<string, unknown> | undefined) ?? null,
-    body,
+    body: itemToBody(item, ids),
     client_mutated_at: item.updatedAt ?? null,
     deleted_at: null,
   };
 }
 
 export function rowToReminder(row: ReminderRow, ids: IdResolver): LastDoneItem {
-  const body = (row.body ?? {}) as Partial<LastDoneItem> & Record<string, unknown>;
-  const inventoryItemId =
-    typeof body.inventoryItemId === 'string' && body.inventoryItemId
-      ? ids.toLocal(body.inventoryItemId)
-      : undefined;
-  const personId =
-    typeof body.personId === 'string' && body.personId
-      ? ids.toLocal(body.personId)
-      : undefined;
+  const item = bodyToItem<LastDoneItem>(row, ids);
   return {
-    ...(body as LastDoneItem),
-    id: ids.toLocal(row.id),
-    ...(inventoryItemId ? { inventoryItemId } : {}),
-    ...(personId ? { personId } : {}),
-    label: typeof body.label === 'string' && body.label ? body.label : row.label,
-    logs: Array.isArray(body.logs) ? body.logs : [],
+    ...item,
+    label: typeof item.label === 'string' && item.label ? item.label : row.label,
+    logs: Array.isArray(item.logs) ? item.logs : [],
   };
+}
+
+type Titled = { id: string; updatedAt?: string; title?: string; name?: string };
+
+export function genericToRow<T extends Titled>(
+  item: T,
+  householdId: string,
+  ids: IdResolver
+): GenericRow {
+  return {
+    id: ids.toSync(item.id),
+    household_id: householdId,
+    person_id: null,
+    title: String(item.title ?? item.name ?? ''),
+    body: itemToBody(item, ids),
+    client_mutated_at: item.updatedAt ?? null,
+    deleted_at: null,
+  };
+}
+
+export function rowToGeneric<T extends { id: string }>(row: GenericRow, ids: IdResolver): T {
+  return bodyToItem<T>(row, ids);
+}
+
+export function personToRow(
+  item: HouseholdMember,
+  householdId: string,
+  ids: IdResolver
+): PersonRow {
+  return {
+    id: ids.toSync(item.id),
+    household_id: householdId,
+    name: item.name ?? '',
+    role: item.role ?? 'adult',
+    relation: item.relation ?? null,
+    body: itemToBody(item, ids),
+    client_mutated_at: item.updatedAt ?? null,
+    deleted_at: null,
+  };
+}
+
+export function rowToPerson(row: PersonRow, ids: IdResolver): HouseholdMember {
+  const item = bodyToItem<HouseholdMember>(row, ids);
+  return {
+    ...item,
+    name: typeof item.name === 'string' && item.name ? item.name : row.name,
+  };
+}
+
+/** Column shape a tombstone needs so NOT NULL constraints hold per table. */
+export function tombstoneRow(
+  table: SyncTable,
+  syncId: string,
+  householdId: string,
+  queuedAt: string,
+  now: string
+): Record<string, unknown> {
+  const base = {
+    id: syncId,
+    household_id: householdId,
+    body: {},
+    client_mutated_at: queuedAt,
+    deleted_at: now,
+  };
+  switch (table) {
+    case 'things':
+      return {
+        ...base,
+        person_id: null,
+        name: '',
+        category: null,
+        space_key: null,
+        room: null,
+        is_document: false,
+        document_kind: null,
+        expiry_date: null,
+      };
+    case 'reminders':
+      return {
+        ...base,
+        person_id: null,
+        thing_id: null,
+        label: '',
+        remind_at: null,
+        remind_interval: null,
+      };
+    case 'household_people':
+      return { ...base, name: '', role: 'adult', relation: null };
+    default:
+      return { ...base, person_id: null, title: '' };
+  }
 }
 
 export type RemoteChange<T> = {
@@ -222,3 +374,5 @@ export function mergeRemote<T extends { id: string; updatedAt?: string }>(
 
   return { merged: changed ? [...byId.values()] : local, changed };
 }
+
+export type { Expense, Subscription, Habit, ClassPack, HouseholdMember };

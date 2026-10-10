@@ -69,8 +69,8 @@ Saavi is engineered as an **Offline-First, Local-First Application** with backgr
 * **Model**: **Apple / Google Store Subscription 7-Day Free Trial**.
 * **Flow**: User starts a subscription via Apple StoreKit / Google Play Billing with an introductory 7-day free trial.
 * **Authority**: **RevenueCat** is the sole source of truth for trial period, billing, and active subscription state.
-* **Free Trial AI Allowance**: **5 AI conversations / day** during the 7-day trial.
-* **Post-Trial / Paid Pro Allowance**: Generous internal fair-use ceiling (e.g. 150 requests/day cost guard) without presenting paying users with stressful artificial counters.
+* **Free Trial AI Allowance**: **25 Talk turns / day** during the 7-day trial.
+* **Post-Trial / Paid Pro Allowance**: **100 Talk turns / day**, shown on the paywall and plan screen.
 * **Manual Feature Guarantee**: Manual CRUD (adding/editing Things, Expenses, Habits, Classes, Subscriptions, Last Done) remains **100% free and unlimited forever**, even if a trial expires or a subscription lapses.
 
 ### Decision 2: Clarifying Single Turn vs. Multi-Message Conversations
@@ -194,7 +194,7 @@ To protect OpenAI API costs from direct script tampering without adding Redis:
   - Wire 7-day free trial presentation and "Restore Purchases" in `app/settings/plan.tsx`.
 - [ ] **Task 2.2 — Chat API JWT Verification & 5/day Trial Guard**:
   - Update `server/chat.mjs` to verify Supabase JWT header.
-  - Enforce 5 AI requests/day for trial users via Supabase counter table/RPC (no Redis).
+  - Enforce 25 AI requests/day for trial users via Supabase counter table/RPC (no Redis).
 - [ ] **Task 2.3 — Private Supabase Media Storage**:
   - Create private Supabase storage bucket `media` with RLS.
   - Implement background upload in `lib/cloud/mediaSync.ts` to convert local cache to durable storage paths.

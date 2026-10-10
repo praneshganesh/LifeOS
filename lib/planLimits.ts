@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const STORAGE_KEY = 'lifeos:plan:v1';
 
-export type PlanId = 'trial' | 'pro' | 'family';
+export type PlanId = 'trial' | 'pro' | 'family' | 'lapsed';
 
 export type PlanDef = {
   id: PlanId;
@@ -22,10 +22,26 @@ const UNLIMITED = {
   members: Infinity,
 } as const;
 
-export const TRIAL_DAYS = 14;
+/**
+ * In-app trial length (days). Override with EXPO_PUBLIC_TRIAL_DAYS.
+ * Keep StoreKit / Play intro offers aligned with this number.
+ */
+function resolveTrialDays(): number {
+  const raw = (process.env.EXPO_PUBLIC_TRIAL_DAYS ?? '').trim();
+  const n = raw ? Number(raw) : 7;
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 7;
+}
 
-/** Family plan includes this many app logins (owner + invitees). */
+export const TRIAL_DAYS = resolveTrialDays();
+
+/** Family plan includes this many app logins (owner + invitees). Not sold at launch. */
 export const FAMILY_LOGIN_SEATS = 4;
+
+/** Paid Talk turns per calendar day. */
+export const PRO_TALK_DAILY = 100;
+
+/** Trial Talk turns per calendar day. */
+export const TRIAL_TALK_DAILY = 25;
 
 export const PLANS: PlanDef[] = [
   {
@@ -33,48 +49,55 @@ export const PLANS: PlanDef[] = [
     name: 'Trial',
     price: `${TRIAL_DAYS} days`,
     perks: [
-      'Full Pro for 14 days',
+      `Full Pro for ${TRIAL_DAYS} days`,
       'Unlimited Things, homes, people',
-      'Talk, Capture, classes, habits',
-      'One login — Family adds household sharing later',
+      `${TRIAL_TALK_DAILY} Talk turns / day`,
+      'One login, on your devices',
     ],
     limits: { ...UNLIMITED },
   },
   {
     id: 'pro',
     name: 'Pro',
-    price: 'AED 29 / mo',
+    price: 'Pro',
     perks: [
       'Everything in Trial, after you pay',
-      'One login · your devices (sync later)',
-      'Talk capped per day (cost guard)',
-      'Person tags — son’s class on your account',
+      'Your devices, one login',
+      `${PRO_TALK_DAILY} Talk turns / day`,
+      'Person tags — a child’s class on your account',
     ],
     limits: { ...UNLIMITED },
   },
   {
     id: 'family',
     name: 'Family',
-    price: 'AED 49 / mo',
+    price: 'Family',
     perks: [
-      'Everything in Pro',
-      '4 logins in one household',
-      'Extra seats as add-ons',
-      'Shared Things · personal habits',
+      'Not offered at launch',
+      'A stored Family tier is treated as Pro',
     ],
     limits: { ...UNLIMITED },
+  },
+  {
+    id: 'lapsed',
+    name: 'Ended',
+    price: 'Ended',
+    perks: ['Resubscribe to continue'],
+    limits: { assets: 0, homes: 0, members: 0 },
   },
 ];
 
 export type PlanPrefs = {
   planId: PlanId;
   trialStartedAt?: string;
+  /** Store product queued for the next renewal, when it differs from the active one. */
+  pendingProductId?: string;
 };
 
 export const DEFAULT_PLAN: PlanPrefs = { planId: 'trial' };
 
 function normalizePlanId(id: unknown): PlanId {
-  if (id === 'pro' || id === 'family' || id === 'trial') return id;
+  if (id === 'pro' || id === 'family' || id === 'trial' || id === 'lapsed') return id;
   if (id === 'free') return 'trial';
   return 'trial';
 }
@@ -91,16 +114,30 @@ export async function loadPlanPrefs(): Promise<PlanPrefs> {
       return fresh;
     }
     const parsed = JSON.parse(raw) as Partial<PlanPrefs> & { planId?: unknown };
-    const planId = normalizePlanId(parsed.planId);
+    const storedId = normalizePlanId(parsed.planId);
+    const planId = storedId === 'family' ? 'pro' : storedId;
     const trialStartedAt =
       typeof parsed.trialStartedAt === 'string' && parsed.trialStartedAt
         ? parsed.trialStartedAt
         : planId === 'trial'
           ? new Date().toISOString()
           : undefined;
-    const prefs: PlanPrefs = { planId, trialStartedAt };
-    if (String(parsed.planId) === 'free') {
+    const pendingProductId =
+      typeof parsed.pendingProductId === 'string' && parsed.pendingProductId.trim()
+        ? parsed.pendingProductId.trim()
+        : undefined;
+    const prefs: PlanPrefs = {
+      planId,
+      trialStartedAt,
+      ...(pendingProductId ? { pendingProductId } : {}),
+    };
+    if (String(parsed.planId) === 'free' || storedId === 'family') {
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
+      if (storedId === 'family') {
+        void import('@/lib/aiUsage')
+          .then((m) => m.syncPlanIdToSupabase('pro'))
+          .catch(() => undefined);
+      }
     }
     return prefs;
   } catch {
@@ -111,16 +148,58 @@ export async function loadPlanPrefs(): Promise<PlanPrefs> {
   }
 }
 
+async function storedPendingProductId(): Promise<string | undefined> {
+  try {
+    const raw = await AsyncStorage.getItem(STORAGE_KEY);
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as { pendingProductId?: unknown };
+    return typeof parsed.pendingProductId === 'string' && parsed.pendingProductId.trim()
+      ? parsed.pendingProductId.trim()
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function savePlanPrefs(prefs: PlanPrefs): Promise<void> {
   const planId = normalizePlanId(prefs.planId);
+  const pending =
+    planId === 'trial' || planId === 'lapsed'
+      ? undefined
+      : prefs.pendingProductId?.trim() || (await storedPendingProductId());
   const next: PlanPrefs = {
     planId,
     trialStartedAt:
       prefs.trialStartedAt ||
       (planId === 'trial' ? new Date().toISOString() : undefined),
+    ...(pending ? { pendingProductId: pending } : {}),
   };
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   void import('@/lib/cloud/sync').then((m) => m.scheduleCloudPush()).catch(() => undefined);
+  void import('@/lib/aiUsage')
+    .then((m) => m.syncPlanIdToSupabase(planId))
+    .catch(() => undefined);
+}
+
+/** Remember a deferred store product, or clear it once that product is active. */
+export async function setPendingStoreProduct(pendingProductId: string | null): Promise<void> {
+  const current = await loadPlanPrefs();
+  const pending =
+    current.planId === 'trial' ? undefined : pendingProductId?.trim() || undefined;
+  const next: PlanPrefs = {
+    planId: current.planId,
+    trialStartedAt: current.trialStartedAt,
+    ...(pending ? { pendingProductId: pending } : {}),
+  };
+  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  const { syncPlanIdToSupabase } = await import('@/lib/aiUsage');
+  await syncPlanIdToSupabase(current.planId, {
+    cadence: null,
+    productId: null,
+    renewsAt: null,
+    pendingProductId: pending ?? null,
+    updatePending: true,
+  });
 }
 
 export function planById(id: PlanId | 'free'): PlanDef {

@@ -24,7 +24,7 @@ import {
 } from '@/lib/invites/membership';
 import {
   configureRevenueCat,
-  fetchCustomerPlanId,
+  fetchCustomerBilling,
   fetchPaywallOffers,
   isRevenueCatConfigured,
   pickOffer,
@@ -42,12 +42,25 @@ type PlanContextValue = {
   billingReady: boolean;
   offers: OfferSummary[];
   refresh: () => Promise<void>;
-  refreshOffers: () => Promise<void>;
+  refreshOffers: () => Promise<OfferSummary[]>;
   /**
    * Buy Pro or Family via RevenueCat when available.
    * Falls back to local unlock in __DEV__ if RC isn't available (web / missing key).
    */
-  subscribe: (planId: 'pro' | 'family', cadence?: 'monthly' | 'yearly') => Promise<void>;
+  subscribe: (
+    planId: 'pro',
+    cadence?: 'monthly' | 'yearly'
+  ) => Promise<
+    | {
+        ok: true;
+        planId: PlanId;
+        productId: string | null;
+        cadence: 'monthly' | 'yearly' | null;
+        renewsAt: string | null;
+        pendingProductId: string | null;
+      }
+    | { ok: false; cancelled?: boolean; error: string }
+  >;
   restore: () => Promise<{ ok: boolean; error?: string }>;
   /** Dev helper: restart trial clock. */
   restartTrial: () => Promise<void>;
@@ -90,10 +103,11 @@ export function PlanProvider({ children }: { children: ReactNode }) {
   const refreshOffers = useCallback(async () => {
     if (!isRevenueCatConfigured()) {
       setOffers([]);
-      return;
+      return [] as OfferSummary[];
     }
     const list = await fetchPaywallOffers();
     setOffers(list);
+    return list;
   }, []);
 
   const refresh = useCallback(async () => {
@@ -105,9 +119,44 @@ export function PlanProvider({ children }: { children: ReactNode }) {
 
     let prefsNext = p;
     if (m.role !== 'member' && isRevenueCatConfigured()) {
-      const remote = await fetchCustomerPlanId();
-      if (remote && remote !== p.planId) {
-        prefsNext = { planId: remote, trialStartedAt: p.trialStartedAt };
+      const [{ loadProfileBilling }, billing] = await Promise.all([
+        import('@/lib/billing/profilePlan'),
+        fetchCustomerBilling(),
+      ]);
+      const profile = await loadProfileBilling();
+      const pendingProductId = p.pendingProductId || profile?.pendingProductId || undefined;
+      if (billing.status === 'active') {
+        const snap = billing.snap;
+        const pendingCleared = Boolean(pendingProductId) && snap.productId === pendingProductId;
+        const nextPending = pendingCleared ? undefined : pendingProductId;
+        if (snap.planId !== p.planId || nextPending !== p.pendingProductId) {
+          prefsNext = {
+            planId: snap.planId,
+            trialStartedAt: p.trialStartedAt,
+            pendingProductId: nextPending,
+          };
+          await savePlanPrefs(prefsNext);
+          if (pendingCleared) {
+            const { setPendingStoreProduct } = await import('@/lib/planLimits');
+            await setPendingStoreProduct(null);
+          }
+        } else {
+          const { syncPlanIdToSupabase } = await import('@/lib/aiUsage');
+          void syncPlanIdToSupabase(snap.planId, snap);
+        }
+      } else if (
+        billing.status === 'none' &&
+        (p.planId === 'pro' ||
+          p.planId === 'family' ||
+          p.planId === 'lapsed' ||
+          profile?.planId === 'pro' ||
+          profile?.planId === 'family' ||
+          profile?.planId === 'lapsed')
+      ) {
+        prefsNext = { planId: 'lapsed', trialStartedAt: p.trialStartedAt };
+        if (p.planId !== 'lapsed') await savePlanPrefs(prefsNext);
+      } else if (billing.status === 'unavailable' && profile?.planId === 'lapsed' && p.planId !== 'lapsed') {
+        prefsNext = { planId: 'lapsed', trialStartedAt: p.trialStartedAt };
         await savePlanPrefs(prefsNext);
       }
     }
@@ -146,42 +195,73 @@ export function PlanProvider({ children }: { children: ReactNode }) {
   );
 
   const subscribe = useCallback(
-    async (planId: 'pro' | 'family', cadence: 'monthly' | 'yearly' = 'yearly') => {
-      const want =
-        planId === 'pro'
-          ? cadence === 'monthly'
-            ? ('pro_monthly' as const)
-            : ('pro_yearly' as const)
-          : cadence === 'monthly'
-            ? ('family_monthly' as const)
-            : ('family_yearly' as const);
+    async (planId: 'pro', cadence: 'monthly' | 'yearly' = 'monthly') => {
+      const want = cadence === 'monthly' ? ('pro_monthly' as const) : ('pro_yearly' as const);
 
       if (billingReady && offers.length) {
-        const offer = pickOffer(offers, want) || pickOffer(
-          offers,
-          planId === 'pro' ? 'pro_yearly' : 'family_yearly'
-        );
+        const uid = await resolveAppUserId();
+        if (!uid) {
+          return {
+            ok: false as const,
+            error: 'Sign in before subscribing so the purchase stays on your account.',
+          };
+        }
+        await configureRevenueCat(uid);
+        const offer = pickOffer(offers, want);
         if (offer) {
           const result = await purchaseOffer(offer);
           if (result.ok) {
             await applyPlanId(result.planId, prefs.trialStartedAt);
-            return;
+            const { setPendingStoreProduct } = await import('@/lib/planLimits');
+            await setPendingStoreProduct(result.pendingProductId);
+            setPrefs((prev) => ({
+              ...prev,
+              planId: result.planId,
+              pendingProductId: result.pendingProductId ?? undefined,
+            }));
+            return {
+              ok: true as const,
+              planId: result.planId,
+              productId: result.productId,
+              cadence: result.cadence,
+              renewsAt: result.renewsAt,
+              pendingProductId: result.pendingProductId,
+            };
           }
-          if (!result.cancelled) {
-            throw new Error(result.error);
+          if (result.cancelled) {
+            return {
+              ok: false as const,
+              cancelled: true as const,
+              error: 'Purchase cancelled or Apple closed the sheet before finishing.',
+            };
           }
-          return;
+          return { ok: false as const, error: result.error };
         }
+        const period = cadence === 'monthly' ? 'monthly' : 'yearly';
+        const name = 'Pro';
+        return {
+          ok: false as const,
+          error: `No ${period} ${name} product is available.`,
+        };
       }
 
       // Dev / web fallback — unlock locally when StoreKit isn't available.
       if (__DEV__ || !isRevenueCatConfigured()) {
         await applyPlanId(planId, prefs.trialStartedAt);
-        return;
+        return {
+          ok: true as const,
+          planId,
+          productId: null,
+          cadence: null,
+          renewsAt: null,
+          pendingProductId: null,
+        };
       }
-      throw new Error(
-        'Store products unavailable. Use a TestFlight / dev build with StoreKit, or Restore.'
-      );
+      return {
+        ok: false as const,
+        error:
+          'Store products unavailable. Use a TestFlight / dev build with StoreKit, or Restore.',
+      };
     },
     [billingReady, offers, applyPlanId, prefs.trialStartedAt]
   );

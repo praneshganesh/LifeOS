@@ -3,7 +3,9 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import {
+  CLOUD_PREF_KEYS,
   CLOUD_STORE_KEYS,
+  LEGACY_DOMAIN_KEYS,
   buildCloudBody,
   formatRecoveryCode,
   generateRecoveryCode,
@@ -11,6 +13,12 @@ import {
   normalizeRecoveryCode,
   type CloudSnapshot,
 } from '@/lib/cloud/payload';
+
+const LEGACY_IMPORT_KEY = 'lifeos:cloud:legacyImported:v1';
+
+async function syncEngine() {
+  return import('@/lib/sync/engine');
+}
 
 const RECOVERY_KEY = 'lifeos:cloud:recovery';
 const META_KEY = 'lifeos:cloud:meta:v1';
@@ -88,8 +96,10 @@ async function ensureRecoveryCode(): Promise<string> {
   return code;
 }
 
-async function readLocalStores(): Promise<Record<string, unknown>> {
-  const pairs = await AsyncStorage.multiGet([...CLOUD_STORE_KEYS]);
+async function readLocalStores(
+  keys: readonly string[] = CLOUD_PREF_KEYS
+): Promise<Record<string, unknown>> {
+  const pairs = await AsyncStorage.multiGet([...keys]);
   const stores: Record<string, unknown> = {};
   for (const [key, raw] of pairs) {
     if (raw == null) continue;
@@ -102,12 +112,29 @@ async function readLocalStores(): Promise<Record<string, unknown>> {
   return stores;
 }
 
+/**
+ * Prefs: overwrite local (blob is their source of truth across devices).
+ * Legacy domain keys: only fill an EMPTY local store, once per device —
+ * row sync then imports them with ON CONFLICT DO NOTHING.
+ */
 async function writeLocalStores(stores: Record<string, unknown>): Promise<void> {
   const entries: [string, string][] = [];
-  for (const key of CLOUD_STORE_KEYS) {
+  for (const key of CLOUD_PREF_KEYS) {
     if (!(key in stores) || stores[key] == null) continue;
     entries.push([key, JSON.stringify(stores[key])]);
   }
+
+  const imported = (await AsyncStorage.getItem(LEGACY_IMPORT_KEY)) === '1';
+  if (!imported) {
+    const existing = await AsyncStorage.multiGet([...LEGACY_DOMAIN_KEYS]);
+    for (const [key, raw] of existing) {
+      if (raw != null) continue;
+      if (!(key in stores) || stores[key] == null) continue;
+      entries.push([key, JSON.stringify(stores[key])]);
+    }
+    entries.push([LEGACY_IMPORT_KEY, '1']);
+  }
+
   if (entries.length) await AsyncStorage.multiSet(entries);
 }
 
@@ -118,6 +145,47 @@ export async function ensureCloudSession(): Promise<string | null> {
   const { data, error } = await supabase.auth.signInAnonymously();
   if (error) throw error;
   return data.user?.id ?? null;
+}
+
+/**
+ * After Sign in with Apple (link or reclaim), pull cloud prefs for this user,
+ * re-point row sync at the user's household, and refresh cloud meta.
+ */
+export async function pullCloudAfterSignIn(userId: string): Promise<CloudMeta> {
+  const meta = await loadCloudMeta();
+  if (!isSupabaseConfigured() || !supabase) {
+    return { ...meta, userId, lastError: null };
+  }
+  try {
+    if (meta.userId && meta.userId !== userId) {
+      // Different auth user than before: forget the cached household so the
+      // engine resolves the reclaimed account's household and pulls its rows.
+      const engine = await syncEngine();
+      await engine.resetSyncStateForUser(null);
+    }
+    const pulled = await pullStores(userId);
+    const now = new Date().toISOString();
+    if (pulled === 0) {
+      await pushStores(userId);
+    }
+    const next: CloudMeta = {
+      userId,
+      lastPullAt: now,
+      lastPushAt: pulled === 0 ? now : meta.lastPushAt,
+      lastError: null,
+    };
+    await saveCloudMeta(next);
+    void syncEngine().then((m) => m.syncRowsNow()).catch(() => undefined);
+    return next;
+  } catch (e) {
+    const next = {
+      ...meta,
+      userId,
+      lastError: e instanceof Error ? e.message : 'Cloud pull failed.',
+    };
+    await saveCloudMeta(next);
+    return next;
+  }
 }
 
 async function pullStores(userId: string): Promise<number> {
@@ -139,9 +207,10 @@ async function pullStores(userId: string): Promise<number> {
   return rows.length;
 }
 
+/** Prefs-only blob push. Domain rows are owned by `lib/sync/engine.ts`. */
 async function pushStores(userId: string): Promise<void> {
   if (!supabase) return;
-  const snapshot = buildCloudBody(await readLocalStores());
+  const snapshot = buildCloudBody(await readLocalStores(CLOUD_PREF_KEYS), undefined, CLOUD_PREF_KEYS);
   const rows = Object.entries(snapshot.stores).map(([store_key, body]) => ({
     user_id: userId,
     store_key,
@@ -154,10 +223,13 @@ async function pushStores(userId: string): Promise<void> {
     });
     if (error) throw error;
   }
+  // Recovery code = prefs snapshot + a claim on this household's rows.
   const code = await ensureRecoveryCode();
+  const householdId = await (await syncEngine()).getCachedHouseholdId().catch(() => null);
   const { error: recErr } = await supabase.rpc('upsert_life_recovery', {
     p_code: normalizeRecoveryCode(code),
     p_body: snapshot,
+    ...(householdId ? { p_household: householdId } : {}),
   });
   if (recErr) throw recErr;
 }
@@ -247,29 +319,58 @@ export async function syncCloudNow(): Promise<CloudMeta> {
   }
 }
 
+/**
+ * Recovery on a new phone: restore prefs from the snapshot, join the code's
+ * household (row data + media follow via sync), then pull everything.
+ */
 export async function restoreFromRecoveryCode(code: string): Promise<CloudSnapshot> {
   if (!supabase) throw new Error('Cloud is not configured.');
   if (!isValidRecoveryCode(code)) throw new Error('That recovery code is not valid.');
+  const normalized = normalizeRecoveryCode(code);
   const { data, error } = await supabase.rpc('fetch_life_recovery', {
-    p_code: normalizeRecoveryCode(code),
+    p_code: normalized,
   });
   if (error) throw error;
   const snapshot = data as CloudSnapshot | null;
   if (!snapshot?.stores || typeof snapshot.stores !== 'object') {
     throw new Error('No backup found for that code.');
   }
-  await writeLocalStores(snapshot.stores);
-  await writeSecure(RECOVERY_KEY, normalizeRecoveryCode(code));
+
   const userId = await ensureCloudSession();
-  if (userId) {
-    await pushStores(userId);
-    await saveCloudMeta({
-      userId,
-      lastPullAt: new Date().toISOString(),
-      lastPushAt: new Date().toISOString(),
-      lastError: null,
-    });
-  }
+  if (!userId) throw new Error('Could not open a cloud session.');
+
+  // Household first so the legacy domain import below is skipped when rows exist.
+  const { data: claimed, error: claimErr } = await supabase.rpc(
+    'claim_household_by_recovery',
+    { p_code: normalized }
+  );
+  if (claimErr) throw claimErr;
+  const householdId = typeof claimed === 'string' ? claimed : null;
+
+  const engine = await syncEngine();
+  await engine.resetSyncStateForUser(householdId);
+
+  // Prefs always; legacy domain blob only when this phone has nothing local
+  // and the code was never bound to a household (pre-row-sync backups).
+  const stores = householdId
+    ? Object.fromEntries(
+        Object.entries(snapshot.stores).filter(([k]) =>
+          (CLOUD_PREF_KEYS as readonly string[]).includes(k)
+        )
+      )
+    : snapshot.stores;
+  await writeLocalStores(stores);
+  await writeSecure(RECOVERY_KEY, normalized);
+
+  await pushStores(userId);
+  await saveCloudMeta({
+    userId,
+    lastPullAt: new Date().toISOString(),
+    lastPushAt: new Date().toISOString(),
+    lastError: null,
+  });
+  // Pull rows + media now (best-effort; the engine retries on its own).
+  await engine.syncRowsNow().catch(() => undefined);
   return snapshot;
 }
 

@@ -1,4 +1,4 @@
-import { Text as RNText, type TextProps, type TextStyle } from 'react-native';
+import { Platform, Text as RNText, type TextProps, type TextStyle } from 'react-native';
 import { fonts } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
 
@@ -84,5 +84,16 @@ export function Text({
     },
   };
 
-  return <RNText style={[variantStyle[variant], style]} {...props} />;
+  return (
+    <RNText
+      style={[
+        variantStyle[variant],
+        // Android adds extra font padding by default, which makes multi-line
+        // chat/body text look top-heavy and flush against the bottom edge.
+        Platform.OS === 'android' ? { includeFontPadding: false } : null,
+        style,
+      ]}
+      {...props}
+    />
+  );
 }

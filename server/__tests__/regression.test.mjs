@@ -116,7 +116,10 @@ describe('chat-api action validation', () => {
       validateAction({ type: 'set_reminder', label: 'Renew Passport', remindAt: '2026-09-01' }),
       true
     );
-    assert.equal(validateAction({ type: 'set_reminder', label: 'Renew Passport' }), false);
+    // remindAt may be omitted (prompt: "if no day is spoken, omit remindAt");
+    // the client then defaults to today instead of the model inventing a date.
+    assert.equal(validateAction({ type: 'set_reminder', label: 'Renew Passport' }), true);
+    assert.equal(validateAction({ type: 'set_reminder', label: '' , remindAt: '2026-09-01' }), false);
     assert.equal(
       validateAction({ type: 'set_reminder', label: 'Renew Passport', remindAt: 'next Tuesday' }),
       false

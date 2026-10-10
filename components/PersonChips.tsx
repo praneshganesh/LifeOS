@@ -57,8 +57,10 @@ export function PersonChips({
 
   return (
     <>
-      <Text style={[styles.label, { color: colors.ink }]}>{label}</Text>
-      <View style={styles.chips}>
+      {label ? (
+        <Text style={[styles.label, { color: colors.ink }]}>{label}</Text>
+      ) : null}
+      <View style={[styles.chips, !label && { marginBottom: 0 }]}>
         <Pressable
           onPress={() => onChange(null)}
           style={({ pressed }) => [

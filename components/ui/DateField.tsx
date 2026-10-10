@@ -20,9 +20,13 @@ import { useTheme } from '@/lib/ThemeContext';
 const WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'] as const;
 const IS_NATIVE = Platform.OS === 'ios' || Platform.OS === 'android';
 
-/** Apple’s inline calendar is ~320pt wide and won’t stretch on Pro Max / Plus. */
+/**
+ * Apple’s inline calendar is ~320pt wide and won’t stretch on Pro Max / Plus.
+ * Height must fit a 6-week month. 336pt clips the last week on iOS 17+
+ * (the month header grew), which is what hides 28–30 under the dock.
+ */
 const IOS_INLINE_CALENDAR_WIDTH = 320;
-const IOS_INLINE_CALENDAR_HEIGHT = 336;
+const IOS_INLINE_CALENDAR_HEIGHT = 460;
 
 function toDate(value: string): Date {
   return parseDateInput(value) ?? new Date();
@@ -161,7 +165,8 @@ function NativeDatePicker({
     if (embedded || iosExpanded) {
       const scale =
         iosWrapW > 0 ? Math.min(1.35, iosWrapW / IOS_INLINE_CALENDAR_WIDTH) : 1;
-      const scaledH = Math.round(IOS_INLINE_CALENDAR_HEIGHT * scale);
+      // Extra points so the scale transform doesn’t shave the last day row.
+      const scaledH = Math.ceil(IOS_INLINE_CALENDAR_HEIGHT * scale) + 12;
       return (
         <View
           style={[

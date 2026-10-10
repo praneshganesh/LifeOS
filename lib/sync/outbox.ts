@@ -9,7 +9,7 @@ import type { LastDoneItem } from '@/lib/lastDone';
 import { coalesceOutbox, type OutboxOp, type SyncTable } from '@/lib/sync/core';
 
 const OUTBOX_KEY = 'lifeos:sync:outbox:v1';
-const MAX_QUEUE = 2000;
+const MAX_QUEUE = 4000;
 
 let cache: OutboxOp[] | null = null;
 let writeChain: Promise<void> = Promise.resolve();
@@ -34,7 +34,10 @@ function persist(next: OutboxOp[]): Promise<void> {
   return writeChain;
 }
 
-async function enqueue(op: Omit<OutboxOp, 'queuedAt' | 'attempts'>): Promise<void> {
+async function enqueue(
+  op: Omit<OutboxOp, 'queuedAt' | 'attempts'>,
+  opts?: { silent?: boolean }
+): Promise<void> {
   const queue = await load();
   const next = coalesceOutbox(queue, {
     ...op,
@@ -42,25 +45,48 @@ async function enqueue(op: Omit<OutboxOp, 'queuedAt' | 'attempts'>): Promise<voi
     attempts: 0,
   }).slice(-MAX_QUEUE);
   await persist(next);
+  if (opts?.silent) return;
   void import('@/lib/sync/engine')
     .then((m) => m.scheduleRowSync())
     .catch(() => undefined);
 }
 
+/** Generic: any synced module. */
+export async function queueUpsert(
+  table: SyncTable,
+  item: { id: string },
+  opts?: { backfill?: boolean; silent?: boolean }
+): Promise<void> {
+  await enqueue(
+    {
+      table,
+      rowId: item.id,
+      op: 'upsert',
+      payload: item,
+      ...(opts?.backfill ? { backfill: true } : {}),
+    },
+    { silent: opts?.silent }
+  );
+}
+
+export async function queueDelete(table: SyncTable, id: string): Promise<void> {
+  await enqueue({ table, rowId: id, op: 'delete' });
+}
+
 export async function queueThingUpsert(item: InventoryItem): Promise<void> {
-  await enqueue({ table: 'things', rowId: item.id, op: 'upsert', payload: item });
+  await queueUpsert('things', item);
 }
 
 export async function queueThingDelete(id: string): Promise<void> {
-  await enqueue({ table: 'things', rowId: id, op: 'delete' });
+  await queueDelete('things', id);
 }
 
 export async function queueReminderUpsert(item: LastDoneItem): Promise<void> {
-  await enqueue({ table: 'reminders', rowId: item.id, op: 'upsert', payload: item });
+  await queueUpsert('reminders', item);
 }
 
 export async function queueReminderDelete(id: string): Promise<void> {
-  await enqueue({ table: 'reminders', rowId: id, op: 'delete' });
+  await queueDelete('reminders', id);
 }
 
 export async function peekOutbox(): Promise<OutboxOp[]> {

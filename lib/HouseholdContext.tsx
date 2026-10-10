@@ -25,6 +25,8 @@ import {
   loadVersionedArray,
   saveVersionedArray,
 } from '@/lib/storage/versioned';
+import { queueDelete, queueUpsert } from '@/lib/sync/outbox';
+import { subscribeSyncApplied } from '@/lib/sync/engine';
 
 const STORAGE_KEY = 'lifeos:household:v1';
 const SCHEMA_VERSION = 1;
@@ -80,6 +82,20 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
+  useEffect(() => {
+    return subscribeSyncApplied((tables) => {
+      if (!tables.includes('household_people')) return;
+      void loadVersionedArray<HouseholdMember>(
+        STORAGE_KEY,
+        SCHEMA_VERSION,
+        normalizeHouseholdMember
+      ).then((loaded) => {
+        membersRef.current = loaded;
+        setMembers(loaded);
+      });
+    });
+  }, []);
+
   // Awaited persist: callers only resolve once the write is on disk, so a
   // failed write rejects instead of the UI reporting a save that never stuck.
   const persist = async (next: HouseholdMember[]) => {
@@ -94,7 +110,10 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
     if (wouldExceedMemberLimit(plan, membersRef.current.length)) {
       throw new PlanLimitError('members');
     }
-    let created = createHouseholdMember(input);
+    let created: HouseholdMember = {
+      ...createHouseholdMember(input),
+      updatedAt: new Date().toISOString(),
+    };
     if (
       membersRef.current.length === 0 &&
       (created.role === 'adult' || created.role === 'parent')
@@ -102,22 +121,27 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       created = { ...created, permission: 'owner' as const };
     }
     await persist([created, ...membersRef.current]);
+    void queueUpsert('household_people', created);
     return created;
   }, []);
 
   const updateMember = useCallback(async (id: string, patch: Partial<HouseholdMember>) => {
+    let updated: HouseholdMember | null = null;
     await persist(
       membersRef.current.map((m) => {
         if (m.id !== id) return m;
-        const merged = { ...m, ...patch };
+        const merged: HouseholdMember = { ...m, ...patch, updatedAt: new Date().toISOString() };
         if (patch.name) merged.avatarLetter = avatarLetterFromName(patch.name);
+        updated = merged;
         return merged;
       })
     );
+    if (updated) void queueUpsert('household_people', updated);
   }, []);
 
   const removeMember = useCallback(async (id: string) => {
     await persist(membersRef.current.filter((m) => m.id !== id));
+    void queueDelete('household_people', id);
   }, []);
 
   const getById = useCallback(

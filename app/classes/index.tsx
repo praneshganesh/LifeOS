@@ -143,10 +143,8 @@ function makeStyles(colors: ThemeColors) {
     color: colors.forest,
   },
   card: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
     padding: spacing.md,
     marginBottom: spacing.sm,
   },

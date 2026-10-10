@@ -160,7 +160,7 @@ export default function RoomDetailScreen() {
                 onPress={() => router.push(`/asset/${asset.id}`)}
                 onEdit={
                   getById(asset.id)
-                    ? () => router.push(`/asset/edit/${asset.id}`)
+                    ? () => router.push(`/asset/${asset.id}`)
                     : undefined
                 }
                 onDelete={

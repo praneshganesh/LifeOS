@@ -1,39 +1,54 @@
 import Constants from 'expo-constants';
 import { DETAIL_DOCK_PAD } from '@/components/ui/DetailKit';
-import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
-import { ListCard, ListRow } from '@/components/ui/ListKit';
+import { ModuleScreen } from '@/components/ui/ModuleScreen';
 import { Text } from '@/components/ui/Text';
-import { spacing } from '@/constants/theme';
+import { fonts, spacing } from '@/constants/theme';
+import { useTheme } from '@/lib/ThemeContext';
 
+/**
+ * Kept for deep links / App Store compliance. Not listed in Settings;
+ * version also shows at the bottom of the Settings home screen.
+ */
 export default function AboutSettingsScreen() {
+  const { colors } = useTheme();
   const version =
     Constants.expoConfig?.version ||
     Constants.nativeAppVersion ||
     '1.0.0';
-  const sdk =
-    Constants.expoConfig?.sdkVersion ||
-    String(Constants.expoConfig?.runtimeVersion || '57');
 
   return (
     <ModuleScreen
-      title="About Saavi"
+      title="Saavi"
       backLabel="Settings"
       backFallbackHref="/settings"
       bottomExtra={DETAIL_DOCK_PAD}
     >
-      <Text variant="body" style={{ marginBottom: spacing.lg }}>
-        Life administration — homes, assets, warranties, documents, and family —
-        with automatic document reading and no required email or bank
-        connections. Your data syncs securely to the cloud.
+      <Text
+        style={{
+          fontFamily: fonts.sansSemi,
+          fontSize: 28,
+          color: colors.ink,
+          letterSpacing: -0.4,
+          marginBottom: spacing.sm,
+        }}
+      >
+        Saavi
       </Text>
-      <ModuleSection label="App">
-        <ListCard>
-          <ListRow title="Version" meta={version} />
-          <ListRow title="Expo SDK" meta={String(sdk).includes('57') ? '57' : String(sdk)} />
-          <ListRow title="Fonts" meta="Figtree" />
-          <ListRow title="Storage" meta="Cloud synced" last />
-        </ListCard>
-      </ModuleSection>
+      <Text
+        style={{
+          fontFamily: fonts.sans,
+          fontSize: 16,
+          lineHeight: 23,
+          color: colors.mute,
+          marginBottom: spacing.xl,
+        }}
+      >
+        Your home life in one place: Things, people, spend, and the paperwork
+        that goes with them.
+      </Text>
+      <Text style={{ fontFamily: fonts.sans, fontSize: 14, color: colors.faint }}>
+        Version {version}
+      </Text>
     </ModuleScreen>
   );
 }

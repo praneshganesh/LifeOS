@@ -118,6 +118,18 @@ export type ChatSetReminderAction = {
   personId?: string;
 };
 
+/** Change an existing reminder / Last Done activity (due date, label, …). */
+export type ChatUpdateLastDoneAction = {
+  type: 'update_last_done';
+  id?: string;
+  label?: string;
+  patch: {
+    label?: string;
+    notes?: string | null;
+    remindAt?: string | null;
+  };
+};
+
 /** Log a spend entry (not a durable Thing). */
 export type ChatAddExpenseAction = {
   type: 'add_expense';
@@ -267,6 +279,26 @@ export type ChatRemoveClassPackAction = {
   title?: string;
 };
 
+/** Create a habit without marking today done. */
+export type ChatAddHabitAction = {
+  type: 'add_habit';
+  title: string;
+  why?: string;
+  assignedTo?: string;
+  personId?: string;
+};
+
+/** Refine an existing habit (rename, why, …). */
+export type ChatUpdateHabitAction = {
+  type: 'update_habit';
+  id?: string;
+  title?: string;
+  patch: {
+    title?: string;
+    why?: string;
+  };
+};
+
 /** Check in a habit (create if missing when createIfMissing). */
 export type ChatHabitCheckInAction = {
   type: 'habit_check_in';
@@ -319,6 +351,7 @@ export type ChatAction =
   | ChatOpenLastDoneAction
   | ChatLogDoneAction
   | ChatSetReminderAction
+  | ChatUpdateLastDoneAction
   | ChatRemoveLastDoneAction
   | ChatAddExpenseAction
   | ChatUpdateExpenseAction
@@ -326,6 +359,8 @@ export type ChatAction =
   | ChatAddSubscriptionAction
   | ChatUpdateSubscriptionAction
   | ChatRemoveSubscriptionAction
+  | ChatAddHabitAction
+  | ChatUpdateHabitAction
   | ChatHabitCheckInAction
   | ChatRemoveHabitAction
   | ChatAddClassPackAction
@@ -338,4 +373,13 @@ export type ChatAction =
 export type ChatAgentResponse = {
   reply: string;
   actions: ChatAction[];
+  /** Present when chat-api consumed a Supabase AI turn. */
+  aiAllowance?: {
+    ok?: boolean;
+    used?: number;
+    limit?: number;
+    remaining?: number;
+    day?: string;
+    planId?: string;
+  };
 };

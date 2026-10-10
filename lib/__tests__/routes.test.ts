@@ -136,6 +136,14 @@ describe('reminder speech', () => {
     );
   });
 
+  it('maps today to the local day key', () => {
+    const mon = new Date(2026, 8, 21);
+    assert.equal(
+      remindAtFromUtterance('Remind me today to pack lunch', mon),
+      '2026-09-21'
+    );
+  });
+
   it('parses 10th November and splits label from notes', () => {
     const sep = new Date(2026, 8, 1);
     const utterance =

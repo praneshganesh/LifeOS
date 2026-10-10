@@ -42,6 +42,8 @@ export type ClassPack = {
   scheduleTimeInferred?: boolean;
   notes?: string;
   createdAt: string;
+  /** Last local mutation — LWW clock for row sync. */
+  updatedAt?: string;
 };
 
 export type NewClassPackInput = {
@@ -262,6 +264,7 @@ export function normalizeClassPack(raw: unknown): ClassPack | null {
       typeof o.createdAt === 'string' && o.createdAt
         ? o.createdAt
         : new Date().toISOString(),
+    updatedAt: typeof o.updatedAt === 'string' ? o.updatedAt : undefined,
   };
 }
 
@@ -600,6 +603,44 @@ export function nextScheduledClassOccurrence(
     }
   }
   return best;
+}
+
+/** Compact class cues for Talk / Ask agenda replies. */
+export function agendaClassesFromPacks(
+  packs: ClassPack[],
+  now = new Date()
+): {
+  classesToday: { title: string; when?: string }[];
+  nextClass: { title: string; when: string } | null;
+} {
+  const todayKey = localDayKey(now);
+  const classesToday: { title: string; when?: string }[] = [];
+  let nextClass: { title: string; when: string } | null = null;
+  let bestAhead = 999;
+
+  for (const pack of packs) {
+    const left = remainingCount(pack);
+    if (left != null && left <= 0) continue;
+    const next = nextScheduledClassOccurrence(pack, now);
+    if (!next) continue;
+    const time = pack.scheduleTime ? ` ${pack.scheduleTime}` : '';
+    if (next.date === todayKey) {
+      const when = pack.scheduleTimeInferred ? undefined : pack.scheduleTime?.trim();
+      classesToday.push(when ? { title: pack.title, when } : { title: pack.title });
+    }
+    if (next.daysAhead < bestAhead) {
+      bestAhead = next.daysAhead;
+      const when =
+        next.daysAhead === 0
+          ? `today${time}`
+          : next.daysAhead === 1
+            ? `tomorrow${time}`
+            : `${next.dayName}${time}`;
+      nextClass = { title: pack.title, when: when.trim() };
+    }
+  }
+
+  return { classesToday, nextClass };
 }
 
 export function looksLikeClassAttendance(text?: string): boolean {

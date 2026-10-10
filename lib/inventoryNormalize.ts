@@ -29,6 +29,7 @@ export function normalizeInventoryItem(raw: unknown): InventoryItem | null {
     spaceId: typeof r.spaceId === 'string' ? r.spaceId : 's1',
     icon: (typeof r.icon === 'string' ? r.icon : 'package') as InventoryItem['icon'],
     imageUri: typeof r.imageUri === 'string' ? r.imageUri : undefined,
+    imagePath: typeof r.imagePath === 'string' && r.imagePath ? r.imagePath : undefined,
     purchaseDate: dash(r.purchaseDate),
     price: dash(r.price),
     purchasedFrom:

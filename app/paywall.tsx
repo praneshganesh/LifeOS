@@ -16,9 +16,13 @@ import { isOnboardingDone } from '@/lib/onboarding';
 import { fonts, radius, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
 import { pickOffer, type OfferSummary } from '@/lib/billing/revenueCat';
+import { PRO_TALK_DAILY } from '@/lib/planLimits';
+import { promptSaveWithApple } from '@/lib/auth/appleNudge';
+
+type Cadence = 'monthly' | 'yearly';
 
 /**
- * Hard gate when trial ends — Pro / Family via Apple (RevenueCat → StoreKit).
+ * Hard gate when trial ends — Pro via Apple (RevenueCat → StoreKit).
  */
 export default function PaywallScreen() {
   const { colors } = useTheme();
@@ -33,8 +37,9 @@ export default function PaywallScreen() {
     billingReady,
     refreshOffers,
   } = usePlan();
-  const [busy, setBusy] = useState<'pro' | 'family' | 'restore' | null>(null);
+  const [busy, setBusy] = useState<'pro' | 'restore' | null>(null);
   const [loadingOffers, setLoadingOffers] = useState(true);
+  const [cadence, setCadence] = useState<Cadence>('monthly');
 
   useEffect(() => {
     let live = true;
@@ -48,16 +53,19 @@ export default function PaywallScreen() {
   }, [refreshOffers]);
 
   const proOffer =
-    pickOffer(offers, 'pro_yearly') || pickOffer(offers, 'pro_monthly');
-  const familyOffer =
-    pickOffer(offers, 'family_yearly') || pickOffer(offers, 'family_monthly');
+    pickOffer(offers, cadence === 'yearly' ? 'pro_yearly' : 'pro_monthly');
 
   async function afterUnlock() {
+    await promptSaveWithApple({
+      title: 'Save with Apple',
+      message:
+        'Your plan is active. Link Apple so the next phone can restore your subscription, household, and synced data. You can skip and do this later in Settings → Account.',
+    });
     const done = await isOnboardingDone();
     router.replace((done ? '/(tabs)' : '/onboarding') as Href);
   }
 
-  async function pick(planId: 'pro' | 'family') {
+  async function pickPro() {
     if (busy) return;
     if (!billingReady) {
       Alert.alert(
@@ -66,17 +74,42 @@ export default function PaywallScreen() {
       );
       return;
     }
-    if (!(planId === 'pro' ? proOffer : familyOffer)) {
+    if (!proOffer) {
       Alert.alert(
         'Plans unavailable',
         'Store products aren’t loaded yet. Check RevenueCat offerings and App Store Connect subscriptions, then try again.'
       );
       return;
     }
-    setBusy(planId);
+    setBusy('pro');
     try {
-      await subscribe(planId, 'yearly');
-      await afterUnlock();
+      const result = await subscribe('pro', cadence);
+      if (result.ok) {
+        if (result.pendingProductId) {
+          const { pendingSwitchLine } = await import('@/lib/billing/revenueCat');
+          const queued = pendingSwitchLine(
+            {
+              cadence: result.cadence,
+              renewsAt: result.renewsAt,
+              productId: result.productId,
+            },
+            result.pendingProductId
+          );
+          if (queued) {
+            await new Promise<void>((resolve) => {
+              Alert.alert('Starts at renewal', queued, [
+                { text: 'OK', onPress: () => resolve() },
+              ]);
+            });
+          }
+        }
+        await afterUnlock();
+        return;
+      }
+      Alert.alert(
+        result.cancelled ? 'Purchase cancelled' : 'Purchase failed',
+        result.error
+      );
     } catch (e) {
       Alert.alert(
         'Purchase',
@@ -110,9 +143,11 @@ export default function PaywallScreen() {
   }
 
   const title =
-    entitlement.paywallReason === 'trial_ended'
-      ? 'Your trial has ended'
-      : 'Choose a plan';
+    entitlement.paywallReason === 'subscription_ended'
+      ? 'Your subscription has ended'
+      : entitlement.paywallReason === 'trial_ended'
+        ? 'Your trial has ended'
+        : 'Choose a plan';
 
   return (
     <Screen>
@@ -129,29 +164,47 @@ export default function PaywallScreen() {
         <Text style={[styles.brand, { color: colors.ink }]}>Saavi</Text>
         <Text style={[styles.title, { color: colors.ink }]}>{title}</Text>
         <Text style={[styles.sub, { color: colors.mute }]}>
-          Subscribe with Apple. Cancel anytime in Settings.
+          {entitlement.paywallReason === 'subscription_ended'
+            ? 'Resubscribe to continue. This does not start a new trial.'
+            : 'Subscribe with Apple. Cancel anytime in Settings.'}
         </Text>
+
+        <View style={styles.cadenceRow}>
+          {(['monthly', 'yearly'] as const).map((c) => {
+            const on = cadence === c;
+            return (
+              <Pressable
+                key={c}
+                onPress={() => setCadence(c)}
+                style={[
+                  styles.cadenceChip,
+                  {
+                    backgroundColor: on ? colors.ink : colors.surfaceSoft,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.cadenceText,
+                    { color: on ? colors.onInk : colors.ink },
+                  ]}
+                >
+                  {c === 'yearly' ? 'Yearly' : 'Monthly'}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
 
         <PlanCard
           name="Pro"
-          hint="One login · all your devices"
+          hint={`Your devices · ${PRO_TALK_DAILY} Talk turns / day`}
           offer={proOffer}
           loading={loadingOffers && billingReady}
           billingReady={billingReady}
           selected
           busy={busy === 'pro'}
-          onPress={() => void pick('pro')}
-          colors={colors}
-        />
-        <PlanCard
-          name="Family"
-          hint="Up to 4 logins · invite family"
-          offer={familyOffer}
-          loading={loadingOffers && billingReady}
-          billingReady={billingReady}
-          selected={false}
-          busy={busy === 'family'}
-          onPress={() => void pick('family')}
+          onPress={() => void pickPro()}
           colors={colors}
         />
 
@@ -180,7 +233,20 @@ export default function PaywallScreen() {
 
         <Text style={[styles.legal, { color: colors.mute }]}>
           Payment is charged to your Apple ID. Subscriptions renew unless cancelled
-          at least 24 hours before the period ends.
+          at least 24 hours before the period ends.{' '}
+          <Text
+            style={[styles.legalLink, { color: colors.ink }]}
+            onPress={() => router.push('/settings/terms' as Href)}
+          >
+            Terms
+          </Text>
+          {' · '}
+          <Text
+            style={[styles.legalLink, { color: colors.ink }]}
+            onPress={() => router.push('/settings/privacy-policy' as Href)}
+          >
+            Privacy Policy
+          </Text>
         </Text>
 
         {__DEV__ ? (
@@ -222,11 +288,7 @@ function PlanCard({
   onPress: () => void;
   colors: { ink: string; mute: string; accent: string; surface: string; line: string; onInk: string };
 }) {
-  const price = !billingReady
-    ? 'App Store'
-    : loading
-      ? '…'
-      : offer?.priceString || 'Unavailable';
+  const price = loading ? '…' : offer?.priceString?.trim() || '—';
 
   return (
     <Pressable
@@ -236,7 +298,6 @@ function PlanCard({
         styles.card,
         {
           backgroundColor: selected ? colors.ink : colors.surface,
-          borderColor: selected ? colors.ink : colors.line,
           opacity: pressed || busy ? 0.92 : 1,
         },
       ]}
@@ -308,11 +369,26 @@ const styles = StyleSheet.create({
     fontSize: 17,
     lineHeight: 24,
     marginTop: 10,
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
+  },
+  cadenceRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: spacing.lg,
+  },
+  cadenceChip: {
+    flex: 1,
+    height: 44,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cadenceText: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 15,
   },
   card: {
     borderRadius: radius.xl,
-    borderWidth: 1.5,
     padding: spacing.lg,
     marginBottom: spacing.md,
   },
@@ -371,6 +447,12 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginTop: spacing.md,
     textAlign: 'center',
+  },
+  legalLink: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 14,
+    lineHeight: 20,
+    textDecorationLine: 'underline',
   },
   dev: {
     marginTop: spacing.xl,

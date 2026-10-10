@@ -2,7 +2,27 @@
 
 **Goal:** Real Postgres tables in Supabase, with the phone remaining usable in airplane mode. Solo users are a **household of one**; Family is the same model with more members — not a later rewrite.
 
-**Status:** Architecture only. Current app still uses AsyncStorage + optional `life_stores` JSON blobs. This doc is the target; implement in phases below.
+**Status (2026-09-28): implemented for all modules.** Phases A, C (media) and D (blob freeze) below are done; Phase B (SQLite local mirror) is **explicitly deferred**, AsyncStorage stays as the local mirror.
+
+### What ships today
+
+| Area | Implementation |
+|------|----------------|
+| Tables | `household_people`, `spaces`, `rooms`, `things`, `reminders`, `expenses`, `subscriptions`, `habits`, `class_packs` (migrations `20260911080000_household_sync.sql`, `20260928090000_row_sync_all_modules.sql`). All share the §4 columns; `body jsonb` carries the full local item. |
+| Engine | `lib/sync/engine.ts` (`SPECS` registry, `syncRowsNow`, `scheduleRowSync`, `subscribeSyncApplied`), `lib/sync/core.ts` (row mapping, LWW merge, tombstones), `lib/sync/outbox.ts` (AsyncStorage outbox, coalesced per row). |
+| Ids | New rows get client UUIDs (`lib/ids.ts newUuid`). Legacy ids (`inv-…`, `s1`, `rm-…`) map to a **deterministic** uuid (`legacyIdToUuid`, FNV-1a based) so seeded spaces do not duplicate across devices. |
+| Contexts | Every module context stamps `updatedAt`, calls `queueUpsert` / `queueDelete`, and reloads its store on `subscribeSyncApplied`. |
+| Backfill | First sync after sign-in / recovery enqueues every local row as a `backfill` op (`ignoreDuplicates: true`) so a fresh device never clobbers newer cloud rows. |
+| Media | `lib/media/mediaSync.ts`: private bucket `media`, path `{household_id}/{uuid}.ext`, RLS via `_media_household(name)`. Things sync `imagePath`, expenses `receiptPath`; local `imageUri` / `receiptUri` never leave the device and are re-downloaded (signed URL) on a new device. Local files are never deleted by sync. |
+| Blob | `life_stores` is **prefs only** (`CLOUD_PREF_KEYS`). Domain keys are read once for legacy import when the local store is empty, never pushed again. |
+| Recovery | `life_recovery` rows carry `household_id`; `claim_household_by_recovery(code)` adds the new user as owner, then row sync pulls everything. |
+| Plan mirror | RevenueCat webhook → chat API `/rc/webhook` → `admin_set_plan_id` (service role) writes `plan_id`, `billing_cadence`, `store_product_id`, `renews_at`, and `pending_store_product_id`. `set_my_plan_id` from the client is an optimistic mirror of the same columns. Talk limits read `plan_id` only. |
+
+### Deferred (not correctness gaps)
+
+- **SQLite local mirror (§5).** AsyncStorage arrays are fine up to a few thousand rows per module; revisit when list sizes or write frequency make JSON rewrites noticeable.
+- **Field-level merge (§7).** Row LWW is the shipped rule.
+- **Tombstone GC.** Tombstones are kept indefinitely for now.
 
 ---
 
@@ -64,7 +84,7 @@ On first launch / first cloud session:
 ### Family later (same schema)
 - Invite → `household_invites` (code / magic link).
 - Accept → new `household_members` row (`editor` / `viewer`).
-- No new data model — only membership.
+- Who can see a row inside that household (audience) is specified in [`FAMILY_SHARING.md`](./FAMILY_SHARING.md). Membership alone is not the visibility rule.
 
 Distinguish:
 
@@ -109,7 +129,7 @@ notification_prefs       -- per user or per household (decide per field)
 
 **Prefs split:** appearance / talk-voice / security → **user-local** (or `user_prefs`). Plan entitlements → user or household billing owner.
 
-**Media (phase 2):** `media_objects (id, household_id, thing_id?, path, content_type, …)` + Storage path `media/{household_id}/{id}`. Local file cache mirrors path; upload from outbox when online.
+**Media (live):** no separate `media_objects` table. The row itself carries the durable path (`things.body.imagePath`, `expenses.body.receiptPath`) and the device-only URI (`imageUri` / `receiptUri`) is stripped from every cloud body. Storage path `media/{household_id}/{uuid}.ext`; RLS on `storage.objects` resolves the household from the first path segment. Local files are never deleted by sync.
 
 ### RLS (sketch)
 
@@ -118,14 +138,17 @@ notification_prefs       -- per user or per household (decide per field)
 - Viewers: `select` only; editors/owners: mutate.
 - Invites: restricted RPC (`accept_invite`) — no open table writes.
 
-Keep existing `life_stores` / `life_recovery` only as a **temporary bridge** during migration (or drop after cutover). Do not extend blob sync.
+`life_stores` is now **prefs only** (`CLOUD_PREF_KEYS` in `lib/cloud/payload.ts`: notification prefs, profile, onboarding, appearance, plan mirror, AI usage mirror, talk voice). Legacy domain keys are pulled **once** when the local store is empty (`lifeos:cloud:legacyImported:v1`) and never pushed again. `life_recovery` now carries `household_id`; entering a code on a new phone calls `claim_household_by_recovery`, which adds owner membership so row sync (not a blob) restores the data.
 
 ---
 
 ## 5. Local store
 
-### Recommendation
-Move domain data from AsyncStorage arrays → **SQLite on device** (Expo SQLite or WatermelonDB).
+### Current
+AsyncStorage arrays per module (`lifeos:<module>:v1`) + an AsyncStorage outbox (`lib/sync/outbox.ts`, capped at 4000 ops, coalesced per row). Contexts stamp `updatedAt`, call `queueUpsert` / `queueDelete`, and reload from storage on `subscribeSyncApplied`.
+
+### Deferred: SQLite mirror
+Move domain data from AsyncStorage arrays → **SQLite on device** (Expo SQLite or WatermelonDB). Explicitly deferred: the row shapes and outbox are already Postgres-aligned, so this is a swap of the persistence layer, not a redesign. Revisit when a household passes a few thousand rows or list screens show read latency.
 
 Why:
 
@@ -209,25 +232,25 @@ Talk/chat remains online-only; domain CRUD does not.
 
 ## 9. Migration from today’s app
 
-### Phase A — Schema + solo household (no UI break)
-1. Add migrations for households, members, people, things, …  
-2. Keep AsyncStorage UI working.  
-3. One-shot **import**: local inventory → `things` rows under new household; same for other modules.  
-4. Dual-write optional: local save + outbox to new tables (feature flag).
+### Phase A — Schema + solo household (DONE)
+1. Migrations for households, members, people, things, reminders, expenses, subscriptions, habits, class_packs, spaces, rooms.  
+2. AsyncStorage UI kept working.  
+3. One-shot **backfill** (`lifeos:sync:backfilled:v2`): every local row is enqueued with `ignoreDuplicates` so a fresh device never clobbers newer cloud rows.  
+4. Legacy ids (`inv-…`, `s1`, `rm-…`) map to deterministic uuids (`legacyIdToUuid`, FNV-1a based) so seeded spaces do not duplicate across devices.
 
-### Phase B — Local SQLite + outbox
-1. Replace Context persistence with SQLite repositories.  
-2. Hydrate Context from SQLite (or query directly).  
-3. Disable `life_stores` blob push for migrated users.
+### Phase B — Outbox + contexts (DONE; SQLite deferred)
+1. Contexts write local first, then `queueUpsert` / `queueDelete`.  
+2. Contexts reload on `subscribeSyncApplied`.  
+3. `life_stores` blob push is prefs only.
 
-### Phase C — Family
-1. Invites + RLS enforcement.  
-2. Pull other members’ changes.  
-3. Media sync policy (opt-in for IDs).
+### Phase C — Family (DONE for data path)
+1. Invites + RLS by household membership (`user_household_ids()`, `household_can_edit()`).  
+2. Pull other members' changes per table cursor.  
+3. Media: uploads only what the user captured; identity documents are stored in the same private household bucket (no public URLs; signed URLs, 1h).
 
-### Phase D — Remove bridge
-1. Drop or freeze `life_stores` / recovery-blob path.  
-2. Recovery = Sign in with Apple + household membership (plus optional encrypted export file).
+### Phase D — Bridge frozen (DONE)
+1. `life_stores` frozen to prefs; legacy domain keys import once.  
+2. Recovery = Sign in with Apple, or recovery code → `claim_household_by_recovery` → membership → row sync.
 
 **Client IDs:** generate UUIDs now for new local rows so offline creates survive upload without remapping.
 
@@ -242,18 +265,23 @@ Talk/chat remains online-only; domain CRUD does not.
 
 ---
 
-## 11. Implementation order (suggested)
+## 11. Implementation order
 
-1. **Doc + schema migrations** for household + `things` + `reminders` (highest value).  
-2. **UUID ids** in local creates.  
-3. **Outbox + push** for things/reminders only (prove airplane → online).  
-4. **Pull + LWW.**  
-5. Migrate remaining modules.  
-6. SQLite local mirror if AsyncStorage becomes awkward.  
-7. Apple auth + invites.
+1. ~~Doc + schema migrations for household + `things` + `reminders`~~ done  
+2. ~~UUID ids in local creates~~ done  
+3. ~~Outbox + push for things/reminders~~ done  
+4. ~~Pull + LWW~~ done  
+5. ~~Migrate remaining modules~~ done (expenses, subscriptions, habits, class_packs, spaces, rooms, household_people)  
+6. SQLite local mirror — **deferred** (see §5)  
+7. ~~Apple auth + invites~~ done (`docs/AUTH_APPLE.md`, `docs/SUBSCRIPTIONS_AND_INVITES.md`)
+
+### Deploy checklist for this cutover
+- Apply `supabase/migrations/20260928090000_row_sync_all_modules.sql` on staging, then production (creates 6 tables, the `media` bucket + policies, `claim_household_by_recovery`, `admin_set_plan_id`).
+- Redeploy the chat API (`npm run deploy:chat-api`) with `REVENUECAT_WEBHOOK_SECRET` + `SUPABASE_SERVICE_ROLE_KEY` set; point the RevenueCat webhook at `/rc/webhook`.
+- No app-side flag: the first online session backfills local rows and imports the legacy blob once if the device has no local data.
 
 ---
 
 ## 12. Relation to `docs/BACKEND.md`
 
-`BACKEND.md` still describes **staging Git ↔ Supabase** and the **legacy** `life_stores` snapshot. Treat that snapshot as **transitional solo backup** only. New work follows **this** architecture; do not add features that deepen blob sync.
+`BACKEND.md` describes **staging Git ↔ Supabase**, env, and the operational side (what lives in which table, webhook setup). The `life_stores` snapshot there is now prefs-only; domain data follows **this** document. Do not add features that deepen blob sync.

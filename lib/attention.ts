@@ -308,6 +308,104 @@ export function openAttentionQueue(
   );
 }
 
+/** Compact overdue rows for Talk / Ask (same sources as Today → Overdue). */
+export function agendaOverdueItems(
+  inventory: InventoryItem[],
+  lastDone: LastDoneItem[] = [],
+  subscriptions: Subscription[] = [],
+  classPacks: ClassPack[] = [],
+  now = new Date()
+): { title: string; subtitle?: string; who?: string }[] {
+  return buildAttentionItems(inventory, lastDone, subscriptions, classPacks, now)
+    .filter((a) => a.daysLeft != null && a.daysLeft < 0)
+    .map((a) => ({
+      title: a.title,
+      subtitle: a.subtitle,
+      who: a.subtitle && !/^(Documents|Reminder|Overdue)/i.test(a.subtitle)
+        ? a.subtitle.split('·')[0]?.trim()
+        : undefined,
+    }));
+}
+
+/**
+ * Future due rows (attention + reminder dates) for Talk week/month agenda.
+ * `dayKey` is local YYYY-MM-DD.
+ */
+export function agendaHorizonItems(
+  inventory: InventoryItem[],
+  lastDone: LastDoneItem[] = [],
+  subscriptions: Subscription[] = [],
+  classPacks: ClassPack[] = [],
+  now = new Date()
+): { title: string; dayKey: string; who?: string }[] {
+  const today = localDayKey(now);
+  const seen = new Set<string>();
+  const out: { title: string; dayKey: string; who?: string }[] = [];
+
+  const push = (title: string, dayKey: string, who?: string) => {
+    const key = `${dayKey}::${title.trim().toLowerCase()}`;
+    if (!title.trim() || !dayKey || seen.has(key)) return;
+    seen.add(key);
+    out.push({ title: title.trim(), dayKey, who });
+  };
+
+  for (const a of buildAttentionItems(
+    inventory,
+    lastDone,
+    subscriptions,
+    classPacks,
+    now
+  )) {
+    if (a.daysLeft == null || a.daysLeft < 0) continue;
+    const d = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() + a.daysLeft
+    );
+    const who =
+      a.subtitle && !/^(Documents|Reminder|Subscription|Class)/i.test(a.subtitle)
+        ? a.subtitle.split('·')[0]?.trim()
+        : undefined;
+    push(a.title, localDayKey(d), who);
+  }
+
+  for (const item of lastDone) {
+    const raw = item.remindAt?.trim();
+    if (!raw) continue;
+    const m = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (!m) continue;
+    if (m[1] < today) continue;
+    push(item.label, m[1], item.assignedTo || undefined);
+  }
+
+  return out.sort((a, b) =>
+    a.dayKey === b.dayKey
+      ? a.title.localeCompare(b.title)
+      : a.dayKey.localeCompare(b.dayKey)
+  );
+}
+
+/** Attention rows due after today but soon (Today → Coming up). */
+export function agendaComingItems(
+  inventory: InventoryItem[],
+  lastDone: LastDoneItem[] = [],
+  subscriptions: Subscription[] = [],
+  classPacks: ClassPack[] = [],
+  now = new Date()
+): { title: string; subtitle?: string; who?: string }[] {
+  return buildAttentionItems(inventory, lastDone, subscriptions, classPacks, now)
+    .filter(
+      (a) =>
+        (a.urgency === 'urgent' || a.urgency === 'soon') &&
+        (a.daysLeft == null || a.daysLeft > 0)
+    )
+    .map((a) => ({
+      title: a.title,
+      subtitle: a.subtitle,
+      who: a.subtitle?.split('·')[0]?.trim(),
+    }));
+}
+
 export function warrantyRecordsFromInventory(inventory: InventoryItem[]) {
   return inventory
     .filter((i) => !i.isDocument && i.category !== 'Documents')

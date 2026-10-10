@@ -42,22 +42,26 @@ import {
   loggedOn,
 } from '@/lib/habits';
 import { getLastDoneAt } from '@/lib/lastDone';
-import { remainingCount, usedCount } from '@/lib/classes';
+import { agendaClassesFromPacks, remainingCount, usedCount } from '@/lib/classes';
+import { buildAgendaLocalContext } from '@/lib/chat/agendaContext';
 import { useTalkOverlay } from '@/lib/TalkOverlayContext';
 import { useCurrency } from '@/lib/CurrencyContext';
 import { ChatAgentError, runChatAgent } from '@/lib/chat/agent';
 import { applyChatActions } from '@/lib/chat/applyActions';
 import { composeAppliedReply } from '@/lib/chat/composeReply';
 import {
-  agendaQueryScope,
-  hrefForAgendaScope,
-  isAgendaQueryIntent,
   isCloseTalkIntent,
   resolveLocalIntent,
 } from '@/lib/chat/localIntents';
 import { resolveOpenItemId } from '@/lib/chat/openItem';
 import { hrefForTalkFocus, type TalkFocus } from '@/lib/chat/focus';
 import type { ChatMessage } from '@/lib/chat/types';
+import {
+  AiDailyLimitError,
+  assertAiAllowance,
+  recordAiTurn,
+} from '@/lib/aiUsage';
+import { usePlan } from '@/lib/PlanContext';
 import { blurActiveElement } from '@/lib/a11y';
 import { localDayKey } from '@/lib/dates';
 import { rememberedCaptureHref } from '@/lib/captureContext';
@@ -129,7 +133,7 @@ function ListeningAura({
   );
 }
 
-/** Soft ChatGPT-like listening orb — no mic glyph while live. */
+/** Soft listening orb. Color comes from the theme gradient, and the disc turns. */
 function AnimatedListeningOrb({
   busy,
   live,
@@ -156,7 +160,7 @@ function AnimatedListeningOrb({
       cancelAnimation(spin);
       cancelAnimation(breathe);
     };
-  }, [spin, breathe, live]);
+  }, [breathe, live, spin]);
 
   const spinStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${spin.value * 360}deg` }],
@@ -172,7 +176,7 @@ function AnimatedListeningOrb({
         <LinearGradient
           colors={
             live
-              ? [colors.listenGradient[0]!, colors.listenGradient[2]!, colors.listenGradient[1]!, colors.listenGradient[0]!]
+              ? [colors.listenGradient[0], colors.listenGradient[2], colors.listenGradient[1], colors.listenGradient[0]]
               : [...colors.listenGradient]
           }
           start={{ x: 0.15, y: 0.1 }}
@@ -180,7 +184,6 @@ function AnimatedListeningOrb({
           style={StyleSheet.absoluteFill}
         />
       </Animated.View>
-      {/* Soft vignette so the orb reads as a glow, not a hard disc */}
       <LinearGradient
         colors={['transparent', 'rgba(0,0,0,0.22)']}
         style={styles.orbVignette}
@@ -208,9 +211,12 @@ export function TalkOrb() {
   const router = useRouter();
   const pathname = usePathname();
   const { items, addItem, updateItem, removeItem, getById } = useInventory();
-  const { items: lastDoneItems, logDone, setReminder, remove: removeLastDone } = useLastDone();
+  const { items: lastDoneItems, logDone, setReminder, updateActivity, remove: removeLastDone } = useLastDone();
   const { members: householdMembers, addMember, updateMember } = useHousehold();
   const { currency: defaultCurrency } = useCurrency();
+  const { entitlement } = usePlan();
+  const planIdRef = useRef(entitlement.planId);
+  planIdRef.current = entitlement.planId;
   const currencyRef = useRef(defaultCurrency);
   currencyRef.current = defaultCurrency;
   const { expenses, addExpense, updateExpense, removeExpense, getById: getExpenseById } = useExpenses();
@@ -548,19 +554,21 @@ export function TalkOrb() {
       const newestId = inventoryRef.current[0]?.id ?? null;
 
       // Clear UI commands stay on-device (exit / open item)
-      const local = resolveLocalIntent(text, {
-        focusItemId: focusItemIdRef.current,
-        fallbackItemId: newestId,
-        focusExpenseId: focusExpenseIdRef.current,
-        talkFocus: talkFocusRef.current,
-        reminders: lastDoneRef.current.map((d) => ({
-          label: d.label,
-          remindAt: d.remindAt,
-        })),
-        openHabits: habitsRef.current
-          .filter((h) => !h.doneToday)
-          .map((h) => ({ title: h.title })),
-      });
+      const local = resolveLocalIntent(
+        text,
+        buildAgendaLocalContext({
+          inventory: items,
+          lastDone: lastDoneItems,
+          subscriptions,
+          classPacks,
+          habits,
+          members: householdMembers,
+          focusItemId: focusItemIdRef.current,
+          focusExpenseId: focusExpenseIdRef.current,
+          talkFocus: talkFocusRef.current,
+          fallbackItemId: newestId,
+        })
+      );
       if (local) {
         console.log('[Talk] local intent', text, local.actions.map((a) => a.type));
         if (isCloseTalkIntent(text)) {
@@ -570,31 +578,6 @@ export function TalkOrb() {
           clearResumeTimer();
           stopRecognition();
           setTimeout(() => closeTalk(), 350);
-          return;
-        }
-        if (isAgendaQueryIntent(text)) {
-          const scope = agendaQueryScope(text)!;
-          setReply(local.reply);
-          setPhase('reply');
-          sessionActiveRef.current = false;
-          clearResumeTimer();
-          stopRecognition();
-          stopSpeech();
-          if (speakRepliesRef.current && local.reply.trim()) {
-            try {
-              Speech.speak(local.reply.trim(), {
-                language: 'en-US',
-                rate: 1.0,
-                pitch: 1.0,
-              });
-            } catch {
-              /* ignore */
-            }
-          }
-          setTimeout(() => {
-            closeTalk();
-            router.push(hrefForAgendaScope(scope) as never);
-          }, 500);
           return;
         }
         const applied = await applyChatActions(
@@ -664,6 +647,7 @@ export function TalkOrb() {
 
       try {
         const turnLocalDate = localDayKey();
+        await assertAiAllowance(planIdRef.current);
         console.log('[Talk] → OpenAI', text, 'focus', focusItemIdRef.current);
         const result = await runChatAgent({
           messages: nextHistory,
@@ -682,6 +666,11 @@ export function TalkOrb() {
           defaultCurrency: currencyRef.current,
           localDate: turnLocalDate,
         });
+        const used = result.aiAllowance?.used;
+        await recordAiTurn(
+          turnLocalDate,
+          typeof used === 'number' ? used : undefined
+        );
         if (!openRef.current || !sessionActiveRef.current) return;
         const applied = await applyChatActions(
           result.actions,
@@ -692,7 +681,7 @@ export function TalkOrb() {
             resolveItem: (id) => getById(id),
             lastUserText: text,
             defaultCurrency: currencyRef.current,
-            lastDone: { logDone, setReminder, remove: removeLastDone },
+            lastDone: { logDone, setReminder, updateActivity, remove: removeLastDone },
             household: householdMembers,
             people: { addMember, updateMember },
             expenses: {
@@ -778,6 +767,11 @@ export function TalkOrb() {
           habitCheckInTitle: applied.habitCheckInTitle,
           habitStreak: applied.habitStreak,
           habitCheckInDays: applied.habitCheckInDays,
+          addedHabitTitle: applied.addedHabitTitle,
+          addedHabitWhy: applied.addedHabitWhy,
+          addedHabitAlready: applied.addedHabitAlready,
+          updatedHabit: applied.updatedHabit,
+          updatedHabitTitle: applied.updatedHabitTitle,
           classPackTitle: applied.classPackTitle,
           classPackRemaining: applied.classPackRemaining,
           classPackTotal: applied.classPackTotal,
@@ -786,6 +780,7 @@ export function TalkOrb() {
           classLogAttemptFor: applied.classLogAttemptFor,
           reminderLabel: applied.reminderLabel,
           reminderAt: applied.reminderAt,
+          updatedReminder: applied.updatedReminder,
           removedLastDoneLabel: applied.removedLastDoneLabel,
           updatedClassPack: applied.updatedClassPack,
           renamedPersonFrom: applied.renamedPersonFrom,
@@ -847,9 +842,10 @@ export function TalkOrb() {
       } catch (err) {
         handledRef.current = false;
         setPhase('idle');
+        const limited = err instanceof AiDailyLimitError;
         setError(
-          err instanceof ChatAgentError
-            ? err.message
+          limited || err instanceof ChatAgentError
+            ? (err as Error).message
             : 'Something went wrong — still listening…'
         );
         if (err instanceof ChatAgentError) setApiDown(true);
@@ -858,7 +854,7 @@ export function TalkOrb() {
           if (sessionActiveRef.current && openRef.current) {
             void startListenRef.current();
           }
-        }, 1200);
+        }, limited ? 2400 : 1200);
       }
     },
     [
@@ -878,6 +874,12 @@ export function TalkOrb() {
       setTalkFocus,
       pathname,
       router,
+      items,
+      lastDoneItems,
+      subscriptions,
+      habits,
+      householdMembers,
+      classPacks,
     ]
   );
   processUtteranceRef.current = processUtterance;
@@ -1200,11 +1202,7 @@ export function TalkOrb() {
             </View>
 
             <View style={styles.replySlot}>
-              {reply && phase !== 'listening' ? (
-                <Text style={styles.reply} numberOfLines={8}>
-                  {reply}
-                </Text>
-              ) : null}
+              {reply && phase !== 'listening' ? <TalkReply text={reply} /> : null}
               {error ? <Text style={styles.error}>{error}</Text> : null}
             </View>
           </View>
@@ -1486,6 +1484,35 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.92)',
     textAlign: 'center',
   },
+  replyList: {
+    alignItems: 'center',
+    gap: 6,
+    maxWidth: 320,
+  },
+  replyKicker: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 13,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    color: 'rgba(255,255,255,0.92)',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  replyLine: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 18,
+    lineHeight: 26,
+    letterSpacing: -0.2,
+    color: 'rgba(255,255,255,0.92)',
+    textAlign: 'center',
+  },
+  replyNote: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 18,
+    lineHeight: 26,
+    color: 'rgba(255,255,255,0.92)',
+    textAlign: 'center',
+  },
   error: {
     fontFamily: fonts.sans,
     fontSize: 15,
@@ -1573,3 +1600,38 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
 });
+
+/** A headed list (Reminders\nLabel · Today) renders as rows. One sentence stays centered. */
+function TalkReply({ text }: { text: string }) {
+  const lines = text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length < 2) {
+    return (
+      <Text style={styles.reply} numberOfLines={8}>
+        {text}
+      </Text>
+    );
+  }
+  const [heading, ...items] = lines;
+  return (
+    <View style={styles.replyList}>
+      <Text style={styles.replyKicker}>{heading}</Text>
+      {items.map((line, index) => {
+        if (line.startsWith('+')) {
+          return (
+            <Text key={`${index}-${line}`} style={styles.replyNote}>
+              {line}
+            </Text>
+          );
+        }
+        return (
+          <Text key={`${index}-${line}`} style={styles.replyLine} numberOfLines={2}>
+            {line}
+          </Text>
+        );
+      })}
+    </View>
+  );
+}

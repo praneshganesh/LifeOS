@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   FlatList,
   Keyboard,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
@@ -11,12 +10,14 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowUp, Camera, Mic } from 'lucide-react-native';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import { dueSoonForHome } from '@/lib/attention';
+import { buildAgendaLocalContext } from '@/lib/chat/agendaContext';
 import { useInventory } from '@/lib/InventoryContext';
 import { useLastDone } from '@/lib/LastDoneContext';
 import { useHousehold } from '@/lib/HouseholdContext';
@@ -33,14 +34,23 @@ import {
   loggedOn,
 } from '@/lib/habits';
 import { getLastDoneAt } from '@/lib/lastDone';
-import { remainingCount, usedCount } from '@/lib/classes';
+import { agendaClassesFromPacks, remainingCount, usedCount } from '@/lib/classes';
 import { ChatAgentError, runChatAgent } from '@/lib/chat/agent';
 import { applyChatActions } from '@/lib/chat/applyActions';
 import { composeAppliedReply } from '@/lib/chat/composeReply';
-import { isCloseTalkIntent, resolveLocalIntent } from '@/lib/chat/localIntents';
+import {
+  isCloseTalkIntent,
+  resolveLocalIntent,
+} from '@/lib/chat/localIntents';
 import { resolveOpenItemId } from '@/lib/chat/openItem';
 import { hrefForTalkFocus, type TalkFocus } from '@/lib/chat/focus';
 import type { ChatMessage } from '@/lib/chat/types';
+import {
+  AiDailyLimitError,
+  assertAiAllowance,
+  recordAiTurn,
+} from '@/lib/aiUsage';
+import { usePlan } from '@/lib/PlanContext';
 import { useTalkOverlay } from '@/lib/TalkOverlayContext';
 import { useCurrency } from '@/lib/CurrencyContext';
 import { getHouseholdPeople, selfAvatarInitial } from '@/lib/people';
@@ -60,7 +70,8 @@ type UiMessage = {
   itemId?: string;
 };
 
-const INPUT_MIN_H = 26;
+/** Android font metrics need a taller floor than iOS for the same lineHeight. */
+const INPUT_MIN_H = Platform.OS === 'android' ? 44 : 26;
 const INPUT_MAX_H = 120;
 
 const STARTER_PROMPTS = [
@@ -74,6 +85,7 @@ export default function ChatScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { entitlement } = usePlan();
   const listRef = useRef<FlatList<UiMessage>>(null);
   const inputRef = useRef<TextInput>(null);
   const { talkFocus, setTalkFocus, focusItemId, focusExpenseId, openTalk } =
@@ -85,7 +97,7 @@ export default function ChatScreen() {
   const talkFocusRef = useRef<TalkFocus | null>(talkFocus);
   talkFocusRef.current = talkFocus;
   const { items, addItem, updateItem, removeItem, getById } = useInventory();
-  const { items: lastDoneItems, logDone, setReminder, remove: removeLastDone } = useLastDone();
+  const { items: lastDoneItems, logDone, setReminder, updateActivity, remove: removeLastDone } = useLastDone();
   const { members: householdMembers, addMember, updateMember } = useHousehold();
   const { currency: defaultCurrency } = useCurrency();
   const { expenses, addExpense, updateExpense, removeExpense, getById: getExpenseById } = useExpenses();
@@ -182,7 +194,13 @@ export default function ChatScreen() {
   useEffect(() => {
     const show = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      () => setKeyboardOpen(true)
+      () => {
+        setKeyboardOpen(true);
+        // Keep the thread pinned so the composer isn't covered mid-scroll.
+        requestAnimationFrame(() =>
+          listRef.current?.scrollToEnd({ animated: true })
+        );
+      }
     );
     const hide = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
@@ -257,13 +275,25 @@ export default function ChatScreen() {
       const newestId = items[0]?.id ?? null;
       const turnLocalDate = localDayKey();
       // Ask keeps close/exit for the model; Talk overlay handles dismiss locally.
-      const local = resolveLocalIntent(question, {
-        focusItemId: focusItemIdRef.current,
-        fallbackItemId: newestId,
-        focusExpenseId: focusExpenseIdRef.current,
-        talkFocus: talkFocusRef.current,
-      });
+      const local = resolveLocalIntent(
+        question,
+        buildAgendaLocalContext({
+          inventory: items,
+          lastDone: lastDoneItems,
+          subscriptions,
+          classPacks,
+          habits,
+          members: householdMembers,
+          focusItemId: focusItemIdRef.current,
+          focusExpenseId: focusExpenseIdRef.current,
+          talkFocus: talkFocusRef.current,
+          fallbackItemId: newestId,
+        })
+      );
       const useLocal = local && !isCloseTalkIntent(question);
+      if (!useLocal) {
+        await assertAiAllowance(entitlement.planId);
+      }
       const result =
         useLocal
           ? local
@@ -284,6 +314,14 @@ export default function ChatScreen() {
               defaultCurrency,
               localDate: turnLocalDate,
             });
+      if (!useLocal) {
+        const used = result.aiAllowance?.used;
+        await recordAiTurn(
+          turnLocalDate,
+          typeof used === 'number' ? used : undefined
+        );
+      }
+
       const applied = await applyChatActions(
         result.actions,
         { addItem, updateItem, removeItem },
@@ -293,7 +331,7 @@ export default function ChatScreen() {
           resolveItem: (id) => getById(id),
           lastUserText: question,
           defaultCurrency,
-          lastDone: { logDone, setReminder, remove: removeLastDone },
+          lastDone: { logDone, setReminder, updateActivity, remove: removeLastDone },
           household: householdMembers,
           people: { addMember, updateMember },
           expenses: {
@@ -380,6 +418,11 @@ export default function ChatScreen() {
         habitCheckInTitle: applied.habitCheckInTitle,
         habitStreak: applied.habitStreak,
         habitCheckInDays: applied.habitCheckInDays,
+        addedHabitTitle: applied.addedHabitTitle,
+        addedHabitWhy: applied.addedHabitWhy,
+        addedHabitAlready: applied.addedHabitAlready,
+        updatedHabit: applied.updatedHabit,
+        updatedHabitTitle: applied.updatedHabitTitle,
         classPackTitle: applied.classPackTitle,
         classPackRemaining: applied.classPackRemaining,
         classPackTotal: applied.classPackTotal,
@@ -388,6 +431,7 @@ export default function ChatScreen() {
         classLogAttemptFor: applied.classLogAttemptFor,
         reminderLabel: applied.reminderLabel,
         reminderAt: applied.reminderAt,
+        updatedReminder: applied.updatedReminder,
         removedLastDoneLabel: applied.removedLastDoneLabel,
         updatedClassPack: applied.updatedClassPack,
         renamedPersonFrom: applied.renamedPersonFrom,
@@ -426,13 +470,16 @@ export default function ChatScreen() {
       ]);
     } catch (err) {
       const text =
-        err instanceof ChatAgentError
+        err instanceof AiDailyLimitError || err instanceof ChatAgentError
           ? err.message
           : 'Something went wrong talking to Saavi. Try again in a moment.';
       setMessages((prev) => [
         ...prev,
         { id: `a-${Date.now()}`, role: 'assistant', text },
       ]);
+      if (err instanceof AiDailyLimitError && entitlement.planId === 'trial') {
+        router.push('/settings/plan' as Href);
+      }
     } finally {
       setBusy(false);
       requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
@@ -441,9 +488,11 @@ export default function ChatScreen() {
 
   return (
     <Screen>
+      {/* react-native-keyboard-controller: works with Android edge-to-edge,
+          where the RN KeyboardAvoidingView + adjustResize combo fails. */}
       <KeyboardAvoidingView
         style={{ flex: 1, width: '100%' }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
         keyboardVerticalOffset={0}
       >
         <HomeHeader surface="ask" avatarLetter={avatarLetter} />
@@ -584,7 +633,9 @@ export default function ChatScreen() {
                 if (!text.trim()) setInputHeight(INPUT_MIN_H);
               }}
               onContentSizeChange={(e) => {
-                const h = Math.ceil(e.nativeEvent.contentSize.height);
+                const raw = Math.ceil(e.nativeEvent.contentSize.height);
+                // Android contentSize often under-reports with custom fonts / lineHeight.
+                const h = Platform.OS === 'android' ? raw + 6 : raw;
                 setInputHeight(Math.min(INPUT_MAX_H, Math.max(INPUT_MIN_H, h)));
               }}
               placeholder="What’s new, or what should I look up…"
@@ -705,7 +756,10 @@ const styles = StyleSheet.create({
   },
   bubble: {
     paddingHorizontal: spacing.md,
-    paddingVertical: 10,
+    paddingTop: 10,
+    // Extra bottom pad on Android so descenders don't kiss the border
+    // (includeFontPadding is also disabled on the shared Text component).
+    paddingBottom: Platform.OS === 'android' ? 14 : 10,
     borderRadius: radius.md,
   },
   bubbleText: {
@@ -762,15 +816,18 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderWidth: 1.5,
     paddingHorizontal: spacing.md,
-    paddingTop: Platform.OS === 'ios' ? 12 : 10,
-    paddingBottom: 8,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === 'android' ? 12 : 8,
   },
   input: {
     fontFamily: fonts.sans,
     fontSize: 16,
     lineHeight: 22,
     padding: 0,
+    paddingTop: Platform.OS === 'android' ? 2 : 0,
+    paddingBottom: Platform.OS === 'android' ? 6 : 0,
     maxHeight: INPUT_MAX_H,
+    ...(Platform.OS === 'android' ? { includeFontPadding: false } : null),
   },
   composerActions: {
     flexDirection: 'row',

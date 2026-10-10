@@ -17,6 +17,7 @@ import {
   DETAIL_STICKY_PAD,
 } from '@/components/ui/DetailKit';
 import { Text } from '@/components/ui/Text';
+import { moduleTone } from '@/lib/moduleTone';
 import { DatePillRow } from '@/components/ui/DateField';
 import { TimePillRow } from '@/components/ui/TimeField';
 import { FormGroup } from '@/components/ui/FormKit';
@@ -27,7 +28,6 @@ import {
   formatPackWindow,
   loggedOn,
   nextScheduledClassOccurrence,
-  paceHint,
   packStatus,
   remainingCount,
   SCHEDULE_DAYS,
@@ -47,7 +47,7 @@ import { type ThemeColors, fonts, radius, spacing } from '@/constants/theme';
 import CreateClassPackScreen from './create';
 
 export default function ClassPackDetailScreen() {
-  const { colors } = useTheme();
+  const { colors, resolved } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { id: idParam } = useLocalSearchParams<{ id: string }>();
   const id = Array.isArray(idParam) ? idParam[0] : idParam;
@@ -148,14 +148,13 @@ export default function ClassPackDetailScreen() {
     );
   }
 
-  const accent = colors.sky;
+  const accent = moduleTone('classes', colors, resolved === 'light').accent;
   const used = usedCount(pack);
   const remaining = remainingCount(pack);
   const today = localDayKey();
   const todayDone = loggedOn(pack, today);
   const status = packStatus(pack);
   const daysLeft = daysLeftInWindow(pack);
-  const pace = paceHint(pack);
   const recent = [...pack.logs]
     .sort((a, b) => b.doneAt.localeCompare(a.doneAt))
     .slice(0, 12);
@@ -180,8 +179,8 @@ export default function ClassPackDetailScreen() {
 
   const countLine =
     remaining == null
-      ? `${used} session${used === 1 ? '' : 's'} logged · until ${formatPackWindow(pack)}`
-      : `${remaining} of ${pack.total} sessions left · until ${formatPackWindow(pack)}`;
+      ? `${used} logged · until ${formatPackWindow(pack)}`
+      : `${remaining}/${pack.total} left · until ${formatPackWindow(pack)}`;
 
   return (
     <ModuleScreen
@@ -209,8 +208,8 @@ export default function ClassPackDetailScreen() {
           onTitleChange={setTitle}
           onTitleCommit={persistTitle}
           titlePlaceholder="Class name"
-          subtitle={countLine}
-          meta={[scheduleDesc, pace].filter(Boolean).join(' · ') || undefined}
+          subtitle={scheduleDesc || countLine}
+          meta={scheduleDesc ? countLine : undefined}
         />
       }
     >

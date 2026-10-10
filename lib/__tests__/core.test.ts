@@ -22,6 +22,7 @@ import {
   type Habit,
 } from '../habits';
 import {
+  buildHabitMonthCalendar,
   buildHabitYearCalendar,
   daysInMonth,
 } from '../habitHeatmap';
@@ -594,6 +595,18 @@ describe('habit year calendar', () => {
     // April has 30 days → day 31 invalid
     assert.equal(model.months[3]!.cells[30]!.state, 'invalid');
     assert.equal(model.months[3]!.cells[30]!.key, null);
+  });
+
+  it('builds a single-month calendar for the current month default', () => {
+    const model = buildHabitMonthCalendar(
+      [{ id: '1', doneAt: '2026-09-21' }],
+      new Date(2026, 8, 21)
+    );
+    assert.equal(model.year, 2026);
+    assert.equal(model.months.length, 1);
+    assert.equal(model.months[0]!.monthIndex, 8);
+    assert.equal(model.months[0]!.label, 'Sep');
+    assert.equal(model.months[0]!.cells[20]!.state, 'done');
   });
 
   it('disables Feb 29–31 in common years and Feb 30–31 in leap years', () => {

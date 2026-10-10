@@ -52,7 +52,7 @@ export default function DoneTabScreen() {
       >
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
-            <Text variant="title">Done</Text>
+            <Text variant="title">Activities</Text>
           </View>
           <Pressable
             onPress={openLog}

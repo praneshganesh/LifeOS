@@ -1,20 +1,28 @@
 import { useCallback, useState } from 'react';
 import { useFocusEffect, useRouter, type Href } from 'expo-router';
+import Constants from 'expo-constants';
 import { DETAIL_DOCK_PAD } from '@/components/ui/DetailKit';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { ListCard, ListRow } from '@/components/ui/ListKit';
+import { Text } from '@/components/ui/Text';
 import { useSpaces } from '@/lib/SpacesContext';
 import { useHousehold } from '@/lib/HouseholdContext';
 import { useCurrency } from '@/lib/CurrencyContext';
 import { loadLocalProfile } from '@/lib/profile';
 import { loadPlanPrefs, planById } from '@/lib/planLimits';
+import {
+  fetchSubscriptionSnapshot,
+  pendingSwitchLine,
+  subscriptionDetailLine,
+} from '@/lib/billing/revenueCat';
 import { resolveSelfDisplayName } from '@/lib/people';
 import { moduleHref } from '@/lib/moduleNav';
 import { useTheme } from '@/lib/ThemeContext';
+import { fonts, spacing } from '@/constants/theme';
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { mode, resolved } = useTheme();
+  const { colors, mode, resolved } = useTheme();
   const { spaces } = useSpaces();
   const { members } = useHousehold();
   const { currency } = useCurrency();
@@ -30,9 +38,19 @@ export default function SettingsScreen() {
           resolveSelfDisplayName(p.displayName, members) || p.displayName
         );
       });
-      void loadPlanPrefs().then((prefs) => {
-        if (live) setPlanTitle(planById(prefs.planId).name);
-      });
+      void Promise.all([loadPlanPrefs(), fetchSubscriptionSnapshot()]).then(
+        ([prefs, snap]) => {
+          if (!live) return;
+          const name = planById(prefs.planId).name;
+          const detail =
+            snap && prefs.planId === 'pro'
+              ? subscriptionDetailLine(snap)
+              : '';
+          const queued = pendingSwitchLine(snap, prefs.pendingProductId);
+          const base = detail ? `${name} · ${detail}` : name;
+          setPlanTitle(queued ? `${base}. ${queued}` : base);
+        }
+      );
       return () => {
         live = false;
       };
@@ -44,6 +62,10 @@ export default function SettingsScreen() {
   const homesMeta = [defaultHome, currency].filter(Boolean).join(' · ');
   const modeLabel =
     mode === 'system' ? `System · ${resolved}` : mode === 'dark' ? 'Dark' : 'Light';
+  const version =
+    Constants.expoConfig?.version ||
+    Constants.nativeAppVersion ||
+    '1.0.0';
 
   return (
     <ModuleScreen
@@ -53,6 +75,12 @@ export default function SettingsScreen() {
     >
       <ModuleSection label="Account">
         <ListCard>
+          <ListRow
+            icon="id"
+            title="Sign in & Apple"
+            subtitle="Save identity across devices"
+            onPress={() => router.push('/settings/account' as Href)}
+          />
           <ListRow
             icon="family"
             title="Profile"
@@ -67,7 +95,7 @@ export default function SettingsScreen() {
           />
           <ListRow
             icon="credit"
-            title="Plan & billing"
+            title="Plan"
             subtitle={planTitle}
             onPress={() => router.push('/settings/plan' as Href)}
             last
@@ -79,7 +107,7 @@ export default function SettingsScreen() {
         <ListCard>
           <ListRow
             icon="bell"
-            title="Notification preferences"
+            title="Notifications"
             onPress={() => router.push('/settings/notifications' as Href)}
           />
           <ListRow
@@ -103,20 +131,24 @@ export default function SettingsScreen() {
           <ListRow
             icon="shield"
             title="Privacy"
-            subtitle="On-device first · chat summary only"
+            subtitle="What happens with your data"
             onPress={() => router.push('/settings/privacy' as Href)}
+          />
+          <ListRow
+            icon="scroll"
+            title="Privacy policy"
+            onPress={() => router.push('/settings/privacy-policy' as Href)}
+          />
+          <ListRow
+            icon="scroll"
+            title="Terms"
+            onPress={() => router.push('/settings/terms' as Href)}
           />
           <ListRow
             icon="key"
             title="Security"
             subtitle="Face ID & app lock"
             onPress={() => router.push('/settings/security' as Href)}
-          />
-          <ListRow
-            icon="family"
-            title="Sharing & permissions"
-            subtitle={`${members.length} household`}
-            onPress={() => router.push('/settings/sharing' as Href)}
             last
           />
         </ListCard>
@@ -129,15 +161,23 @@ export default function SettingsScreen() {
             title="Export & backup"
             subtitle="Phone + cloud snapshot"
             onPress={() => router.push('/settings/data' as Href)}
-          />
-          <ListRow
-            icon="document"
-            title="About Saavi"
-            onPress={() => router.push('/settings/about' as Href)}
             last
           />
         </ListCard>
       </ModuleSection>
+
+      <Text
+        style={{
+          fontFamily: fonts.sans,
+          fontSize: 13,
+          color: colors.faint,
+          textAlign: 'center',
+          marginTop: spacing.xl,
+          marginBottom: spacing.md,
+        }}
+      >
+        Saavi · {version}
+      </Text>
     </ModuleScreen>
   );
 }

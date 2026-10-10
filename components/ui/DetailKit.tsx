@@ -51,6 +51,10 @@ export function DetailHero({
   onTitleChange,
   onTitleCommit,
   titlePlaceholder,
+  onPress,
+  compact,
+  /** Sits on the title row (e.g. a highlight stat) — keeps the hero short. */
+  trailing,
   children,
   style,
 }: {
@@ -65,6 +69,11 @@ export function DetailHero({
   onTitleChange?: (v: string) => void;
   onTitleCommit?: () => void;
   titlePlaceholder?: string;
+  /** Whole hero tap — e.g. open Plan & billing from Profile. */
+  onPress?: () => void;
+  /** Less padding — profile identity card. */
+  compact?: boolean;
+  trailing?: ReactNode;
   children?: ReactNode;
   style?: StyleProp<ViewStyle>;
 }) {
@@ -72,39 +81,88 @@ export function DetailHero({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const tone = detailTone(accent, resolved === 'light', vividFallback ?? accent);
 
-  return (
-    <View style={[styles.hero, { borderColor: colors.lineStrong }, style]}>
+  const titleNode = editableTitle ? (
+    <TextInput
+      value={titleValue ?? ''}
+      onChangeText={onTitleChange}
+      onBlur={onTitleCommit}
+      onSubmitEditing={onTitleCommit}
+      returnKeyType="done"
+      multiline={!trailing}
+      numberOfLines={trailing ? 1 : undefined}
+      style={[
+        styles.heroTitle,
+        compact && styles.heroTitleCompact,
+        trailing ? styles.heroTitleBeside : null,
+        { color: colors.ink, flex: trailing ? 1 : undefined },
+      ]}
+      placeholder={titlePlaceholder ?? 'Name'}
+      placeholderTextColor={colors.faint}
+      accessibilityLabel="Name"
+    />
+  ) : title ? (
+    <Text
+      style={[
+        styles.heroTitle,
+        trailing ? styles.heroTitleBeside : null,
+        { color: colors.ink, flex: trailing ? 1 : undefined },
+      ]}
+      numberOfLines={trailing ? 1 : 2}
+    >
+      {title}
+    </Text>
+  ) : null;
+
+  const body = (
+    <>
       <DotField tone={tone} />
-      <View style={styles.heroFill}>
+      <View style={[styles.heroFill, compact && styles.heroFillCompact]}>
         {eyebrow ? (
-          <Text style={[styles.eyebrow, { color: accent }]}>{eyebrow}</Text>
+          <Text style={[styles.eyebrow, { color: colors.mute }]} numberOfLines={1}>
+            {eyebrow}
+          </Text>
         ) : null}
-        {editableTitle ? (
-          <TextInput
-            value={titleValue ?? ''}
-            onChangeText={onTitleChange}
-            onBlur={onTitleCommit}
-            onSubmitEditing={onTitleCommit}
-            returnKeyType="done"
-            multiline
-            style={[styles.heroTitle, { color: colors.ink }]}
-            placeholder={titlePlaceholder ?? 'Name'}
-            placeholderTextColor={colors.faint}
-            accessibilityLabel="Name"
-          />
-        ) : title ? (
-          <Text style={[styles.heroTitle, { color: colors.ink }]}>{title}</Text>
-        ) : null}
+        {trailing ? (
+          <View style={styles.heroTitleRow}>
+            {titleNode}
+            {trailing}
+          </View>
+        ) : (
+          titleNode
+        )}
         {subtitle ? (
-          <Text style={[styles.heroSub, { color: colors.slate }]}>{subtitle}</Text>
+          <Text style={[styles.heroSub, { color: colors.mute }]} numberOfLines={2}>
+            {subtitle}
+          </Text>
         ) : null}
         {meta ? (
-          <Text style={[styles.heroMeta, { color: accent }]}>{meta}</Text>
+          <Text style={[styles.heroMeta, { color: colors.mute }]} numberOfLines={1}>
+            {meta}
+          </Text>
         ) : null}
         {children}
       </View>
-    </View>
+    </>
   );
+
+  if (onPress) {
+    return (
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        style={({ pressed }) => [
+          styles.hero,
+          compact && styles.heroCompact,
+          style,
+          pressed && { opacity: 0.92 },
+        ]}
+      >
+        {body}
+      </Pressable>
+    );
+  }
+
+  return <View style={[styles.hero, compact && styles.heroCompact, style]}>{body}</View>;
 }
 
 export function DetailSection({
@@ -155,7 +213,6 @@ export function DetailChip({
   label,
   selected,
   onPress,
-  accent,
   disabled,
   fill,
 }: {
@@ -177,8 +234,8 @@ export function DetailChip({
         styles.chip,
         fill && styles.chipFill,
         {
-          backgroundColor: selected ? accent : colors.surface,
-          borderColor: selected ? accent : colors.lineStrong,
+          backgroundColor: selected ? colors.accent : colors.surface,
+          borderColor: selected ? colors.accent : colors.lineStrong,
           opacity: disabled ? 0.45 : pressed ? 0.9 : 1,
         },
       ]}
@@ -189,7 +246,7 @@ export function DetailChip({
         style={[
           styles.chipText,
           fill && styles.chipTextFill,
-          { color: selected ? colors.pure : colors.ink },
+          { color: selected ? colors.accentOn : colors.ink },
         ]}
         numberOfLines={1}
       >
@@ -263,7 +320,6 @@ export function DetailFacts({ children }: { children: ReactNode }) {
 export function DetailPrimaryButton({
   label,
   onPress,
-  accent,
   disabled,
   style,
   flush,
@@ -271,13 +327,14 @@ export function DetailPrimaryButton({
 }: {
   label: string;
   onPress: () => void;
-  accent: string;
+  /** Ignored. Primary actions always use the theme accent. */
+  accent?: string;
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
 } & FlushActionProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const fill = accent || colors.accent;
+  const fill = colors.accent;
   return (
     <Pressable
       onPress={onPress}
@@ -301,10 +358,10 @@ export function DetailPrimaryButton({
 /** Top-chrome edit — solid accent circle with light icon (reads as a real control). */
 export function DetailEditButton({
   onPress,
-  accent,
 }: {
   onPress: () => void;
-  accent: string;
+  /** Ignored. Edit chrome uses the theme accent. */
+  accent?: string;
 }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -314,7 +371,7 @@ export function DetailEditButton({
       style={({ pressed }) => [
         styles.editBtn,
         {
-          backgroundColor: accent,
+          backgroundColor: colors.accent,
           opacity: pressed ? 0.88 : 1,
         },
         pressed && { transform: [{ scale: 0.96 }] },
@@ -323,7 +380,7 @@ export function DetailEditButton({
       accessibilityLabel="Edit"
       hitSlop={8}
     >
-      <SquarePen size={18} color={colors.pure} strokeWidth={2.25} />
+      <SquarePen size={18} color={colors.accentOn} strokeWidth={2.25} />
     </Pressable>
   );
 }
@@ -486,46 +543,76 @@ function makeStyles(colors: ThemeColors) {
     hero: {
       borderRadius: radius.md,
       overflow: 'hidden',
-      borderWidth: 1.5,
       marginBottom: spacing.md,
-      minHeight: 140,
+      minHeight: 0,
       ...shadows.soft,
+    },
+    heroCompact: {
+      minHeight: 0,
+      marginBottom: spacing.sm,
     },
     heroFill: {
       paddingHorizontal: spacing.lg,
-      paddingTop: spacing.lg,
-      paddingBottom: spacing.lg + 4,
-      gap: 6,
+      paddingTop: spacing.sm,
+      paddingBottom: spacing.sm,
+      gap: 2,
+    },
+    heroFillCompact: {
+      paddingHorizontal: spacing.md,
+      paddingTop: 10,
+      paddingBottom: 10,
+      gap: 2,
     },
     eyebrow: {
       fontFamily: fonts.sansMedium,
       fontSize: 13,
       letterSpacing: 0.2,
-      marginBottom: 2,
+      marginBottom: 0,
+    },
+    heroTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      minWidth: 0,
     },
     heroTitle: {
       fontFamily: fonts.sansSemi,
-      fontSize: 26,
-      lineHeight: 32,
-      letterSpacing: -0.6,
+      fontSize: 24,
+      lineHeight: 30,
+      letterSpacing: -0.5,
       padding: 0,
       margin: 0,
       backgroundColor: 'transparent',
     },
+    heroTitleBeside: {
+      fontSize: 22,
+      lineHeight: 28,
+      height: 32,
+      maxHeight: 32,
+      paddingTop: 0,
+      paddingBottom: 0,
+      minWidth: 0,
+    },
+    heroTitleCompact: {
+      fontSize: 22,
+      lineHeight: 26,
+      height: 28,
+    },
     heroSub: {
       fontFamily: fonts.sans,
-      fontSize: 15,
-      lineHeight: 21,
-      marginTop: 4,
+      fontSize: 14,
+      lineHeight: 20,
+      marginTop: 2,
     },
     heroMeta: {
       fontFamily: fonts.sansMedium,
       fontSize: 13,
       letterSpacing: -0.1,
+      marginTop: 2,
     },
     section: {
-      marginBottom: spacing.lg,
-      gap: 10,
+      marginBottom: spacing.xl,
+      gap: spacing.sm,
     },
     sectionLabel: {
       fontFamily: fonts.sansSemi,

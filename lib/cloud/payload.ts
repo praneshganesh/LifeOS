@@ -1,5 +1,23 @@
-/** AsyncStorage keys that belong in the cloud snapshot. Device lock stays local. */
-export const CLOUD_STORE_KEYS = [
+/**
+ * Cloud snapshot keys.
+ *
+ * Domain data (things, expenses, …) is row-synced (`lib/sync/engine.ts`).
+ * The `life_stores` blob is now **prefs only**; the domain keys below are kept
+ * solely so a phone that only ever had the legacy blob can import it once.
+ * Device lock / biometrics stay local.
+ */
+export const CLOUD_PREF_KEYS = [
+  'lifeos:notif-prefs:v1',
+  'lifeos:profile:v1',
+  'lifeos:onboarding:v1',
+  'lifeos:appearance:v1',
+  'lifeos:plan:v1',
+  'lifeos:aiUsage:v1',
+  'lifeos:talk-voice:v1',
+] as const;
+
+/** Legacy blob keys — pulled once when the local store is empty; never pushed. */
+export const LEGACY_DOMAIN_KEYS = [
   'lifeos:inventory:v1',
   'lifeos:expenses:v1',
   'lifeos:habits:v1',
@@ -8,18 +26,16 @@ export const CLOUD_STORE_KEYS = [
   'lifeos:last-done:v2',
   'lifeos:household:v1',
   'lifeos:spaces:v2',
-  'lifeos:notif-prefs:v1',
-  'lifeos:profile:v1',
-  'lifeos:onboarding:v1',
-  'lifeos:appearance:v1',
-  'lifeos:plan:v1',
-  'lifeos:talk-voice:v1',
 ] as const;
+
+/** Every key the blob may contain (pull side). */
+export const CLOUD_STORE_KEYS = [...LEGACY_DOMAIN_KEYS, ...CLOUD_PREF_KEYS] as const;
 
 export type CloudStoreKey = (typeof CLOUD_STORE_KEYS)[number];
 
 const LOCAL_MEDIA_KEYS = new Set([
   'imageUri',
+  'receiptUri',
   'photoUri',
   'localUri',
   'fileUri',
@@ -88,12 +104,17 @@ export type CloudSnapshot = {
   stores: Record<string, unknown>;
 };
 
+/**
+ * Snapshot to push. Defaults to prefs only (row sync owns domain data);
+ * pass `keys` to build a wider snapshot (tests / export).
+ */
 export function buildCloudBody(
   stores: Record<string, unknown>,
-  exportedAt = new Date().toISOString()
+  exportedAt = new Date().toISOString(),
+  keys: readonly string[] = CLOUD_STORE_KEYS
 ): CloudSnapshot {
   const next: Record<string, unknown> = {};
-  for (const key of CLOUD_STORE_KEYS) {
+  for (const key of keys) {
     if (key in stores && stores[key] != null) {
       next[key] = stripLocalMedia(stores[key]);
     }

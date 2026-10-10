@@ -10,6 +10,7 @@ export type EntitlementStatus =
   | 'trial_expired'
   | 'pro'
   | 'family'
+  | 'lapsed'
   | 'member'; // joined someone else's Family — no own billing
 
 export type Entitlement = {
@@ -25,7 +26,7 @@ export type Entitlement = {
   trialDaysLeft: number | null;
   trialEndsAt: string | null;
   /** Why a paywall might show */
-  paywallReason: 'trial_ended' | 'upgrade_family' | null;
+  paywallReason: 'trial_ended' | 'subscription_ended' | 'upgrade_family' | null;
 };
 
 export function trialEndsAt(prefs: PlanPrefs): Date | null {
@@ -50,26 +51,24 @@ export function computeEntitlement(
   }
 ): Entitlement {
   const now = opts?.now ?? new Date();
-  const invited = Math.max(0, opts?.invitedLogins ?? 0);
   const seatsTotal = FAMILY_LOGIN_SEATS;
-  // Owner takes 1 seat; remaining for invitees.
-  const seatsRemaining = Math.max(0, seatsTotal - 1 - invited);
 
-  if (opts?.isHouseholdMember) {
+  if (prefs.planId === 'lapsed') {
     return {
-      status: 'member',
-      planId: 'family',
-      hasAccess: true,
+      status: 'lapsed',
+      planId: 'lapsed',
+      hasAccess: false,
       canInvite: false,
       seatsRemaining: 0,
       seatsTotal,
       trialDaysLeft: null,
       trialEndsAt: null,
-      paywallReason: null,
+      paywallReason: 'subscription_ended',
     };
   }
 
-  if (prefs.planId === 'pro') {
+  // Launch sells Pro only. A stored family tier is Pro until Family ships.
+  if (prefs.planId === 'pro' || prefs.planId === 'family') {
     return {
       status: 'pro',
       planId: 'pro',
@@ -79,21 +78,7 @@ export function computeEntitlement(
       seatsTotal,
       trialDaysLeft: null,
       trialEndsAt: null,
-      paywallReason: 'upgrade_family',
-    };
-  }
-
-  if (prefs.planId === 'family') {
-    return {
-      status: 'family',
-      planId: 'family',
-      hasAccess: true,
-      canInvite: seatsRemaining > 0,
-      seatsRemaining,
-      seatsTotal,
-      trialDaysLeft: null,
-      trialEndsAt: null,
-      paywallReason: seatsRemaining > 0 ? null : 'upgrade_family',
+      paywallReason: null,
     };
   }
 
@@ -116,7 +101,7 @@ export function computeEntitlement(
   };
 }
 
-/** True when inviting requires Family upgrade first. */
-export function needsFamilyUpgrade(ent: Entitlement): boolean {
-  return ent.planId === 'pro' || ent.planId === 'trial' || (ent.planId === 'family' && !ent.canInvite && ent.status !== 'member');
+/** Invites are not sold at launch. */
+export function needsFamilyUpgrade(_ent: Entitlement): boolean {
+  return false;
 }

@@ -34,7 +34,7 @@ export default function OnboardingCurrency() {
     setSaving(true);
     try {
       await setCurrency(picked || suggested);
-      router.push('/onboarding/family');
+      router.push('/onboarding/quiet-hours');
     } finally {
       setSaving(false);
     }
@@ -46,7 +46,7 @@ export default function OnboardingCurrency() {
         contentContainerStyle={styles.body}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.step}>Step 2 of 6</Text>
+        <Text style={styles.step}>Step 3 of 5</Text>
         <Text style={styles.title}>What’s your currency?</Text>
         <Text style={styles.lead}>
           Used for expenses, subscriptions, and Talk. You can change it anytime in

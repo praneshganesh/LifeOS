@@ -1,14 +1,21 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { isUuid, newUuid } from '../ids';
+import { isUuid, legacyIdToUuid, newUuid } from '../ids';
 import {
   coalesceOutbox,
+  genericToRow,
   mergeRemote,
+  personToRow,
   reminderToRow,
+  rowToGeneric,
+  rowToPerson,
   rowToReminder,
   rowToThing,
   thingToRow,
+  tombstoneRow,
   identityIds,
+  type Expense,
+  type HouseholdMember,
   type IdResolver,
   type OutboxOp,
 } from '../sync/core';
@@ -79,6 +86,17 @@ describe('ids', () => {
   it('rejects legacy prefix ids', () => {
     assert.equal(isUuid('inv-1736-ab3'), false);
     assert.equal(isUuid('ld-1736-xyz'), false);
+  });
+
+  it('maps legacy ids to the same uuid on every device', () => {
+    const a = legacyIdToUuid('s1');
+    assert.ok(isUuid(a), a);
+    assert.equal(legacyIdToUuid('s1'), a);
+    assert.notEqual(legacyIdToUuid('s2'), a);
+    assert.notEqual(legacyIdToUuid('rm-s1-kitchen'), a);
+    // Real uuids pass through unchanged.
+    const real = newUuid();
+    assert.equal(legacyIdToUuid(real), real);
   });
 });
 
@@ -163,6 +181,76 @@ describe('reminder row mapping', () => {
     const row = reminderToRow(item, HH, identityIds);
     assert.equal(row.remind_at, item.remindAt);
     assert.deepEqual(row.remind_interval, item.remindInterval);
+  });
+});
+
+describe('generic + person row mapping', () => {
+  it('keeps receiptPath but strips the device receipt URI from expenses', () => {
+    const ids = makeResolver();
+    const expense: Expense = {
+      id: 'exp-legacy-1',
+      title: 'Groceries',
+      amount: 42.5,
+      currency: 'AED',
+      date: '2026-09-01',
+      category: 'food',
+      personId: 'p-legacy-1',
+      receiptUri: 'file:///var/mobile/receipts/1.jpg',
+      receiptPath: `${HH}/abc.jpg`,
+      createdAt: '2026-09-01T10:00:00.000Z',
+      updatedAt: '2026-09-02T10:00:00.000Z',
+    } as Expense;
+    const row = genericToRow(expense, HH, ids);
+    assert.ok(isUuid(row.id));
+    assert.equal(row.title, 'Groceries');
+    assert.equal(row.client_mutated_at, expense.updatedAt);
+    assert.equal(row.body.receiptUri, undefined);
+    assert.equal(row.body.receiptPath, `${HH}/abc.jpg`);
+    assert.ok(isUuid(String(row.body.personId)));
+    const back = rowToGeneric<Expense>(row, ids);
+    assert.equal(back.id, 'exp-legacy-1');
+    assert.equal(back.personId, 'p-legacy-1');
+    assert.equal(back.amount, 42.5);
+  });
+
+  it('uses name as the title for spaces and rooms', () => {
+    const row = genericToRow({ id: newUuid(), name: 'Kitchen' }, HH, identityIds);
+    assert.equal(row.title, 'Kitchen');
+  });
+
+  it('round-trips household people with name/role columns', () => {
+    const member: HouseholdMember = {
+      id: newUuid(),
+      name: 'Asha',
+      role: 'child',
+      relation: 'daughter',
+      avatarLetter: 'A',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+    } as HouseholdMember;
+    const row = personToRow(member, HH, identityIds);
+    assert.equal(row.name, 'Asha');
+    assert.equal(row.role, 'child');
+    assert.equal(row.relation, 'daughter');
+    const back = rowToPerson(row, identityIds);
+    assert.deepEqual(back, member);
+  });
+
+  it('builds tombstones that satisfy each table shape', () => {
+    const id = newUuid();
+    const t = tombstoneRow('things', id, HH, 'q', 'n');
+    assert.equal(t.name, '');
+    assert.equal(t.is_document, false);
+    const r = tombstoneRow('reminders', id, HH, 'q', 'n');
+    assert.equal(r.label, '');
+    const p = tombstoneRow('household_people', id, HH, 'q', 'n');
+    assert.equal(p.role, 'adult');
+    for (const table of ['expenses', 'subscriptions', 'habits', 'class_packs', 'spaces', 'rooms'] as const) {
+      const g = tombstoneRow(table, id, HH, 'q', 'n');
+      assert.equal(g.title, '');
+      assert.equal(g.deleted_at, 'n');
+      assert.equal(g.client_mutated_at, 'q');
+    }
   });
 });
 

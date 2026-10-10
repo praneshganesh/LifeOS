@@ -1,46 +1,29 @@
 import { useTheme } from '@/lib/ThemeContext';
 import { useEffect, useMemo, useState } from 'react';
-import {
-  Alert,
-  Platform,
-  Pressable,
-  StyleSheet,
-  TextInput,
-  View,
-} from 'react-native';
-import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
-import { Screen } from '@/components/ui/Screen';
-import { KeyboardFormScroll } from '@/components/ui/KeyboardFormScroll';
+import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Redirect, useLocalSearchParams, type Href } from 'expo-router';
 import { Text } from '@/components/ui/Text';
 import { OptionalDateField } from '@/components/ui/DateField';
-import {
-  DETAIL_STICKY_PAD,
-  DetailPrimaryButton,
-  DetailStickyActions,
-  DetailTrashButton,
-} from '@/components/ui/DetailKit';
+import { DetailPrimaryButton } from '@/components/ui/DetailKit';
 import { PersonChips } from '@/components/PersonChips';
 import { useHousehold } from '@/lib/HouseholdContext';
 import { useInventory } from '@/lib/InventoryContext';
 import { useSpaces } from '@/lib/SpacesContext';
-import { blurActiveElement } from '@/lib/a11y';
 import { parseDateInput } from '@/lib/lastDone';
 import { useLastDone } from '@/lib/LastDoneContext';
 import { defaultDocumentReminder } from '@/lib/documentReminders';
 import { useToast } from '@/lib/ToastContext';
 import { type ThemeColors, fonts, radius, spacing } from '@/constants/theme';
 
-export default function EditAssetScreen() {
+export function AssetEditor({ assetId }: { assetId: string }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
-  const { getById, updateItem, removeItem } = useInventory();
+  const { getById, updateItem } = useInventory();
   const { setReminder } = useLastDone();
   const { spaces, roomsForSpace } = useSpaces();
   const { members } = useHousehold();
   const { showToast, showError } = useToast();
-  const item = id ? getById(id) : undefined;
+  const item = assetId ? getById(assetId) : undefined;
 
   const [name, setName] = useState('');
   const [brand, setBrand] = useState('');
@@ -88,25 +71,12 @@ export default function EditAssetScreen() {
     [spaceId, roomsForSpace]
   );
 
-  if (!item) {
-    return (
-      <Screen>
-        <Stack.Screen options={{ title: 'Edit' }} />
-        <View style={styles.missing}>
-          <Text variant="body">Only captured items can be edited here.</Text>
-          <Pressable onPress={() => router.back()} style={{ marginTop: spacing.md }}>
-            <Text style={styles.link}>Go back</Text>
-          </Pressable>
-        </View>
-      </Screen>
-    );
-  }
+  if (!item) return null;
 
   async function save() {
-    if (!id) return;
     const person = personId ? members.find((m) => m.id === personId) : undefined;
     try {
-      await updateItem(id, {
+      await updateItem(assetId, {
         name: name.trim() || item!.name,
         brand: brand.trim(),
         room: room.trim(),
@@ -153,63 +123,21 @@ export default function EditAssetScreen() {
             label: draft.label,
             remindAt: draft.remindAt,
             notes: draft.notes,
-            inventoryItemId: id,
+            inventoryItemId: assetId,
           });
         } catch (err) {
           console.warn('Document expiry reminder failed', err);
         }
       }
 
-      // Don't Alert here — an alert presented during the pop races with
-      // navigation on iOS and both can be swallowed. A toast doesn't block.
       showToast('Changes saved');
-      if (router.canGoBack()) router.back();
-      else router.replace(`/asset/${id}` as Href);
     } catch {
       showError('Couldn’t save changes — try again.');
     }
   }
 
-  function confirmDelete() {
-    const target = item;
-    if (!target) return;
-    blurActiveElement();
-    const run = async () => {
-      try {
-        await removeItem(target.id);
-      } catch {
-        showError('Couldn’t delete — try again.');
-        return;
-      }
-      router.replace('/(tabs)/spaces');
-    };
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      if (window.confirm(`Remove “${target.name}” from this device?`)) {
-        void run();
-      }
-      return;
-    }
-    Alert.alert('Delete item?', `Remove “${target.name}” from this device?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => {
-          void run();
-        },
-      },
-    ]);
-  }
-
   return (
-    <Screen>
-      <Stack.Screen
-        options={{
-          title: 'Edit item',
-          headerRight: () => <DetailTrashButton onPress={confirmDelete} />,
-        }}
-      />
-      <KeyboardFormScroll contentContainerStyle={styles.content} bottomExtra={DETAIL_STICKY_PAD}>
+    <View>
           <Field label="Name" value={name} onChangeText={setName} />
           <Field label="Brand" value={brand} onChangeText={setBrand} />
           <Field label="Category" value={category} onChangeText={setCategory} />
@@ -332,16 +260,20 @@ export default function EditAssetScreen() {
           />
 
           <Field label="Notes" value={insight} onChangeText={setInsight} multiline />
-      </KeyboardFormScroll>
-      <DetailStickyActions>
-        <DetailPrimaryButton
-          label="Save changes"
-          onPress={() => void save()}
-          accent={colors.accent}
-        />
-      </DetailStickyActions>
-    </Screen>
+      <DetailPrimaryButton
+        label="Save changes"
+        onPress={() => void save()}
+        style={{ marginTop: spacing.sm }}
+      />
+    </View>
   );
+}
+
+export default function EditAssetRoute() {
+  const { id: idParam } = useLocalSearchParams<{ id: string }>();
+  const id = Array.isArray(idParam) ? idParam[0] : idParam;
+  if (!id) return <Redirect href={'/things' as Href} />;
+  return <Redirect href={`/asset/${id}` as Href} />;
 }
 
 function Field({
@@ -439,8 +371,8 @@ function makeStyles(colors: ThemeColors) {
     justifyContent: 'center',
   },
   chipOn: {
-    backgroundColor: colors.ink,
-    borderColor: colors.ink,
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
   },
   chipText: {
     fontFamily: fonts.sansSemi,
@@ -449,7 +381,7 @@ function makeStyles(colors: ThemeColors) {
     color: colors.ink,
   },
   chipTextOn: {
-    color: colors.onInk,
+    color: colors.accentOn,
   },
 });
 }

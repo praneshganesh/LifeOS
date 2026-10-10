@@ -10,6 +10,7 @@ import {
 } from '@/lib/chat/prompt';
 import { normalizeAgentResponse } from '@/lib/chat/applyActions';
 import { localDayKey } from '@/lib/dates';
+import { getSupabaseAccessToken } from '@/lib/aiUsage';
 import type {
   ChatAgentResponse,
   ChatMessage,
@@ -182,8 +183,15 @@ export async function runChatAgent(params: {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  const token = process.env.EXPO_PUBLIC_CHAT_API_TOKEN?.trim();
-  if (token) headers.Authorization = `Bearer ${token}`;
+  const proxyToken = process.env.EXPO_PUBLIC_CHAT_API_TOKEN?.trim();
+  const accessToken = await getSupabaseAccessToken();
+  if (accessToken) {
+    headers.Authorization = `Bearer ${accessToken}`;
+    if (proxyToken) headers['X-Saavi-Proxy-Token'] = proxyToken;
+  } else if (proxyToken) {
+    // Local chat-api without Supabase: legacy shared token.
+    headers.Authorization = `Bearer ${proxyToken}`;
+  }
   try {
     res = await fetch(url, {
       method: 'POST',

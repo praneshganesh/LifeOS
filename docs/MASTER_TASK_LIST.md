@@ -39,7 +39,7 @@ This master checklist breaks down every single task required across **TestFlight
 
 ## 💳 Phase 2: Payments & Subscriptions (RevenueCat & Stores)
 
-See also [`docs/SUBSCRIPTIONS_AND_INVITES.md`](./SUBSCRIPTIONS_AND_INVITES.md) for product rules (trial gate, Pro→Family upgrade, invites).
+See also [`docs/SUBSCRIPTIONS_AND_INVITES.md`](./SUBSCRIPTIONS_AND_INVITES.md) for product rules (trial gate, Pro→Family upgrade, invites) and [`docs/FAMILY_SHARING.md`](./FAMILY_SHARING.md) for the Family gaps and scenarios.
 
 ### 2.0 Client entitlement foundation (in progress)
 - [x] Entitlement model (`lib/entitlements.ts`) — trial active/expired, Pro, Family, member.
@@ -70,58 +70,48 @@ See also [`docs/SUBSCRIPTIONS_AND_INVITES.md`](./SUBSCRIPTIONS_AND_INVITES.md) f
   - Link Google Cloud Service Account credentials to RevenueCat.
 
 ### 2.2 Client-Side RevenueCat Integration
-- [ ] Install SDK: `npx expo install react-native-purchases`.
-- [ ] Initialize RevenueCat on app start with Supabase `user.id`:
-  ```ts
-  Purchases.configure({ apiKey: Platform.select({ ios: IOS_KEY, android: ANDROID_KEY }), appUserID: user.id });
-  ```
-- [ ] Update `app/settings/plan.tsx`:
-  - Fetch offerings from RevenueCat dynamically (`Purchases.getOfferings()`).
-  - Wire subscription purchase buttons (`Purchases.purchasePackage()`).
-  - Add working **"Restore Purchases"** button (`Purchases.restorePurchases()`).
-  - Display active plan badge (`Trial`, `Pro`, `Family`).
+- [x] Install SDK: `react-native-purchases` (`lib/billing/revenueCat.ts`).
+- [x] Initialize RevenueCat on app start with Supabase `user.id` (`configureRevenueCat(uid)` from `PlanContext` and after Apple sign-in).
+- [x] `app/settings/plan.tsx`: live offerings, Monthly / Yearly, purchase, Restore, active plan badge.
+- [x] Server-side plan mirror: RevenueCat webhook `POST /rc/webhook` on the chat API writes `profiles.plan_id` via `admin_set_plan_id` (service role). The client `set_my_plan_id` call remains as an optimistic mirror only. See `server/revenuecat.mjs`, `.env.example`.
 - [ ] Handle App Store Compliance:
   - Add clear Terms of Use (Apple standard EULA) and Privacy Policy links directly on the paywall screen.
   - Display clear pricing terms (e.g., *"7-day free trial, then $4.99/month. Cancel anytime."*).
 
 ---
 
-## 🤖 Phase 3: AI Rate Limiting & Chat API Protection
+## 🤖 Phase 3: AI Rate Limiting & Chat API Protection (DONE)
 
 ### 3.1 Commercial AI Policy
-- **Free Trial**: 5 AI conversations / day (1 conversation = 1 completed Talk turn or Ask message).
-- **Subscribed Pro/Family**: Full access with internal fair-use cost guard ceiling (e.g. 150 calls/day).
-- **Manual CRUD**: Always unlimited & 100% free forever (Things, Expenses, Habits, Classes, Subscriptions, Last Done).
-- **On-Device OCR**: Free & unlimited (runs on-device via ML Kit, zero OpenAI cost).
+- **Free Trial**: 25 AI turns / day (1 turn = 1 completed Talk turn, Ask message, or photo Identify).
+- **Pro**: 100 AI turns / day per user.
+- **Family**: not sold at launch. A leftover `family` row uses the Pro cap (100). The old shared pool was 80.
+- **Manual CRUD**: Always unlimited & free (Things, Expenses, Habits, Classes, Subscriptions, Last Done).
+- **On-Device OCR**: Free & unlimited (ML Kit, zero OpenAI cost). Capture "AI off" skips OCR and cloud entirely.
 
-### 3.2 Client-Side AI Guard
-- [ ] Track daily conversation count locally (`lifeos:ai_counter:YYYY-MM-DD`).
-- [ ] When a trial user hits 5 calls in a day, present a polite upgrade sheet:
-  - *"You've used your 5 free trial AI interactions for today. Upgrade to Pro for unlimited AI, or continue manually."*
-  - Quick CTA button navigating to `app/settings/plan.tsx`.
+### 3.2 Client-Side AI Guard (UX mirror only)
+- [x] `lib/aiUsage.ts` mirrors the server counter for the meter + upgrade sheet; never the sole guard.
+- [x] Limit-reached sheet with CTA to `app/settings/plan.tsx`.
 
 ### 3.3 Server-Side Hard Guard (`server/chat.mjs`)
-- [ ] Verify incoming `Authorization: Bearer <supabase_jwt>` header cryptographically on Fly.io using Supabase JWT secret.
-- [ ] Check user's daily usage count against Supabase `profiles` or a lightweight `user_ai_usage` table.
-- [ ] If trial user exceeds 5 calls/day $\rightarrow$ return `HTTP 429 Too Many Requests` with friendly error payload.
-- [ ] Increment counter atomically upon successful OpenAI completion.
+- [x] `Authorization: Bearer <supabase_jwt>` verified locally against the project JWKS (ES256 / RS256, exp / iss / aud checks) with fallback to `/auth/v1/user` for HS256 projects or key-rotation races (`server/aiAuth.mjs`).
+- [x] `consume_ai_turn(p_day)` RPC (migration `20260919120000_ai_daily_usage.sql`) reads `profiles.plan_id`, increments `ai_daily_usage` atomically, returns `{ ok, used, limit }`.
+- [x] Over-cap → `HTTP 429` with friendly payload before OpenAI is called (both `/chat` and `/identify`).
 
 ---
 
-## 📸 Phase 4: Durable Media Storage (Receipts & Documents)
+## 📸 Phase 4: Durable Media Storage (Receipts & Documents) (DONE)
 
 ### 4.1 Supabase Storage Setup
-- [ ] Create private storage bucket: `media` in Supabase.
-- [ ] Add Row Level Security (RLS) policies:
-  - `INSERT` / `SELECT` / `DELETE` allowed only if `bucket_id = 'media'` and path starts with `auth.uid() + '/'`.
+- [x] Private bucket `media` (15 MB, image/* + PDF) created by migration `20260928090000_row_sync_all_modules.sql`.
+- [x] RLS on `storage.objects`: path is `{household_id}/{uuid}.ext`; select for household members, insert / update / delete for editors (`public._media_household(name)`).
 
-### 4.2 Background Media Synchronization (`lib/cloud/mediaSync.ts`)
-- [ ] Implement non-blocking background uploader:
-  - When user snaps a receipt or document, write local cache `file:///...` immediately (0 delay in UI).
-  - Queue background upload to `media/{user_id}/{media_id}.jpg`.
-  - On upload confirmation, store permanent relative storage path in item record.
-  - Download/cache on demand if user restores on a new device.
-- [ ] Enforce safety rule: **Never delete a local media file unless its cloud upload has been verified.**
+### 4.2 Background Media Synchronization (`lib/media/mediaSync.ts`)
+- [x] Capture writes the local `file://` immediately (zero UI delay); the sync engine uploads in the background and stores `imagePath` (things) / `receiptPath` (expenses) on the row.
+- [x] New device: rows arrive with `imagePath` / `receiptPath` and the engine downloads via signed URL into the app cache, then repoints the local URI.
+- [x] Budgeted (4 transfers per sync run) with per-file attempt backoff.
+- [x] Safety rule enforced: local media files are never deleted by sync.
+- [ ] Media Cache Management UI (clear cached downloads) — deferred to Phase 6.
 
 ---
 

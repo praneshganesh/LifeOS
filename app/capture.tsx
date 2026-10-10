@@ -21,13 +21,16 @@ import {
 } from 'expo-camera';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import { FileText, Image as ImageIcon, RefreshCw, X } from 'lucide-react-native';
+import { FileText, Image as ImageIcon, RefreshCw, Sparkles, X } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { OptionalDateField } from '@/components/ui/DateField';
 import { blurActiveElement } from '@/lib/a11y';
 import { localDayKey } from '@/lib/dates';
 import { parseDateInput } from '@/lib/lastDone';
 import { recognizeImage } from '@/lib/ocr/recognize';
+import { IdentifyError, identifyCaptureImage } from '@/lib/ocr/identify';
+import { usePlan } from '@/lib/PlanContext';
+import { AiDailyLimitError } from '@/lib/aiUsage';
 import {
   extractDocumentFieldHints,
   isIdentityDocumentKind,
@@ -76,13 +79,15 @@ const SAVE_DESTINATIONS: {
 
 /**
  * Capture opens the camera immediately.
- * After OCR, incomplete Talk stubs can be linked on-device (no cloud AI).
+ * AI assist (default on): on-device OCR. Opt-in cloud Identify for products.
+ * AI off: photo only — for passports / sensitive docs.
  */
 export default function CaptureModal() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { entitlement } = usePlan();
   const params = useLocalSearchParams<{
     context?: string;
     spaceId?: string;
@@ -112,6 +117,9 @@ export default function CaptureModal() {
   const [phase, setPhase] = useState<Phase>('camera');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [status, setStatus] = useState('Reading text on your device…');
+  /** When off, skip OCR + cloud Identify (manual fields only). */
+  const [aiAssist, setAiAssist] = useState(true);
+  const [identifying, setIdentifying] = useState(false);
 
   const [name, setName] = useState('');
   const [brand, setBrand] = useState('');
@@ -174,6 +182,7 @@ export default function CaptureModal() {
     setPhase('camera');
     setPhotoUri(null);
     setBusy(false);
+    setIdentifying(false);
     setMatchCandidates([]);
     setLinkedStubId(linkItemId ?? null);
     setOcrText('');
@@ -185,6 +194,37 @@ export default function CaptureModal() {
     setBrowseStubs(false);
     setSaveError('');
     setDuplicateExpense(null);
+  }
+
+  async function runIdentify() {
+    if (!photoUri || identifying || !aiAssist) return;
+    setIdentifying(true);
+    try {
+      const result = await identifyCaptureImage(photoUri, entitlement.planId);
+      if (result.name) setName(result.name);
+      if (result.brand) setBrand(result.brand);
+      if (result.serial) setSerial(result.serial);
+      setIsDocument(false);
+      setReceiptLooksLike(false);
+      setSaveDestination('thing');
+      const confNote =
+        result.confidence >= 0.65
+          ? 'Identified with AI — check before saving.'
+          : 'AI guess (low confidence) — edit anything that looks off.';
+      setOcrNote(result.note ? `${confNote} ${result.note}` : confNote);
+      setStatus('Identified');
+      proposeTalkLinks(result.name || name, result.brand || brand, ocrText);
+    } catch (err) {
+      if (err instanceof AiDailyLimitError) {
+        Alert.alert('Daily AI limit', err.message);
+      } else if (err instanceof IdentifyError) {
+        Alert.alert('Identify', err.message);
+      } else {
+        Alert.alert('Identify', 'Something went wrong. Try again.');
+      }
+    } finally {
+      setIdentifying(false);
+    }
   }
 
   function expenseDraftFromForm(): Pick<
@@ -290,11 +330,30 @@ export default function CaptureModal() {
   async function processUri(uri: string) {
     const durable = await persistLocalMediaUri(uri, 'photo');
     setPhotoUri(durable);
-    setPhase('reading');
-    setStatus('Reading text on your device…');
-    setOcrNote('On-device text recognition — nothing is sent to AI or the cloud.');
     setMatchCandidates([]);
     setLinkedStubId(forcedLink && linkItemId ? linkItemId : null);
+
+    if (!aiAssist) {
+      setOcrText('');
+      setOcrNote(
+        'AI off — photo stays on this phone. Nothing was read or sent. Fill in what you want, then save.'
+      );
+      setStatus('Private capture');
+      if (forcedLink && linkedItem) {
+        setIsDocument(Boolean(linkedItem.isDocument));
+        setName(linkedItem.name);
+        setBrand(linkedItem.brand === 'Unknown' ? '' : linkedItem.brand);
+        setSerial(linkedItem.serial === '—' ? '' : linkedItem.serial);
+      } else if (!name.trim()) {
+        setName('');
+      }
+      setPhase('review');
+      return;
+    }
+
+    setPhase('reading');
+    setStatus('Reading text on your device…');
+    setOcrNote('On-device text recognition — nothing is sent to AI or the cloud yet.');
 
     // Prefer the durable copy — camera temp URIs can disappear mid-read on some devices.
     let result = await recognizeImage(durable);
@@ -508,7 +567,11 @@ export default function CaptureModal() {
           setName(
             picked.fileName?.replace(/\.pdf$/i, '') || preset.defaultName
           );
-          setOcrNote('PDF stored. Open a photo of the ID page for MRZ reading.');
+          setOcrNote(
+            aiAssist
+              ? 'PDF stored. Open a photo of the ID page for MRZ reading.'
+              : 'AI off — PDF stays on this phone. Fill in details, then save.'
+          );
           setPhase('review');
           return;
         }
@@ -527,7 +590,11 @@ export default function CaptureModal() {
         setIsDocument(true);
         setDocKind('unknown');
         setName(asset.name?.replace(/\.pdf$/i, '') || preset.defaultName);
-        setOcrNote('PDF stored on device. Open a photo of the ID page for MRZ reading.');
+        setOcrNote(
+          aiAssist
+            ? 'PDF stored on device. Open a photo of the ID page for MRZ reading.'
+            : 'AI off — PDF stays on this phone. Fill in details, then save.'
+        );
         setPhase('review');
         return;
       }
@@ -748,8 +815,8 @@ export default function CaptureModal() {
       <View style={[styles.black, styles.centered, { paddingTop: insets.top }]}>
         <Text style={styles.permTitle}>Camera access needed</Text>
         <Text style={styles.permBody}>
-          Capture for {preset.label}. You can also upload a photo or PDF — text is
-          read automatically.
+          Capture for {preset.label}. Upload a photo or PDF instead, or turn AI
+          off for sensitive docs.
         </Text>
         <Pressable
           onPress={() => void requestPermission()}
@@ -781,6 +848,25 @@ export default function CaptureModal() {
   }
 
   if (phase === 'review' && photoUri) {
+    const showIdentify =
+      aiAssist &&
+      !forcedLink &&
+      !receiptLooksLike &&
+      attachKind !== 'receipt' &&
+      !isIdentityDocumentKind(docKind) &&
+      saveDestination !== 'document';
+    const whereLabel =
+      forcedLink && linkedItem
+        ? `Attach to ${linkedItem.name}`
+        : receiptLooksLike &&
+            (saveDestination === 'expense' || saveDestination === 'both')
+          ? 'Logging expense'
+          : receiptLooksLike
+            ? 'From receipt'
+            : isDocument || saveDestination === 'document'
+              ? 'Documents'
+              : preset.label;
+
     return (
       // KAV so the absolute-positioned save bar lifts above the keyboard —
       // otherwise editing a lower field leaves Save unreachable.
@@ -792,7 +878,7 @@ export default function CaptureModal() {
           <Pressable onPress={resetToCamera} hitSlop={8}>
             <Text style={styles.reviewLink}>Retake</Text>
           </Pressable>
-          <Text style={styles.reviewTitle}>Looks good?</Text>
+          <Text style={styles.reviewTitle}>Review</Text>
           <Pressable onPress={close} hitSlop={8}>
             <X size={20} color={colors.ink} strokeWidth={2} />
           </Pressable>
@@ -805,42 +891,41 @@ export default function CaptureModal() {
         >
           <Image source={{ uri: photoUri }} style={styles.preview} />
 
-          <View style={styles.contextChip}>
-            <Text style={styles.contextChipText}>
-              {forcedLink && linkedItem
-                ? `Attach to ${linkedItem.name}`
-                : receiptLooksLike &&
-                    (saveDestination === 'expense' || saveDestination === 'both')
-                  ? 'Logging expense'
-                  : receiptLooksLike
-                    ? 'From receipt'
-                    : isDocument || saveDestination === 'document'
-                      ? 'Saving to Documents'
-                      : `Saving to ${preset.label}`}
-            </Text>
-            <Text style={styles.contextChipMeta}>
-              {forcedLink
-                ? attachKind === 'receipt'
-                  ? 'Receipt'
-                  : 'Photo'
-                : receiptLooksLike
-                  ? purchasedFrom || name || 'Receipt scan'
-                  : isDocument || saveDestination === 'document'
-                    ? `Personal Documents${
-                        isIdentityDocumentKind(docKind)
-                          ? ` · ${labelDocumentKind(docKind)}`
-                          : ''
-                      }`
-                    : `${preset.room}${preset.category ? ` · ${preset.category}` : ''}`}
+          <View style={styles.reviewMeta}>
+            <Text style={styles.reviewMetaWhere}>{whereLabel}</Text>
+            <Text style={styles.reviewMetaNote}>
+              {ocrNote ||
+                (aiAssist
+                  ? 'Edit anything that looks off, then save.'
+                  : 'AI was off — fill in what you want, then save.')}
             </Text>
           </View>
 
-          <View style={styles.privacyBanner}>
-            <Text style={styles.privacyText}>
-              {ocrNote ||
-                'Check the fields, then save.'}
-            </Text>
-          </View>
+          {showIdentify ? (
+            <Pressable
+              onPress={() => void runIdentify()}
+              disabled={identifying}
+              style={({ pressed }) => [
+                styles.identifyBtn,
+                pressed && { opacity: 0.88 },
+                identifying && { opacity: 0.7 },
+              ]}
+            >
+              {identifying ? (
+                <ActivityIndicator color={colors.forest} size="small" />
+              ) : (
+                <Sparkles size={16} color={colors.forest} strokeWidth={2} />
+              )}
+              <View style={{ flex: 1 }}>
+                <Text style={styles.identifyTitle}>
+                  {identifying ? 'Identifying…' : 'Identify with AI'}
+                </Text>
+                <Text style={styles.identifyHint}>
+                  Opt-in — sends this photo once. Uses 1 AI turn today.
+                </Text>
+              </View>
+            </Pressable>
+          ) : null}
 
           {matchCandidates.length > 0 && !forcedLink ? (
             <View style={styles.matchCard}>
@@ -1156,7 +1241,9 @@ export default function CaptureModal() {
               ? attachKind === 'receipt'
                 ? `Snap the receipt for ${linkedItem.name}`
                 : `Snap a photo of ${linkedItem.name}`
-              : preset.hint}
+              : aiAssist
+                ? preset.hint
+                : 'AI off — photo only, nothing is read or uploaded'}
           </Text>
         </View>
         <Pressable
@@ -1169,6 +1256,37 @@ export default function CaptureModal() {
       </View>
 
       <View style={[styles.shutterWrap, { paddingBottom: insets.bottom + 20 }]}>
+        <Pressable
+          onPress={() => setAiAssist((v) => !v)}
+          style={({ pressed }) => [
+            styles.aiToggle,
+            aiAssist ? styles.aiToggleOn : styles.aiToggleOff,
+            pressed && { opacity: 0.9 },
+          ]}
+          accessibilityRole="switch"
+          accessibilityState={{ checked: aiAssist }}
+          accessibilityLabel={aiAssist ? 'AI assist on' : 'AI assist off'}
+        >
+          <Sparkles
+            size={14}
+            color={aiAssist ? colors.forestOn : 'rgba(255,255,255,0.85)'}
+            strokeWidth={2.2}
+          />
+          <Text
+            style={[
+              styles.aiToggleText,
+              { color: aiAssist ? colors.forestOn : 'rgba(255,255,255,0.9)' },
+            ]}
+          >
+            {aiAssist ? 'AI On' : 'AI Off'}
+          </Text>
+        </Pressable>
+        <Text style={styles.aiToggleHint}>
+          {aiAssist
+            ? 'Reads text on device · Identify is opt-in after'
+            : 'Sensitive docs — keep this photo private'}
+        </Text>
+
         <View style={styles.altRow}>
           <Pressable onPress={() => void pickImage()} style={styles.altBtn}>
             <ImageIcon size={18} color={colors.pure} strokeWidth={2} />
@@ -1346,6 +1464,36 @@ function makeStyles(colors: ThemeColors) {
     bottom: 0,
     alignItems: 'center',
   },
+  aiToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginBottom: 6,
+  },
+  aiToggleOn: {
+    backgroundColor: colors.forest,
+  },
+  aiToggleOff: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
+  aiToggleText: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 14,
+    letterSpacing: 0.2,
+  },
+  aiToggleHint: {
+    fontFamily: fonts.sans,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.55)',
+    marginBottom: 16,
+    textAlign: 'center',
+    paddingHorizontal: 24,
+  },
   altRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1400,10 +1548,50 @@ function makeStyles(colors: ThemeColors) {
     color: colors.forest,
   },
   preview: {
-    height: 200,
+    height: 280,
     marginHorizontal: spacing.lg,
     borderRadius: radius.lg,
     backgroundColor: colors.surfaceSoft,
+  },
+  reviewMeta: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+    gap: 4,
+  },
+  reviewMetaWhere: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 15,
+    color: colors.ink,
+  },
+  reviewMetaNote: {
+    fontFamily: fonts.sans,
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.mute,
+  },
+  identifyBtn: {
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
+    borderRadius: radius.md,
+    backgroundColor: colors.forestWash,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  identifyTitle: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 15,
+    color: colors.forest,
+  },
+  identifyHint: {
+    fontFamily: fonts.sans,
+    fontSize: 12,
+    lineHeight: 16,
+    color: colors.mute,
+    marginTop: 2,
   },
   contextChip: {
     marginHorizontal: spacing.lg,
@@ -1456,20 +1644,18 @@ function makeStyles(colors: ThemeColors) {
     marginTop: spacing.md,
     padding: spacing.md,
     borderRadius: radius.md,
-    backgroundColor: colors.white,
-    borderWidth: 1.5,
-    borderColor: colors.lineStrong,
+    backgroundColor: colors.surface,
   },
   matchTitle: {
     fontFamily: fonts.sansSemi,
-    fontSize: 16,
+    fontSize: 15,
     color: colors.ink,
   },
   matchLead: {
     marginTop: 4,
     marginBottom: spacing.sm,
     fontFamily: fonts.sans,
-    fontSize: 16,
+    fontSize: 13,
     lineHeight: 18,
     color: colors.mute,
   },
@@ -1480,33 +1666,31 @@ function makeStyles(colors: ThemeColors) {
     paddingVertical: 10,
     paddingHorizontal: 10,
     borderRadius: radius.md,
-    borderWidth: 1.5,
-    borderColor: colors.lineStrong,
+    backgroundColor: colors.surfaceSoft,
     marginTop: 6,
   },
   matchRowOn: {
-    borderColor: colors.forest,
     backgroundColor: colors.forestWash,
   },
   matchName: {
     fontFamily: fonts.sansMedium,
-    fontSize: 16,
+    fontSize: 15,
     color: colors.ink,
   },
   matchMeta: {
     marginTop: 2,
     fontFamily: fonts.sans,
-    fontSize: 16,
+    fontSize: 13,
     color: colors.mute,
   },
   matchAction: {
     fontFamily: fonts.sansMedium,
-    fontSize: 16,
+    fontSize: 14,
     color: colors.slate,
   },
   matchSkip: {
     fontFamily: fonts.sansMedium,
-    fontSize: 16,
+    fontSize: 14,
     color: colors.mute,
   },
   routerCard: {
@@ -1515,18 +1699,16 @@ function makeStyles(colors: ThemeColors) {
     marginBottom: spacing.sm,
     padding: spacing.md,
     borderRadius: radius.md,
-    backgroundColor: colors.white,
-    borderWidth: 1.5,
-    borderColor: colors.lineStrong,
+    backgroundColor: colors.surface,
   },
   routerTitle: {
     fontFamily: fonts.sansSemi,
-    fontSize: 16,
+    fontSize: 15,
     color: colors.ink,
   },
   routerLead: {
     fontFamily: fonts.sans,
-    fontSize: 16,
+    fontSize: 13,
     color: colors.mute,
     marginTop: 4,
     marginBottom: spacing.md,
@@ -1540,19 +1722,16 @@ function makeStyles(colors: ThemeColors) {
     width: '48%',
     flexGrow: 1,
     paddingVertical: 12,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     borderRadius: radius.md,
-    backgroundColor: colors.bg,
-    borderWidth: 1.5,
-    borderColor: colors.lineStrong,
+    backgroundColor: colors.surfaceSoft,
   },
   routerChipOn: {
     backgroundColor: colors.forestWash,
-    borderColor: colors.forest,
   },
   routerChipTitle: {
     fontFamily: fonts.sansSemi,
-    fontSize: 16,
+    fontSize: 14,
     color: colors.ink,
   },
   routerChipTitleOn: {
@@ -1560,7 +1739,7 @@ function makeStyles(colors: ThemeColors) {
   },
   routerChipHint: {
     fontFamily: fonts.sans,
-    fontSize: 16,
+    fontSize: 12,
     color: colors.mute,
     marginTop: 2,
   },
@@ -1573,16 +1752,14 @@ function makeStyles(colors: ThemeColors) {
     marginBottom: spacing.sm,
     padding: spacing.md,
     borderRadius: radius.md,
-    backgroundColor: colors.white,
-    borderWidth: 1.5,
-    borderColor: colors.lineStrong,
+    backgroundColor: colors.surface,
   },
   expenseCheck: {
     width: 22,
     height: 22,
     borderRadius: 6,
     borderWidth: 1.5,
-    borderColor: colors.lineStrong,
+    borderColor: colors.line,
     marginTop: 2,
   },
   expenseCheckOn: {
@@ -1591,12 +1768,12 @@ function makeStyles(colors: ThemeColors) {
   },
   expenseTitle: {
     fontFamily: fonts.sansSemi,
-    fontSize: 16,
+    fontSize: 15,
     color: colors.ink,
   },
   expenseHint: {
     fontFamily: fonts.sans,
-    fontSize: 16,
+    fontSize: 13,
     color: colors.mute,
     marginTop: 2,
   },
@@ -1605,23 +1782,23 @@ function makeStyles(colors: ThemeColors) {
     marginTop: spacing.md,
   },
   fieldLabel: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 16,
+    fontFamily: fonts.sans,
+    fontSize: 13,
     color: colors.mute,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-    marginBottom: 6,
+    marginBottom: 4,
   },
   input: {
     fontFamily: fonts.sansMedium,
-    fontSize: 16,
+    fontSize: 17,
     color: colors.ink,
-    backgroundColor: colors.white,
-    borderRadius: radius.md,
-    borderWidth: 1.5,
-    borderColor: colors.lineStrong,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 12,
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.line,
+    borderRadius: 0,
+    paddingHorizontal: 0,
+    paddingTop: 4,
+    paddingBottom: 10,
   },
   duplicateCard: {
     marginHorizontal: spacing.lg,

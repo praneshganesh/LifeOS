@@ -7,14 +7,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react-native';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
-import { Card } from '@/components/ui/Card';
-import { Icon3DBadge } from '@/components/ui/Icon3D';
 import {
   DETAIL_DOCK_PAD,
-  DetailEditButton,
   DetailHero,
   DetailSection,
 } from '@/components/ui/DetailKit';
+import { SpaceEditor } from '@/app/space/edit/[id]';
+import { MODULE_TONE_FALLBACK, moduleTone } from '@/lib/moduleTone';
 import { SwipeableThingRow } from '@/components/SwipeableThingRow';
 import { useInventory } from '@/lib/InventoryContext';
 import { useSpaces } from '@/lib/SpacesContext';
@@ -24,36 +23,9 @@ import { type ThemeColors, fonts, radius, shadows, spacing } from '@/constants/t
 import { blurActiveElement } from '@/lib/a11y';
 import { captureHref, kindFromSpace, rememberCaptureContext } from '@/lib/captureContext';
 import { useModuleBack } from '@/lib/useModuleBack';
-import type { Space } from '@/lib/spacesDefaults';
-
-function accentForSpaceKind(kind: Space['kind'], colors: ThemeColors) {
-  switch (kind) {
-    case 'vehicle':
-      return { accent: colors.sky, vivid: colors.sky };
-    case 'documents':
-      return { accent: colors.violet, vivid: colors.violet };
-    case 'family':
-      return { accent: colors.amber, vivid: colors.amber };
-    default:
-      return { accent: colors.accent, vivid: colors.forest };
-  }
-}
-
-function kindLabel(kind: Space['kind']) {
-  switch (kind) {
-    case 'vehicle':
-      return 'Vehicles';
-    case 'documents':
-      return 'Documents';
-    case 'family':
-      return 'Family';
-    default:
-      return 'Home';
-  }
-}
 
 export default function SpaceDetailScreen() {
-  const { colors } = useTheme();
+  const { colors, resolved } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { id: idParam } = useLocalSearchParams<{ id: string }>();
   const id = Array.isArray(idParam) ? idParam[0] : idParam;
@@ -61,7 +33,7 @@ export default function SpaceDetailScreen() {
   const router = useRouter();
   const { items: inventory, removeItem, getById } = useInventory();
   const { showError } = useToast();
-  const { getSpace, roomsForSpace } = useSpaces();
+  const { getSpace } = useSpaces();
   const scrollRef = useRef<ScrollView>(null);
   const { backLabel, onBack: handleBack } = useModuleBack({ defaultOrigin: 'things' });
 
@@ -72,7 +44,6 @@ export default function SpaceDetailScreen() {
   );
 
   const space = id ? getSpace(id) : undefined;
-  const spaceRooms = space ? roomsForSpace(space.id) : [];
   const userAssets = useMemo(
     () =>
       inventory
@@ -117,7 +88,7 @@ export default function SpaceDetailScreen() {
     );
   }
 
-  const { accent, vivid } = accentForSpaceKind(space.kind, colors);
+  const accent = colors.accent;
 
   return (
     <Screen>
@@ -148,13 +119,6 @@ export default function SpaceDetailScreen() {
             <Text style={styles.backLabel}>{backLabel}</Text>
           </Pressable>
           <View style={styles.headerActions}>
-            <DetailEditButton
-              accent={accent}
-              onPress={() => {
-                blurActiveElement();
-                router.push(`/space/edit/${space.id}` as Href);
-              }}
-            />
             <Pressable
               onPress={() => {
                 blurActiveElement();
@@ -164,23 +128,25 @@ export default function SpaceDetailScreen() {
               }}
               style={({ pressed }) => [
                 styles.addBtn,
-                { backgroundColor: accent },
+                { backgroundColor: colors.accent },
                 pressed && { opacity: 0.9 },
               ]}
               accessibilityLabel={`Capture for ${space.name}`}
             >
-              <Plus size={18} color={colors.pure} strokeWidth={2.2} />
+              <Plus size={18} color={colors.accentOn} strokeWidth={2.2} />
             </Pressable>
           </View>
         </View>
 
         <DetailHero
-          eyebrow={kindLabel(space.kind)}
+          eyebrow="Space"
           title={space.name}
-          subtitle={`${space.meta} · ${spaceAssets.length} items`}
-          accent={accent}
-          vividFallback={vivid}
+          subtitle={space.meta || undefined}
+          accent={moduleTone('things', colors, resolved === 'light').accent}
+          vividFallback={MODULE_TONE_FALLBACK.things}
         />
+
+        <SpaceEditor spaceId={space.id} />
 
         {space.kind === 'family' ? (
           <Pressable
@@ -194,34 +160,6 @@ export default function SpaceDetailScreen() {
             <Text style={[styles.householdLinkText, { color: accent }]}>Household</Text>
             <ChevronRight size={16} color={accent} strokeWidth={2.2} />
           </Pressable>
-        ) : null}
-
-        {spaceRooms.length > 0 ? (
-          <DetailSection label="Rooms">
-            <View style={styles.roomGrid}>
-              {spaceRooms.map((room) => (
-                <Card
-                  key={room.id}
-                  style={styles.roomCard}
-                  onPress={() => router.push(`/room/${room.id}` as Href)}
-                >
-                  <Icon3DBadge name={room.icon} size={44} />
-                  <Text variant="headline" style={{ marginTop: 10 }}>
-                    {room.name}
-                  </Text>
-                  <Text variant="caption" style={{ marginTop: 4 }}>
-                    {
-                      spaceAssets.filter(
-                        (a) =>
-                          a.room.toLowerCase() === room.name.toLowerCase()
-                      ).length
-                    }{' '}
-                    items
-                  </Text>
-                </Card>
-              ))}
-            </View>
-          </DetailSection>
         ) : null}
 
         <DetailSection label="Things here">
@@ -251,7 +189,7 @@ export default function SpaceDetailScreen() {
                   onPress={() => router.push(`/asset/${asset.id}`)}
                   onEdit={
                     getById(asset.id)
-                      ? () => router.push(`/asset/edit/${asset.id}`)
+                      ? () => router.push(`/asset/${asset.id}`)
                       : undefined
                   }
                   onDelete={

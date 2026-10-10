@@ -22,6 +22,18 @@ import {
 import { repairHeardBrand } from './brands.mjs';
 import { ensureClassActions, classTitleFromUtterance, looksLikeClassAttendance, looksLikeClassEnrollment } from './classes.mjs';
 import { ensureReminderActions } from './reminders.mjs';
+import { ensureHabitCreateActions } from './habits.mjs';
+import {
+  resolveChatAuth,
+  rpcConsumeAiTurn,
+  supabaseConfigured,
+  verifySupabaseUser,
+} from './aiAuth.mjs';
+import {
+  handleRevenueCatEvent,
+  revenueCatConfigured,
+  webhookAuthorized,
+} from './revenuecat.mjs';
 
 const PORT = Number(process.env.PORT || process.env.CHAT_API_PORT || 8787);
 const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
@@ -29,12 +41,16 @@ const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const PRICE_IN = Number(process.env.OPENAI_PRICE_IN_PER_M || 0.15);
 const PRICE_OUT = Number(process.env.OPENAI_PRICE_OUT_PER_M || 0.6);
 const MAX_BODY_BYTES = Number(process.env.CHAT_API_MAX_BODY || 65_536);
+const MAX_IDENTIFY_BODY_BYTES = Number(
+  process.env.CHAT_API_MAX_IDENTIFY_BODY || 4_500_000
+);
 const OPENAI_TIMEOUT_MS = Number(process.env.CHAT_API_OPENAI_TIMEOUT_MS || 20_000);
 const CORS_ALLOWLIST = parseOriginList(process.env.CHAT_API_CORS_ORIGINS);
 const API_TOKEN = process.env.CHAT_API_TOKEN?.trim() || '';
 const PUBLIC_METRICS =
   process.env.CHAT_API_PUBLIC_METRICS === '1' ||
   process.env.NODE_ENV !== 'production';
+const sbBoot = supabaseConfigured();
 const limiter = createLimiter({
   rpm: Number(process.env.CHAT_API_RPM || 30),
   daily: Number(process.env.CHAT_API_DAILY_MAX || 200),
@@ -94,7 +110,8 @@ Facts (critical):
 - passport / document expiry → expiryDate, else warrantyExpiry. Never invent.
 - "when did I last service/maintain X" → LastDone rows with matching itemId/itemName, or recentEvents on the item; if neither matches, say you don’t have a service log.
 - User says they serviced/maintained/descaled something → log_done { label, inventoryItemId?, doneAt? } (prefer inventory id from Inventory JSON).
-- reminder / "remind me" / "log a reminder" → set_reminder { label, remindAt, inventoryItemId?, remindInterval? }. remindAt YYYY-MM-DD ("next Tuesday" → that date). For "every Tuesday and Friday at 6:30am for 8 weeks" / "until December" set remindInterval { unit:"weekdays", weekdays:[2,5], hour:6, minute:30, value:1, endsAt? } (JS weekdays 0=Sun…6=Sat; endsAt YYYY-MM-DD optional — omit for indefinite). Not log_done. Questions like "what reminders do I have" / "show my reminders" → none only; answer from LastDone JSON. Never set_reminder for a question.
+- reminder / "remind me" / "log a reminder" → set_reminder { label, remindAt, inventoryItemId?, remindInterval? }. remindAt YYYY-MM-DD ("next Tuesday" → that date). If they name no day/date, omit remindAt or use today's date from the context message — never invent tomorrow. For "every Tuesday and Friday at 6:30am for 8 weeks" / "until December" set remindInterval { unit:"weekdays", weekdays:[2,5], hour:6, minute:30, value:1, endsAt? } (JS weekdays 0=Sun…6=Sat; endsAt YYYY-MM-DD optional — omit for indefinite). Not log_done. Questions like "what reminders do I have" / "show my reminders" → none only; answer from LastDone JSON. Never set_reminder for a question.
+- change a reminder due date ("update the due date to next Tuesday", "make it Friday", "change the reminder to tomorrow") → update_last_done { id from LastDone/session focus, patch: { remindAt } }. Never set_reminder again for a follow-up date change.
 
 Actions:
 - durable goods (laptop, machine, headphones, passport) → add_item (name, brand?, room?, category?, price?, purchasedFrom?, warrantyExpiry?, manualUrl?, assignedTo?, personId?). warrantyExpiry YYYY-MM-DD; year-only "until 2028" → 2028-12-31. Omit condition unless they said used/refurbished/etc — never invent Good. "I got a new X" is not a condition.
@@ -103,13 +120,17 @@ Actions:
 - delete an expense ("delete that juice", "remove the coffee spend") → remove_expense { id } from Expenses JSON. Never remove_item for spend. Vague "delete that" uses session focus.
 - recurring subscription ("I pay for Netflix", "Spotify is 22 a month") → add_subscription { title, amount, currency?, cycle?, renewsOn?, category?, provider?, assignedTo?, personId? } cycle: weekly|monthly|yearly; categories: streaming|software|fitness|cloud|news|other. Same currency rules as expenses.
 - change/cancel a subscription → update_subscription { id, patch } or remove_subscription { id } from Subscriptions JSON. Never update_item / remove_item for a subscription.
-- habit check-in ("I walked", "mark gym done", "did meditation") → habit_check_in { title, date?, why?, createIfMissing?, inventoryItemId?, assignedTo?, personId? } (default createIfMissing true). First-person with no other name → You. Never check in someone else’s habit of the same title. Delete a habit → remove_habit { id }.
+- create a habit ("create a new habit to meditate every day for 15 minutes", "add a habit called Walk") → add_habit { title, why?, assignedTo?, personId? }. Do NOT habit_check_in. Do not mark today done. Put duration/cadence in why ("15 minutes, every day"). Title is the activity only ("Meditate"), not the whole sentence.
+- rename/refine a habit after create ("change the name to Stretch", "call it Morning walk", "rename it to Read") → update_habit { id from Habits/session focus, patch: { title?, why? } }. Never add_habit again for a rename follow-up.
+- habit check-in ("I walked", "mark gym done", "I meditated today") → habit_check_in { title, date?, why?, createIfMissing?, inventoryItemId?, assignedTo?, personId? } (default createIfMissing true). First-person with no other name → You. Never check in someone else’s habit of the same title. Never use this for "create/add/new habit". Delete a habit → remove_habit { id }.
 - enrolled in a class pack ("I enrolled for swimming", "24 skating classes in 3 months", "Ishaan has skating at 10 AM on Saturdays, 12 classes before November, 6 already done") → add_class_pack { title, total?, completed?, scheduleDays?, scheduleTime?, months?, startsOn?, endsOn?, assignedTo?, personId? }. scheduleDays: array of lowercase days e.g. ["saturday"] or ["monday", "wednesday"]. scheduleTime: formatted time e.g. "10:00 AM". completed: number of classes already completed / done so far (e.g. 6). Create even if they omit the count. ASR "12th classes" → total 12. Not a habit. Not a lookup. First-person enroll → You; “my son” → that child. Never also habit_check_in on enroll. Dates: endsOn/startsOn are YYYY-MM-DD and must be today or later — "before November" → the NEXT upcoming 1 November (never a past year); omit startsOn unless they said when it starts. Change pack size/schedule/completed count → update_class_pack { id, patch: { total?, completed?, scheduleDays?, scheduleTime? } }. Reassign a pack to someone else → update_class_pack { id, patch: { assignedTo } }. Cancel a pack → remove_class_pack { id }.
 - correcting a person's NAME ("that's spelled with double A", "it's Saara not Sara", "S-A-A-R-A") → rename_person { from, to }. from = the CURRENT name of the Household member being corrected, copied from Household JSON (ASR may misspell the name again this turn — match it to the closest member; use session focus when they don't repeat the name). to = the intended spelling: a letter-by-letter spelling wins; otherwise apply the spoken instruction to that member's stored name (e.g. "double A" doubles the a, "two Ts" doubles the t) — never assume this turn's transcript spelling is what is stored. Never treat a name correction as update_class_pack, add_class_pack, or a new person.
 - attended a class ("I attended", "went to skating") → log_class { title?, id?, date?, assignedTo?, personId? } only if Classes JSON has a pack for that person (or one unassigned pack). If Classes JSON is empty, do not log_class. Never invent a pack from attendance. Never log another adult’s pack.
 - refine Thing (store/price/warranty/date/serial/name) → update_item { id, patch } (patch may include purchaseDate, warrantyExpiry, serial, purchasedFrom, price). If user gives price with a currency word → include that ISO code in the price string; bare numbers use Default currency. Sharafdg→Sharaf DG.
 - service/maintain/descale/filter change → log_done { label, inventoryItemId?, doneAt? }
-- reminder ("remind me next Tuesday", "every Tuesday and Friday at 6:30 AM", "log a reminder to renew passport") → set_reminder { label, remindAt, remindInterval?, inventoryItemId?, assignedTo?, personId? }. remindAt YYYY-MM-DD. Recurring weekdays use remindInterval.unit "weekdays". Do not refuse — Saavi stores this on Last Done. "What reminders do I have" / "show my reminders" → none; list from LastDone. Never create on a question.
+- reminder ("remind me next Tuesday", "every Tuesday and Friday at 6:30 AM", "log a reminder to renew passport") → set_reminder { label, remindAt, remindInterval?, inventoryItemId?, assignedTo?, personId? }. remindAt YYYY-MM-DD. If no day is spoken, use today's date from context — do not invent tomorrow. Recurring weekdays use remindInterval.unit "weekdays". Do not refuse — Saavi stores this on Last Done. "What reminders do I have" / "show my reminders" → none; list from LastDone. Never create on a question.
+- change reminder due date / label ("update the due date to next Tuesday", "change that reminder to Friday", "rename it to Pack lunch") → update_last_done { id, patch: { remindAt?, label?, notes? } } using LastDone id or session focus. Never create a second reminder.
+- rename the focused record ("change the name to X", "call it X", "rename it to X") → update_habit / update_expense / update_subscription / update_class_pack / update_item / update_last_done with session focus id. Never create a new record.
 - delete a Last Done activity / reminder → remove_last_done { id } from LastDone JSON.
 - delete/sold a Thing → remove_item { id } (reply with count). "Did you delete?" → none only, do not remove again.
 - show/open a Thing → open_item { id } (use focus item id; never omit id)
@@ -152,13 +173,13 @@ function applyCors(req, res) {
   for (const [k, v] of Object.entries(headers)) res.setHeader(k, v);
 }
 
-function readBody(req) {
+function readBody(req, maxBytes = MAX_BODY_BYTES) {
   return new Promise((resolveBody, reject) => {
     const chunks = [];
     let size = 0;
     req.on('data', (c) => {
       size += c.length;
-      if (size > MAX_BODY_BYTES) {
+      if (size > maxBytes) {
         reject(Object.assign(new Error('payload too large'), { code: 'PAYLOAD' }));
         req.destroy();
         return;
@@ -208,6 +229,8 @@ function sanitizeReply(reply, actions) {
   if (types.includes('add_subscription')) return 'Added that subscription.';
   if (types.includes('update_subscription')) return 'Updated that subscription.';
   if (types.includes('remove_subscription')) return 'Deleted that subscription.';
+  if (types.includes('add_habit')) return 'Added that habit.';
+  if (types.includes('update_habit')) return 'Updated that habit.';
   if (types.includes('habit_check_in')) return 'Checked in.';
   if (types.includes('remove_habit')) return 'Deleted that habit.';
   if (types.includes('add_class_pack')) return 'Added that class.';
@@ -216,6 +239,7 @@ function sanitizeReply(reply, actions) {
   if (types.includes('log_class')) return 'Logged that session.';
   if (types.includes('log_done')) return 'Logged that.';
   if (types.includes('set_reminder')) return 'Reminder set.';
+  if (types.includes('update_last_done')) return 'Updated that reminder.';
   if (types.includes('remove_last_done')) return 'Deleted that activity.';
   if (types.includes('rename_person')) return 'Updated that name.';
   return 'Anything else?';
@@ -306,6 +330,12 @@ export function alignReplyWithActions(reply, actions) {
   if (sub) {
     const amt = formatExpenseAmount(sub.amount, sub.currency);
     return amt ? `Added ${sub.title} — ${amt}.` : `Added subscription: ${sub.title}.`;
+  }
+  const createdHabit = list.find((a) => a?.type === 'add_habit' && a.title);
+  if (createdHabit) {
+    return createdHabit.why
+      ? `Added ${createdHabit.title} — ${createdHabit.why}.`
+      : `Added ${createdHabit.title}.`;
   }
   const habit = list.find((a) => a?.type === 'habit_check_in' && a.title);
   if (habit) return `Checked in ${habit.title}.`;
@@ -666,10 +696,13 @@ export function repairActions(actions, { focusItemId, focusExpenseId, sessionFoc
     focusExpenseId ||
     null;
   const people = Array.isArray(household) ? household : [];
-  const repaired = ensureReminderActions(
-    ensureClassActions(actions, lastUserText, classPacksSummary),
-    lastUserText,
-    inventorySummary
+  const repaired = ensureHabitCreateActions(
+    ensureReminderActions(
+      ensureClassActions(actions, lastUserText, classPacksSummary),
+      lastUserText,
+      inventorySummary
+    ),
+    lastUserText
   ).filter((a) => {
     if (!a) return false;
     if (looksLikeClassEnrollment(lastUserText) && a.type === 'habit_check_in') {
@@ -894,8 +927,21 @@ export function validateAction(action) {
         (typeof action.title === 'string' && action.title.trim().length > 0)
       );
 
+    case 'add_habit':
     case 'habit_check_in':
       return typeof action.title === 'string' && action.title.trim().length > 0;
+
+    case 'update_habit': {
+      const patch = action.patch && typeof action.patch === 'object' ? action.patch : null;
+      if (!patch) return false;
+      const hasId =
+        (typeof action.id === 'string' && action.id.trim().length > 0) ||
+        (typeof action.title === 'string' && action.title.trim().length > 0);
+      const hasPatch =
+        (typeof patch.title === 'string' && patch.title.trim().length > 0) ||
+        (typeof patch.why === 'string' && patch.why.trim().length > 0);
+      return hasId || hasPatch;
+    }
 
     case 'remove_habit':
     case 'open_habit':
@@ -936,8 +982,24 @@ export function validateAction(action) {
       return (
         typeof action.label === 'string' &&
         action.label.trim().length > 0 &&
-        isIsoDate(action.remindAt)
+        (action.remindAt == null ||
+          action.remindAt === '' ||
+          isIsoDate(action.remindAt))
       );
+
+    case 'update_last_done': {
+      const patch = action.patch && typeof action.patch === 'object' ? action.patch : null;
+      if (!patch) return false;
+      const hasId =
+        (typeof action.id === 'string' && action.id.trim().length > 0) ||
+        (typeof action.label === 'string' && action.label.trim().length > 0);
+      const hasPatch =
+        (typeof patch.label === 'string' && patch.label.trim().length > 0) ||
+        patch.notes !== undefined ||
+        patch.remindAt === null ||
+        isIsoDate(patch.remindAt);
+      return hasId || hasPatch;
+    }
 
     case 'remove_last_done':
     case 'open_last_done':
@@ -1020,12 +1082,39 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (req.method !== 'POST' || path !== '/chat') {
+  // ── RevenueCat webhook → profiles.plan_id (service role) ────────────────
+  if (req.method === 'POST' && path === '/rc/webhook') {
+    const rc = revenueCatConfigured();
+    const sb = supabaseConfigured();
+    if (!rc || !sb) {
+      json(req, res, 503, { error: 'RevenueCat webhook not configured' });
+      return;
+    }
+    if (!webhookAuthorized(req.headers.authorization, rc.secret)) {
+      json(req, res, 401, { error: 'Unauthorized' });
+      return;
+    }
+    let body;
+    try {
+      body = await readBody(req);
+    } catch {
+      json(req, res, 400, { error: 'Invalid JSON body' });
+      return;
+    }
+    const out = await handleRevenueCatEvent(body, { sb, cfg: rc, log: console.log });
+    json(req, res, out.status, out.body);
+    return;
+  }
+
+  if (req.method !== 'POST' || (path !== '/chat' && path !== '/identify')) {
     json(req, res, 404, { error: 'Not found' });
     return;
   }
 
-  if (!tokenOk(API_TOKEN, bearerToken(req.headers.authorization))) {
+  const sb = supabaseConfigured();
+  const auth = resolveChatAuth(req, { proxyToken: API_TOKEN });
+  // Shared proxy token (optional): X-Saavi-Proxy-Token, or legacy Authorization when not a JWT.
+  if (API_TOKEN && !tokenOk(API_TOKEN, auth.givenProxy)) {
     json(req, res, 401, { error: 'Unauthorized' });
     return;
   }
@@ -1042,6 +1131,22 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  let aiAllowance = null;
+  if (sb) {
+    if (!auth.accessToken) {
+      json(req, res, 401, {
+        error:
+          'Sign in required for Talk. Open the app online so Saavi can start your cloud session.',
+      });
+      return;
+    }
+    const user = await verifySupabaseUser(sb, auth.accessToken);
+    if (!user.ok) {
+      json(req, res, 401, { error: user.error || 'Invalid session' });
+      return;
+    }
+  }
+
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     json(req, res, 500, {
@@ -1050,6 +1155,149 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // ── Opt-in photo identify (vision) ──────────────────────────────────────
+  if (path === '/identify') {
+    let body;
+    try {
+      body = await readBody(req, MAX_IDENTIFY_BODY_BYTES);
+    } catch (err) {
+      if (err?.code === 'PAYLOAD') {
+        json(req, res, 413, { error: 'Photo too large for Identify.' });
+        return;
+      }
+      json(req, res, 400, { error: 'Invalid JSON body' });
+      return;
+    }
+
+    const rawB64 = String(body.imageBase64 || '')
+      .replace(/^data:image\/\w+;base64,/, '')
+      .trim();
+    if (!rawB64 || rawB64.length < 64) {
+      json(req, res, 400, { error: 'imageBase64 required' });
+      return;
+    }
+    if (rawB64.length > 4_000_000) {
+      json(req, res, 413, { error: 'Photo too large for Identify.' });
+      return;
+    }
+    const mime = String(body.mimeType || 'image/jpeg').trim() || 'image/jpeg';
+    const rawLocalDate = typeof body.localDate === 'string' ? body.localDate.trim() : '';
+    const today = isIsoDate(rawLocalDate)
+      ? rawLocalDate
+      : new Date().toISOString().slice(0, 10);
+
+    if (sb) {
+      const consumed = await rpcConsumeAiTurn(sb, auth.accessToken, today);
+      if (!consumed.ok) {
+        json(req, res, 502, {
+          error: consumed.error || 'Could not check Talk allowance',
+        });
+        return;
+      }
+      aiAllowance = consumed.allowance;
+      if (!aiAllowance?.ok) {
+        const used = Number(aiAllowance?.used || 0);
+        const limit = Number(aiAllowance?.limit || 0);
+        json(req, res, 429, {
+          error: `Daily Talk limit reached (${used}/${limit}). Try again tomorrow — manual capture stays unlimited.`,
+          aiAllowance,
+        });
+        return;
+      }
+    }
+
+    const oaAbort = new AbortController();
+    const oaTimer = setTimeout(() => oaAbort.abort(), OPENAI_TIMEOUT_MS);
+    try {
+      const oaRes = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        signal: oaAbort.signal,
+        body: JSON.stringify({
+          model: MODEL,
+          temperature: 0.2,
+          max_tokens: 220,
+          response_format: { type: 'json_object' },
+          messages: [
+            {
+              role: 'system',
+              content:
+                'You identify household products and vehicles from a photo for Saavi inventory. Reply JSON only: {"name":"","brand":"","category":"","serial":"","note":"","confidence":0}. name = short product title people would save (e.g. "Tesla Model 3", "Samsung 55\\" TV"). brand if visible. category one of: Electronics, Appliances, Vehicles, Furniture, Kitchen, Documents, Other. serial only if clearly readable on the object. note one short clause if useful. confidence 0-1. If unclear, still guess best-effort with low confidence; empty name only if totally blank.',
+            },
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: 'Identify this item for my home inventory.',
+                },
+                {
+                  type: 'image_url',
+                  image_url: {
+                    url: `data:${mime};base64,${rawB64}`,
+                    detail: 'low',
+                  },
+                },
+              ],
+            },
+          ],
+        }),
+      });
+      const data = await oaRes.json().catch(() => ({}));
+      if (!oaRes.ok) {
+        json(req, res, 502, {
+          error: data?.error?.message || 'OpenAI identify failed',
+          aiAllowance,
+        });
+        return;
+      }
+      const content = data?.choices?.[0]?.message?.content || '{}';
+      let parsed = {};
+      try {
+        parsed = JSON.parse(content);
+      } catch {
+        parsed = {};
+      }
+      const cost = estimateCostUsd(data?.usage);
+      sessionSpendUsd += cost;
+      sessionCalls += 1;
+      console.log('[OpenAI identify]', {
+        model: MODEL,
+        tokens: data?.usage?.total_tokens,
+        costUsd: Number(cost.toFixed(6)),
+        name: String(parsed.name || '').slice(0, 80),
+      });
+      json(req, res, 200, {
+        name: String(parsed.name || '').trim().slice(0, 120),
+        brand: String(parsed.brand || '').trim().slice(0, 80),
+        category: String(parsed.category || '').trim().slice(0, 40),
+        serial: String(parsed.serial || '').trim().slice(0, 80),
+        note: String(parsed.note || '').trim().slice(0, 160),
+        confidence: Math.max(
+          0,
+          Math.min(1, Number(parsed.confidence) || 0)
+        ),
+        via: 'openai',
+        model: MODEL,
+        aiAllowance,
+        costUsd: Number(cost.toFixed(6)),
+      });
+    } catch (err) {
+      const aborted = err?.name === 'AbortError';
+      console.error(err);
+      json(req, res, aborted ? 504 : 500, {
+        error: aborted ? 'Identify timed out' : 'Identify proxy failed',
+      });
+    } finally {
+      clearTimeout(oaTimer);
+    }
+    return;
+  }
+
+  // ── Talk / Ask chat ─────────────────────────────────────────────────────
   let body;
   try {
     body = await readBody(req);
@@ -1115,6 +1363,24 @@ const server = createServer(async (req, res) => {
   const focusLine = focusBits.length
     ? focusBits.join(' ')
     : `No focus id. For open_item, name the Thing — do not guess the newest inventory item.`;
+
+  if (sb) {
+    const consumed = await rpcConsumeAiTurn(sb, auth.accessToken, today);
+    if (!consumed.ok) {
+      json(req, res, 502, { error: consumed.error || 'Could not check Talk allowance' });
+      return;
+    }
+    aiAllowance = consumed.allowance;
+    if (!aiAllowance?.ok) {
+      const used = Number(aiAllowance?.used || 0);
+      const limit = Number(aiAllowance?.limit || 0);
+      json(req, res, 429, {
+        error: `Daily Talk limit reached (${used}/${limit}). Try again tomorrow — manual capture stays unlimited.`,
+        aiAllowance,
+      });
+      return;
+    }
+  }
 
   const openAiMessages = [
     { role: 'system', content: SYSTEM },
@@ -1217,6 +1483,7 @@ const server = createServer(async (req, res) => {
       ...parsed,
       via: 'openai',
       model: MODEL,
+      aiAllowance,
       usage: data?.usage,
       costUsd: Number(cost.toFixed(6)),
     });
@@ -1240,7 +1507,7 @@ if (isDirectRun) {
     console.log(`LifeOS chat API on http://localhost:${PORT}/chat`);
     console.log(`Model: ${MODEL} (≈ $${PRICE_IN}/1M in · $${PRICE_OUT}/1M out)`);
     console.log(
-      `Guards: rpm=${process.env.CHAT_API_RPM || 30} daily=${process.env.CHAT_API_DAILY_MAX || 200} token=${API_TOKEN ? 'on' : 'off'} cors=${CORS_ALLOWLIST ? CORS_ALLOWLIST.length : '*'}`
+      `Guards: rpm=${process.env.CHAT_API_RPM || 30} daily=${process.env.CHAT_API_DAILY_MAX || 200} token=${API_TOKEN ? 'on' : 'off'} supabase=${sbBoot ? 'on' : 'off'} rcWebhook=${revenueCatConfigured() ? 'on' : 'off'} cors=${CORS_ALLOWLIST ? CORS_ALLOWLIST.length : '*'}`
     );
     if (!process.env.OPENAI_API_KEY) {
       console.warn('Warning: OPENAI_API_KEY is missing — requests will fail.');

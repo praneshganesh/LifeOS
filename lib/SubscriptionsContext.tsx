@@ -20,6 +20,8 @@ import {
   loadVersionedArray,
   saveVersionedArray,
 } from '@/lib/storage/versioned';
+import { queueDelete, queueUpsert } from '@/lib/sync/outbox';
+import { subscribeSyncApplied } from '@/lib/sync/engine';
 
 const STORAGE_KEY = 'lifeos:subscriptions:v1';
 const SCHEMA_VERSION = 1;
@@ -58,6 +60,20 @@ export function SubscriptionsProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
+  useEffect(() => {
+    return subscribeSyncApplied((tables) => {
+      if (!tables.includes('subscriptions')) return;
+      void loadVersionedArray<Subscription>(
+        STORAGE_KEY,
+        SCHEMA_VERSION,
+        normalizeSubscription
+      ).then((loaded) => {
+        subsRef.current = sortByRenewal(loaded);
+        setSubscriptions(subsRef.current);
+      });
+    });
+  }, []);
+
   // Awaited persist: callers only resolve once the write is on disk, so a
   // failed write rejects instead of the UI reporting a save that never stuck.
   const persist = async (next: Subscription[]) => {
@@ -67,26 +83,37 @@ export function SubscriptionsProvider({ children }: { children: ReactNode }) {
   };
 
   const addSubscription = useCallback(async (input: NewSubscriptionInput) => {
-    const created = createSubscription(input);
+    const created: Subscription = {
+      ...createSubscription(input),
+      updatedAt: new Date().toISOString(),
+    };
     const dup = findDuplicateSubscription(subsRef.current, created);
     if (dup) return dup;
     await persist(sortByRenewal([created, ...subsRef.current]));
+    void queueUpsert('subscriptions', created);
     return created;
   }, []);
 
   const updateSubscription = useCallback(
     async (id: string, patch: Partial<Subscription>) => {
+      let updated: Subscription | null = null;
       await persist(
         sortByRenewal(
-          subsRef.current.map((s) => (s.id === id ? { ...s, ...patch, id: s.id } : s))
+          subsRef.current.map((s) => {
+            if (s.id !== id) return s;
+            updated = { ...s, ...patch, id: s.id, updatedAt: new Date().toISOString() };
+            return updated;
+          })
         )
       );
+      if (updated) void queueUpsert('subscriptions', updated);
     },
     []
   );
 
   const removeSubscription = useCallback(async (id: string) => {
     await persist(subsRef.current.filter((s) => s.id !== id));
+    void queueDelete('subscriptions', id);
   }, []);
 
   const getById = useCallback(

@@ -27,7 +27,7 @@ export default function HomesSettingsScreen() {
       await setCurrency(code);
       showToast(`Currency set to ${code}`);
     } catch {
-      showError('Couldn’t save currency — try again.');
+      showError('Couldn’t save currency. Try again.');
     }
   }
 
