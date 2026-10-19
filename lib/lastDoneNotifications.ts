@@ -105,6 +105,10 @@ export async function scheduleLastDoneReminder(
   item: LastDoneItem
 ): Promise<void> {
   if (!isNative()) return;
+  if (item.onceDone && !item.remindInterval) {
+    await cancelLastDoneReminder(item.id);
+    return;
+  }
   if (!item.remindAt && item.remindInterval?.unit !== 'weekdays') {
     await cancelLastDoneReminder(item.id);
     return;

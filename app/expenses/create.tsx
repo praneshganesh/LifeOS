@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/DetailKit';
 import { Text } from '@/components/ui/Text';
 import { DateField } from '@/components/ui/DateField';
+import { SuggestField } from '@/components/ui/SuggestField';
 import { useExpenses } from '@/lib/ExpensesContext';
 import { useToast } from '@/lib/ToastContext';
 import { useCurrency } from '@/lib/CurrencyContext';
@@ -31,6 +32,7 @@ import {
   type ExpenseCategory,
 } from '@/lib/expenses';
 import { localDayKey } from '@/lib/dates';
+import { useStoreSuggestions } from '@/lib/useFieldSuggestions';
 import { type ThemeColors, spacing } from '@/constants/theme';
 
 export function ExpenseForm({
@@ -53,6 +55,7 @@ export function ExpenseForm({
   const editing = Boolean(existing);
   const currency = existing?.currency || defaultCurrency;
   const tone = moduleTone('expenses', colors, resolved === 'light');
+  const stores = useStoreSuggestions();
 
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
@@ -156,10 +159,12 @@ export function ExpenseForm({
       </DetailSection>
 
       <DetailSection label="Merchant">
-        <DetailField
+        <SuggestField
           value={merchant}
           onChangeText={setMerchant}
+          suggestions={stores}
           placeholder="e.g. Carrefour"
+          autoCapitalize="words"
         />
       </DetailSection>
 

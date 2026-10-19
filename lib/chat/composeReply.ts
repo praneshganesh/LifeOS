@@ -14,6 +14,20 @@ function formatRemindDay(iso?: string | null): string | undefined {
   });
 }
 
+/** "today" / "tomorrow" when that is the day, otherwise a short calendar date. */
+function formatRemindWhen(iso?: string | null, now = new Date()): string | undefined {
+  const d = iso ? parseDateInput(iso) : null;
+  if (!d) return undefined;
+  const same = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate();
+  if (same(d, now)) return 'today';
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  if (same(d, tomorrow)) return 'tomorrow';
+  return formatRemindDay(iso);
+}
+
 function habitAppliedReply(
   title: string,
   days: number,
@@ -76,6 +90,7 @@ export function composeAppliedReply(params: {
   reminderLabel?: string | null;
   reminderAt?: string | null;
   updatedReminder?: boolean;
+  reminderUnchanged?: boolean;
   removedLastDoneLabel?: string | null;
   updatedClassPack?: boolean;
   renamedPersonFrom?: string | null;
@@ -213,6 +228,12 @@ export function composeAppliedReply(params: {
 
   if (params.reminderLabel) {
     const when = formatRemindDay(params.reminderAt);
+    if (params.reminderUnchanged) {
+      const already = formatRemindWhen(params.reminderAt);
+      return already
+        ? `${params.reminderLabel} is already set for ${already}.`
+        : `${params.reminderLabel} is already set.`;
+    }
     if (params.updatedReminder) {
       return when
         ? `Updated: ${params.reminderLabel} · due ${when}.`

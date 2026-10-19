@@ -28,6 +28,7 @@ import {
   Lamp,
   Laptop,
   ListChecks,
+  Repeat,
   Microwave,
   MessageCircle,
   Mic,
@@ -121,6 +122,7 @@ export const ICON_MAP: Record<string, LucideIcon> = {
   purifier: Snowflake,
   wallet: Wallet,
   tasks: ListChecks,
+  habit: Repeat,
   chart: ChartColumn,
 };
 
@@ -153,7 +155,7 @@ export function AppIcon({
       ? colors.accentOn
       : tone === 'ghost'
         ? '#FFFFFF'
-        : colors.accent;
+        : colors.glyph;
 
   return (
     <View

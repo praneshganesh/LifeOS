@@ -70,9 +70,21 @@ type UiMessage = {
   itemId?: string;
 };
 
-/** Android font metrics need a taller floor than iOS for the same lineHeight. */
-const INPUT_MIN_H = Platform.OS === 'android' ? 44 : 26;
+/** One line of the composer, including a little room under the glyphs. */
+const INPUT_LINE_H = 22;
+const INPUT_MIN_H = Platform.OS === 'android' ? 44 : INPUT_LINE_H + 6;
 const INPUT_MAX_H = 120;
+
+/** How tall the composer must be so a wrapped second line stays visible. */
+function composerHeight(text: string, reported: number): number {
+  const wraps = Math.max(
+    1,
+    text.split('\n').length,
+    Math.ceil(text.trim().length / 34) || 1
+  );
+  const estimated = wraps * INPUT_LINE_H + (Platform.OS === 'android' ? 8 : 6);
+  return Math.min(INPUT_MAX_H, Math.max(INPUT_MIN_H, reported, text.trim() ? estimated : INPUT_MIN_H));
+}
 
 const STARTER_PROMPTS = [
   'I got a coffee machine',
@@ -574,23 +586,14 @@ export default function ChatScreen() {
                 m.role === 'user' ? styles.bubbleRowUser : styles.bubbleRowAssistant,
               ]}
             >
-              <View
-                style={[
-                  styles.bubble,
-                  m.role === 'user'
-                    ? { maxWidth: '88%', backgroundColor: colors.accent }
-                    : {
-                        maxWidth: '88%',
-                        backgroundColor: colors.surface,
-                        borderWidth: 1.5,
-                        borderColor: colors.lineStrong,
-                      },
-                ]}
-              >
+              <View style={styles.bubble}>
                 <Text
                   style={[
                     styles.bubbleText,
-                    { color: m.role === 'user' ? colors.accentOn : colors.ink },
+                    {
+                      color: m.role === 'user' ? colors.accent : colors.ink,
+                      textAlign: m.role === 'user' ? 'right' : 'left',
+                    },
                   ]}
                 >
                   {m.text}
@@ -630,13 +633,13 @@ export default function ChatScreen() {
               value={input}
               onChangeText={(text) => {
                 setInput(text);
-                if (!text.trim()) setInputHeight(INPUT_MIN_H);
+                setInputHeight((h) => composerHeight(text, h));
               }}
               onContentSizeChange={(e) => {
                 const raw = Math.ceil(e.nativeEvent.contentSize.height);
                 // Android contentSize often under-reports with custom fonts / lineHeight.
                 const h = Platform.OS === 'android' ? raw + 6 : raw;
-                setInputHeight(Math.min(INPUT_MAX_H, Math.max(INPUT_MIN_H, h)));
+                setInputHeight(composerHeight(input, h));
               }}
               placeholder="What’s new, or what should I look up…"
               placeholderTextColor={colors.faint}

@@ -67,6 +67,8 @@ export type ThemeColors = {
   warningSoft: string;
   success: string;
   successSoft: string;
+  /** Icon stroke on a light surface. Darker than `accent` in light mode. */
+  glyph: string;
   white: string;
   pure: string;
   black: string;
@@ -100,6 +102,8 @@ function paint(p: {
   accentSoft: string;
   accentWash: string;
   accentOn: string;
+  /** Icon stroke. Defaults to `accent`. Light themes can pass a darker gold. */
+  glyph?: string;
   amber: string;
   amberSoft: string;
   coral: string;
@@ -160,6 +164,7 @@ function paint(p: {
     warningSoft: p.amberSoft,
     success: p.accent,
     successSoft: p.accentSoft,
+    glyph: p.glyph ?? p.accent,
     white: p.surface,
     pure: '#FFFFFF',
     black: '#000000',
@@ -415,6 +420,7 @@ export const inkLight: ThemeColors = paint({
   accentSoft: 'rgba(232, 184, 74, 0.18)',
   accentWash: 'rgba(232, 184, 74, 0.10)',
   accentOn: '#1A1408',
+  glyph: '#8C5E12',
   amber: '#A16207',
   amberSoft: 'rgba(161, 98, 7, 0.14)',
   coral: '#FF3B30',

@@ -37,6 +37,8 @@ import {
 
 const PORT = Number(process.env.PORT || process.env.CHAT_API_PORT || 8787);
 const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+/** Vision is weak on the chat model at low detail. Identify uses a stronger one. */
+const IDENTIFY_MODEL = process.env.OPENAI_IDENTIFY_MODEL || 'gpt-4o';
 /** Rough list prices USD / 1M tokens, override via env if you change models */
 const PRICE_IN = Number(process.env.OPENAI_PRICE_IN_PER_M || 0.15);
 const PRICE_OUT = Number(process.env.OPENAI_PRICE_OUT_PER_M || 0.6);
@@ -1216,7 +1218,7 @@ const server = createServer(async (req, res) => {
     }
 
     const oaAbort = new AbortController();
-    const oaTimer = setTimeout(() => oaAbort.abort(), OPENAI_TIMEOUT_MS);
+    const oaTimer = setTimeout(() => oaAbort.abort(), Math.max(OPENAI_TIMEOUT_MS, 35_000));
     try {
       const oaRes = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -1226,28 +1228,28 @@ const server = createServer(async (req, res) => {
         },
         signal: oaAbort.signal,
         body: JSON.stringify({
-          model: MODEL,
-          temperature: 0.2,
+          model: IDENTIFY_MODEL,
+          temperature: 0,
           max_tokens: 220,
           response_format: { type: 'json_object' },
           messages: [
             {
               role: 'system',
               content:
-                'You identify household products and vehicles from a photo for Saavi inventory. Reply JSON only: {"name":"","brand":"","category":"","serial":"","note":"","confidence":0}. name = short product title people would save (e.g. "Tesla Model 3", "Samsung 55\\" TV"). brand if visible. category one of: Electronics, Appliances, Vehicles, Furniture, Kitchen, Documents, Other. serial only if clearly readable on the object. note one short clause if useful. confidence 0-1. If unclear, still guess best-effort with low confidence; empty name only if totally blank.',
+                'You name the single main object in a photo for a home inventory. Look at the object itself, not the table, cable, or stickers on it. Reply JSON only: {"name":"","brand":"","category":"","serial":"","note":"","confidence":0}. name is the specific product a person would save, including the product line when the shape is distinctive (AirPods Pro, iPhone 15, Nespresso Vertuo, Samsung TV). Never swap in a different product that shares one feature: an earbud case with a cable is not a wireless charging pad, and a closed case is not a charger. brand only if a logo or name is visible, otherwise "". category one of: Electronics, Appliances, Vehicles, Furniture, Kitchen, Documents, Other. serial only if printed and readable, otherwise "". note is one short clause about something actually visible, never a marketing line. confidence 0-1, and below 0.5 when the product line is a guess. Empty name only when the photo has no object.',
             },
             {
               role: 'user',
               content: [
                 {
                   type: 'text',
-                  text: 'Identify this item for my home inventory.',
+                  text: 'What is the main object in this photo? Name that product.',
                 },
                 {
                   type: 'image_url',
                   image_url: {
                     url: `data:${mime};base64,${rawB64}`,
-                    detail: 'low',
+                    detail: 'high',
                   },
                 },
               ],
@@ -1274,7 +1276,7 @@ const server = createServer(async (req, res) => {
       sessionSpendUsd += cost;
       sessionCalls += 1;
       console.log('[OpenAI identify]', {
-        model: MODEL,
+        model: IDENTIFY_MODEL,
         tokens: data?.usage?.total_tokens,
         costUsd: Number(cost.toFixed(6)),
         name: String(parsed.name || '').slice(0, 80),

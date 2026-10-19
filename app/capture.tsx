@@ -24,6 +24,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { FileText, Image as ImageIcon, Keyboard, RefreshCw, Sparkles, X } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { OptionalDateField } from '@/components/ui/DateField';
+import { SuggestionRow } from '@/components/ui/SuggestField';
 import { blurActiveElement } from '@/lib/a11y';
 import { localDayKey } from '@/lib/dates';
 import { parseDateInput } from '@/lib/lastDone';
@@ -46,6 +47,7 @@ import {
 } from '@/lib/ocr/receiptHints';
 import { useInventory } from '@/lib/InventoryContext';
 import { useExpenses } from '@/lib/ExpensesContext';
+import { useBrandSuggestions, useStoreSuggestions } from '@/lib/useFieldSuggestions';
 import { useLastDone } from '@/lib/LastDoneContext';
 import { defaultDocumentReminder } from '@/lib/documentReminders';
 import { messageForPlanLimit } from '@/lib/planLimits';
@@ -109,6 +111,8 @@ export default function CaptureModal() {
   const { addExpense, expenses } = useExpenses();
   const { setReminder } = useLastDone();
   const { currency: defaultCurrency } = useCurrency();
+  const brands = useBrandSuggestions();
+  const stores = useStoreSuggestions();
   const linkedItem = linkItemId ? getById(linkItemId) : undefined;
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
@@ -147,6 +151,7 @@ export default function CaptureModal() {
   const [matchCandidates, setMatchCandidates] = useState<TalkMatch[]>([]);
   const [linkedStubId, setLinkedStubId] = useState<string | null>(null);
   const [browseStubs, setBrowseStubs] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   useEffect(() => {
     blurActiveElement();
@@ -200,6 +205,7 @@ export default function CaptureModal() {
     setSaveDestination('thing');
     setReceiptLooksLike(false);
     setBrowseStubs(false);
+    setMoreOpen(false);
     setSaveError('');
     setDuplicateExpense(null);
   }
@@ -880,18 +886,6 @@ export default function CaptureModal() {
       attachKind !== 'receipt' &&
       !isIdentityDocumentKind(docKind) &&
       saveDestination !== 'document';
-    const whereLabel =
-      forcedLink && linkedItem
-        ? `Attach to ${linkedItem.name}`
-        : receiptLooksLike &&
-            (saveDestination === 'expense' || saveDestination === 'both')
-          ? 'Logging expense'
-          : receiptLooksLike
-            ? 'From receipt'
-            : isDocument || saveDestination === 'document'
-              ? 'Documents'
-              : preset.label;
-
     return (
       // KAV so the absolute-positioned save bar lifts above the keyboard.
       // otherwise editing a lower field leaves Save unreachable.
@@ -903,7 +897,6 @@ export default function CaptureModal() {
           <Pressable onPress={resetToCamera} hitSlop={8}>
             <Text style={styles.reviewLink}>Retake</Text>
           </Pressable>
-          <Text style={styles.reviewTitle}>Review</Text>
           <Pressable onPress={close} hitSlop={8}>
             <X size={20} color={colors.ink} strokeWidth={2} />
           </Pressable>
@@ -916,15 +909,11 @@ export default function CaptureModal() {
         >
           <Image source={{ uri: photoUri }} style={styles.preview} />
 
-          <View style={styles.reviewMeta}>
-            <Text style={styles.reviewMetaWhere}>{whereLabel}</Text>
-            <Text style={styles.reviewMetaNote}>
-              {ocrNote ||
-                (aiAssist
-                  ? 'Edit anything that looks off, then save.'
-                  : 'AI was off. Fill in what you want, then save.')}
-            </Text>
-          </View>
+          {forcedLink && linkedItem ? (
+            <Text style={styles.quietLine}>For {linkedItem.name}</Text>
+          ) : ocrNote ? (
+            <Text style={styles.quietLine}>{ocrNote}</Text>
+          ) : null}
 
           {showIdentify ? (
             <Pressable
@@ -937,27 +926,19 @@ export default function CaptureModal() {
               ]}
             >
               {identifying ? (
-                <ActivityIndicator color={colors.forest} size="small" />
+                <ActivityIndicator color={colors.glyph} size="small" />
               ) : (
-                <Sparkles size={16} color={colors.forest} strokeWidth={2} />
+                <Sparkles size={16} color={colors.glyph} strokeWidth={2} />
               )}
-              <View style={{ flex: 1 }}>
-                <Text style={styles.identifyTitle}>
-                  {identifying ? 'Identifying…' : 'Identify with AI'}
-                </Text>
-                <Text style={styles.identifyHint}>
-                  Optional. Sends this photo once and uses 1 AI turn today.
-                </Text>
-              </View>
+              <Text style={styles.identifyTitle}>
+                {identifying ? 'Looking…' : 'Not the right name?'}
+              </Text>
             </Pressable>
           ) : null}
 
           {matchCandidates.length > 0 && !forcedLink ? (
             <View style={styles.matchCard}>
-              <Text style={styles.matchTitle}>Link to a Talk item?</Text>
-              <Text style={styles.matchLead}>
-                You added this on the go earlier. Confirm to attach this receipt.
-              </Text>
+              <Text style={styles.matchTitle}>Already added this?</Text>
               {matchCandidates.map((m) => {
                 const on = linkedStubId === m.item.id;
                 return (
@@ -968,10 +949,6 @@ export default function CaptureModal() {
                   >
                     <View style={{ flex: 1 }}>
                       <Text style={styles.matchName}>{m.item.name}</Text>
-                      <Text style={styles.matchMeta}>
-                        {m.item.room} · {m.item.category}
-                        {m.reasons.length ? ` · ${m.reasons.slice(0, 2).join(', ')}` : ''}
-                      </Text>
                     </View>
                     <Text style={[styles.matchAction, on && { color: colors.forest }]}>
                       {on ? 'Linked' : 'Link'}
@@ -981,24 +958,19 @@ export default function CaptureModal() {
               })}
               {linkedStubId ? (
                 <Pressable onPress={() => setLinkedStubId(null)} style={{ marginTop: 8 }}>
-                  <Text style={styles.matchSkip}>Save as a new item instead</Text>
+                  <Text style={styles.matchSkip}>Save as new</Text>
                 </Pressable>
               ) : null}
             </View>
           ) : !forcedLink && listIncompleteTalkStubs(items).length > 0 ? (
+            !browseStubs ? (
+              <Pressable onPress={() => setBrowseStubs(true)} style={styles.moreToggle}>
+                <Text style={styles.moreToggleText}>
+                  Attach to something you already added
+                </Text>
+              </Pressable>
+            ) : (
             <View style={styles.matchCard}>
-              <Text style={styles.matchTitle}>Link to a Talk item?</Text>
-              <Text style={styles.matchLead}>
-                No strong OCR match. Browse incomplete Talk stubs if this is one of them.
-              </Text>
-              {!browseStubs ? (
-                <Pressable onPress={() => setBrowseStubs(true)} style={{ marginTop: 4 }}>
-                  <Text style={[styles.matchAction, { color: colors.forest }]}>
-                    Browse Talk stubs
-                  </Text>
-                </Pressable>
-              ) : (
-                <>
                   {listIncompleteTalkStubs(items)
                     .slice(0, 8)
                     .map((stub) => {
@@ -1011,9 +983,6 @@ export default function CaptureModal() {
                         >
                           <View style={{ flex: 1 }}>
                             <Text style={styles.matchName}>{stub.name}</Text>
-                            <Text style={styles.matchMeta}>
-                              {stub.room} · {stub.category}
-                            </Text>
                           </View>
                           <Text style={[styles.matchAction, on && { color: colors.forest }]}>
                             {on ? 'Linked' : 'Link'}
@@ -1023,12 +992,11 @@ export default function CaptureModal() {
                     })}
                   {linkedStubId ? (
                     <Pressable onPress={() => setLinkedStubId(null)} style={{ marginTop: 8 }}>
-                      <Text style={styles.matchSkip}>Save as a new item instead</Text>
+                      <Text style={styles.matchSkip}>Save as new</Text>
                     </Pressable>
                   ) : null}
-                </>
-              )}
             </View>
+            )
           ) : null}
 
           {forcedLink ? (
@@ -1043,6 +1011,8 @@ export default function CaptureModal() {
                   value={purchasedFrom}
                   onChange={setPurchasedFrom}
                   placeholder="Amazon, Sharaf DG…"
+                  suggestions={stores}
+                  autoCapitalize="words"
                 />
               ) : null}
             </>
@@ -1085,59 +1055,115 @@ export default function CaptureModal() {
                 </>
               ) : (
                 <>
-                  <Field label="Name" value={name} onChange={setName} />
-                  <Field label="Brand" value={brand} onChange={setBrand} />
-                  <Field
-                    label="Serial"
-                    value={serial}
-                    onChange={setSerial}
-                    autoCorrect={false}
-                    autoCapitalize="characters"
+                  <TextInput
+                    value={name}
+                    onChangeText={setName}
+                    placeholder="What is it?"
+                    placeholderTextColor={colors.faint}
+                    style={styles.nameInput}
                   />
-                  <Field label="Price" value={price} onChange={(t) => setPrice(sanitizeAmountInput(t))} placeholder={`${defaultCurrency} 0`} />
-                  <Field
-                    label="Bought from"
-                    value={purchasedFrom}
-                    onChange={setPurchasedFrom}
-                    placeholder="Amazon, Sharaf DG…"
+                  <TextInput
+                    value={brand}
+                    onChangeText={setBrand}
+                    placeholder="Brand"
+                    placeholderTextColor={colors.faint}
+                    autoCapitalize="words"
+                    style={styles.brandInput}
                   />
-                  <DateRow
-                    label="Purchase date"
-                    value={purchaseDate}
-                    onChange={setPurchaseDate}
-                  />
+                  <View style={styles.suggestWrap}>
+                    <SuggestionRow value={brand} suggestions={brands} onPick={setBrand} />
+                  </View>
+                  {receiptLooksLike || attachKind === 'receipt' ? (
+                    <>
+                      <Field
+                        label="Price"
+                        value={price}
+                        onChange={(t) => setPrice(sanitizeAmountInput(t))}
+                        placeholder={`${defaultCurrency} 0`}
+                      />
+                      <Field
+                        label="Bought from"
+                        value={purchasedFrom}
+                        onChange={setPurchasedFrom}
+                        placeholder="Store"
+                        suggestions={stores}
+                        autoCapitalize="words"
+                      />
+                    </>
+                  ) : null}
+                  <Pressable
+                    onPress={() => setMoreOpen((open) => !open)}
+                    hitSlop={8}
+                    style={styles.moreToggle}
+                  >
+                    <Text style={styles.moreToggleText}>
+                      {moreOpen
+                        ? 'Hide details'
+                        : receiptLooksLike || attachKind === 'receipt'
+                          ? 'Add serial or date'
+                          : 'Add price, serial, or store'}
+                    </Text>
+                  </Pressable>
+                  {moreOpen ? (
+                    <>
+                      {receiptLooksLike || attachKind === 'receipt' ? null : (
+                        <>
+                          <Field
+                            label="Price"
+                            value={price}
+                            onChange={(t) => setPrice(sanitizeAmountInput(t))}
+                            placeholder={`${defaultCurrency} 0`}
+                          />
+                          <Field
+                            label="Bought from"
+                            value={purchasedFrom}
+                            onChange={setPurchasedFrom}
+                            placeholder="Store"
+                            suggestions={stores}
+                            autoCapitalize="words"
+                          />
+                        </>
+                      )}
+                      <Field
+                        label="Serial"
+                        value={serial}
+                        onChange={setSerial}
+                        autoCorrect={false}
+                        autoCapitalize="characters"
+                        placeholder="Optional"
+                      />
+                      <DateRow
+                        label="Bought on"
+                        value={purchaseDate}
+                        onChange={setPurchaseDate}
+                      />
+                    </>
+                  ) : null}
                 </>
               )}
             </>
           )}
 
           {(receiptLooksLike || attachKind === 'receipt') && !forcedLink ? (
-            <View style={styles.routerCard}>
-              <Text style={styles.routerTitle}>Save as</Text>
-              <Text style={styles.routerLead}>
-                Choose where this receipt goes. You can change it before saving.
-              </Text>
-              <View style={styles.routerGrid}>
-                {SAVE_DESTINATIONS.map((opt) => {
-                  const on = saveDestination === opt.id;
-                  return (
-                    <Pressable
-                      key={opt.id}
-                      onPress={() => {
-                        setSaveDestination(opt.id);
-                        if (opt.id === 'document') setIsDocument(true);
-                        else if (!preset.preferDocument) setIsDocument(false);
-                      }}
-                      style={[styles.routerChip, on && styles.routerChipOn]}
-                    >
-                      <Text style={[styles.routerChipTitle, on && styles.routerChipTitleOn]}>
-                        {opt.title}
-                      </Text>
-                      <Text style={styles.routerChipHint}>{opt.hint}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
+            <View style={styles.destRow}>
+              {SAVE_DESTINATIONS.map((opt) => {
+                const on = saveDestination === opt.id;
+                return (
+                  <Pressable
+                    key={opt.id}
+                    onPress={() => {
+                      setSaveDestination(opt.id);
+                      if (opt.id === 'document') setIsDocument(true);
+                      else if (!preset.preferDocument) setIsDocument(false);
+                    }}
+                    style={[styles.destChip, on && styles.destChipOn]}
+                  >
+                    <Text style={[styles.destChipText, on && styles.destChipTextOn]}>
+                      {opt.title}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
           ) : (receiptLooksLike || attachKind === 'receipt') && forcedLink ? (
             <Pressable
@@ -1154,10 +1180,7 @@ export default function CaptureModal() {
                 ]}
               />
               <View style={{ flex: 1 }}>
-                <Text style={styles.expenseTitle}>Also log as expense</Text>
-                <Text style={styles.expenseHint}>
-                  Keeps spend in Expenses when there’s a price.
-                </Text>
+                <Text style={styles.expenseTitle}>Also log the spend</Text>
               </View>
             </Pressable>
           ) : null}
@@ -1356,6 +1379,7 @@ function Field({
   placeholder,
   autoCorrect,
   autoCapitalize,
+  suggestions,
 }: {
   label: string;
   value: string;
@@ -1363,6 +1387,7 @@ function Field({
   placeholder?: string;
   autoCorrect?: boolean;
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
+  suggestions?: string[];
 }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -1378,6 +1403,9 @@ function Field({
         autoCapitalize={autoCapitalize}
         style={styles.input}
       />
+      {suggestions?.length ? (
+        <SuggestionRow value={value} suggestions={suggestions} onPick={onChange} />
+      ) : null}
     </View>
   );
 }
@@ -1591,10 +1619,75 @@ function makeStyles(colors: ThemeColors) {
     color: colors.forest,
   },
   preview: {
-    height: 280,
+    height: 220,
     marginHorizontal: spacing.lg,
     borderRadius: radius.lg,
     backgroundColor: colors.surfaceSoft,
+  },
+  quietLine: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    fontFamily: fonts.sans,
+    fontSize: 15,
+    lineHeight: 20,
+    color: colors.mute,
+  },
+  nameInput: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    paddingVertical: 6,
+    fontFamily: fonts.sansSemi,
+    fontSize: 28,
+    letterSpacing: -0.4,
+    color: colors.ink,
+  },
+  brandInput: {
+    marginHorizontal: spacing.lg,
+    paddingVertical: 4,
+    fontFamily: fonts.sans,
+    fontSize: 17,
+    color: colors.ink,
+  },
+  suggestWrap: {
+    marginHorizontal: spacing.lg,
+  },
+  moreToggle: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
+    paddingVertical: 6,
+  },
+  moreToggleText: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 15,
+    color: colors.forest,
+  },
+  destRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+  },
+  destChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.lineStrong,
+  },
+  destChipOn: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+  },
+  destChipText: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 15,
+    color: colors.ink,
+  },
+  destChipTextOn: {
+    color: colors.accentOn,
   },
   reviewMeta: {
     marginHorizontal: spacing.lg,

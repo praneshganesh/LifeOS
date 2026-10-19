@@ -176,7 +176,17 @@ function applyLog(existing: LastDoneItem | null, input: LogDoneInput): LastDoneI
       });
     }
 
-    // Append log; drop stale one-off remind from a previous cycle
+    // Once: keep the date so the schedule still says Once, and stop reminding.
+    if (existing.remindAt) {
+      return appendLog(existing, {
+        doneAt: doneDate,
+        remindAt: existing.remindAt,
+        onceDone: true,
+        ...linkOpts,
+        ...personOpts,
+        replaceRemind: true,
+      });
+    }
     return appendLog(existing, {
       doneAt: doneDate,
       ...linkOpts,
@@ -414,7 +424,12 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
       }
       if (patch.remindAt !== undefined) {
         if (patch.remindAt === null) {
-          updated = { ...updated, remindAt: undefined, remindInterval: undefined };
+          updated = {
+            ...updated,
+            remindAt: undefined,
+            remindInterval: undefined,
+            onceDone: undefined,
+          };
         } else {
           const parsed = parseDateInput(patch.remindAt);
           if (!parsed) throw new Error('Invalid reminder date');
@@ -422,17 +437,24 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
             ...updated,
             remindAt: startOfDayISO(parsed),
             remindInterval: undefined,
+            onceDone: undefined,
           };
         }
       }
       if (patch.remindInterval !== undefined) {
         if (patch.remindInterval === null) {
-          updated = { ...updated, remindAt: undefined, remindInterval: undefined };
+          updated = {
+            ...updated,
+            remindAt: undefined,
+            remindInterval: undefined,
+            onceDone: undefined,
+          };
         } else {
           const anchor = parseDateInput(getLastDoneAt(updated)) ?? new Date();
           updated = {
             ...updated,
             ...resolveRemindAt(anchor, { remindInterval: patch.remindInterval }),
+            onceDone: undefined,
           };
         }
       }

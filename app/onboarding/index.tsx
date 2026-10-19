@@ -23,7 +23,7 @@ const TILES: Array<{
   rotate: number;
 }> = [
   { tone: 'things', icon: 'package', x: 0.02, y: 0.08, size: 0.3, rotate: -8 },
-  { tone: 'habits', icon: 'check', x: 0.38, y: 0, size: 0.26, rotate: 6 },
+  { tone: 'habits', icon: 'habit', x: 0.38, y: 0, size: 0.26, rotate: 6 },
   { tone: 'classes', icon: 'today', x: 0.7, y: 0.14, size: 0.28, rotate: -5 },
   { tone: 'expenses', icon: 'wallet', x: 0.12, y: 0.56, size: 0.27, rotate: 5 },
   { tone: 'tasks', icon: 'tasks', x: 0.44, y: 0.47, size: 0.3, rotate: -4 },
@@ -101,7 +101,7 @@ export default function OnboardingWelcome() {
 
       <Animated.View entering={FadeIn.delay(700)} style={styles.footer}>
         <View style={[styles.trialPill, { backgroundColor: colors.accentWash }]}>
-          <Sparkles size={14} color={colors.accent} strokeWidth={2.2} />
+          <Sparkles size={14} color={colors.glyph} strokeWidth={2.2} />
           <Text style={[styles.trialText, { color: colors.ink }]}>
             Free for {TRIAL_DAYS} days. No card needed.
           </Text>

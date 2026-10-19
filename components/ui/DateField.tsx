@@ -21,12 +21,11 @@ const WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'] as const;
 const IS_NATIVE = Platform.OS === 'ios' || Platform.OS === 'android';
 
 /**
- * Apple’s inline calendar is ~320pt wide and won’t stretch on Pro Max / Plus.
- * Height must fit a 6-week month. 336pt clips the last week on iOS 17+
- * (the month header grew), which is what hides 28–30 under the dock.
+ * Height of Apple’s inline date calendar (month header + 6 weeks).
+ * Don’t scale the picker: a transform wider than this box clips the
+ * next-month arrow, and a taller box leaves an empty band under the dates.
  */
-const IOS_INLINE_CALENDAR_WIDTH = 320;
-const IOS_INLINE_CALENDAR_HEIGHT = 460;
+const IOS_INLINE_CALENDAR_HEIGHT = 386;
 
 function toDate(value: string): Date {
   return parseDateInput(value) ?? new Date();
@@ -134,7 +133,7 @@ function NativeDatePicker({
   embedded: boolean;
   defaultOpen?: boolean;
 }) {
-  const { colors } = useTheme();
+  const { colors, resolved: theme } = useTheme();
   const resolved = value || toDateInputValue(new Date());
   const selected = toDate(resolved);
   const [androidOpen, setAndroidOpen] = useState(embedded || Boolean(defaultOpen));
@@ -163,10 +162,7 @@ function NativeDatePicker({
 
   if (Platform.OS === 'ios') {
     if (embedded || iosExpanded) {
-      const scale =
-        iosWrapW > 0 ? Math.min(1.35, iosWrapW / IOS_INLINE_CALENDAR_WIDTH) : 1;
-      // Extra points so the scale transform doesn’t shave the last day row.
-      const scaledH = Math.ceil(IOS_INLINE_CALENDAR_HEIGHT * scale) + 12;
+      const pickerW = iosWrapW > 24 ? iosWrapW - 16 : undefined;
       return (
         <View
           style={[
@@ -187,32 +183,20 @@ function NativeDatePicker({
               <Text style={[styles.changeHint, { color: colors.accent }]}>Done</Text>
             </Pressable>
           ) : null}
-          <View style={[styles.iosInlineClip, { height: scaledH }]}>
-            <View
-              style={{
-                width: IOS_INLINE_CALENDAR_WIDTH,
-                height: IOS_INLINE_CALENDAR_HEIGHT,
-                transform: [
-                  { translateX: (IOS_INLINE_CALENDAR_WIDTH * (scale - 1)) / 2 },
-                  { translateY: (IOS_INLINE_CALENDAR_HEIGHT * (scale - 1)) / 2 },
-                  { scale },
-                ],
-              }}
-            >
-              <DateTimePicker
-                value={selected}
-                mode="date"
-                display="inline"
-                onChange={onNativeChange}
-                maximumDate={maxBound}
-                minimumDate={minBound}
-                style={{
-                  width: IOS_INLINE_CALENDAR_WIDTH,
-                  height: IOS_INLINE_CALENDAR_HEIGHT,
-                }}
-              />
-            </View>
-          </View>
+          <DateTimePicker
+            value={selected}
+            mode="date"
+            display="inline"
+            themeVariant={theme}
+            onChange={onNativeChange}
+            maximumDate={maxBound}
+            minimumDate={minBound}
+            style={{
+              width: pickerW,
+              height: IOS_INLINE_CALENDAR_HEIGHT,
+              alignSelf: 'center',
+            }}
+          />
         </View>
       );
     }
@@ -230,7 +214,7 @@ function NativeDatePicker({
         ]}
       >
         <View style={[styles.iconWrap, { backgroundColor: colors.accentSoft }]}>
-          <Calendar size={16} color={colors.accent} strokeWidth={2.2} />
+          <Calendar size={16} color={colors.glyph} strokeWidth={2.2} />
         </View>
         <Text style={[styles.fieldText, { color: colors.ink }]} numberOfLines={1}>
           {formatDisplay(resolved)}
@@ -254,7 +238,7 @@ function NativeDatePicker({
         ]}
       >
         <View style={[styles.iconWrap, { backgroundColor: colors.accentSoft }]}>
-          <Calendar size={16} color={colors.accent} strokeWidth={2.2} />
+          <Calendar size={16} color={colors.glyph} strokeWidth={2.2} />
         </View>
         <Text style={[styles.fieldText, { color: colors.ink }]} numberOfLines={1}>
           {formatDisplay(resolved)}
@@ -344,7 +328,7 @@ function WebDatePicker({
           ]}
         >
           <View style={[styles.iconWrap, { backgroundColor: colors.accentSoft }]}>
-            <Calendar size={16} color={colors.accent} strokeWidth={2.2} />
+            <Calendar size={16} color={colors.glyph} strokeWidth={2.2} />
           </View>
           <Text style={[styles.fieldText, { color: colors.ink }]} numberOfLines={1}>
             {formatDisplay(resolved)}
@@ -554,7 +538,7 @@ export function OptionalDateField({
         accessibilityLabel={addLabel}
       >
         <View style={[styles.iconWrap, { backgroundColor: colors.accentSoft }]}>
-          <Calendar size={16} color={colors.accent} strokeWidth={2.2} />
+          <Calendar size={16} color={colors.glyph} strokeWidth={2.2} />
         </View>
         <Text style={[styles.fieldText, { color: colors.mute }]}>{addLabel}</Text>
         <Text style={[styles.changeHint, { color: colors.accent }]}>Choose</Text>
@@ -628,10 +612,6 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
-  },
-  iosInlineClip: {
-    width: '100%',
-    overflow: 'hidden',
   },
   panel: {
     marginTop: 8,

@@ -8,7 +8,7 @@ import {
   Check,
   ChevronRight,
   Package,
-  Sparkles,
+  Repeat,
 } from 'lucide-react-native';
 import { Screen } from '@/components/ui/Screen';
 import { SwipeActions } from '@/components/ui/SwipeActions';
@@ -248,7 +248,7 @@ export default function HomeDashboard() {
         {clear ? (
           <View style={[styles.clearCard, { backgroundColor: colors.surface }, shade.card]}>
             <View style={[styles.clearBadge, { backgroundColor: colors.accentWash }]}>
-              <Check size={22} color={colors.accent} strokeWidth={2.4} />
+              <Check size={22} color={colors.glyph} strokeWidth={2.4} />
             </View>
             <Text variant="headline" style={{ fontSize: 20, lineHeight: 26 }}>
               You’re clear
@@ -351,7 +351,7 @@ export default function HomeDashboard() {
               [
                 {
                   key: 'habits' as const,
-                  Icon: Sparkles,
+                  Icon: Repeat,
                   label: 'Habits',
                   value: habits.length ? `${dash.habitsDone}/${habits.length}` : '0',
                   hint: habits.length ? 'done today' : 'start one',
@@ -503,7 +503,7 @@ function RowCard({
       >
         {done ? (
           <View style={[styles.doneBadge, { backgroundColor: colors.forestSoft }]}>
-            <Check size={18} color={colors.forest} strokeWidth={2.6} />
+            <Check size={18} color={colors.glyph} strokeWidth={2.6} />
           </View>
         ) : (
           <AppIcon name={row.icon} size={32} />
@@ -540,7 +540,7 @@ function Tile({
   dots,
   onPress,
 }: {
-  Icon: typeof Sparkles;
+  Icon: typeof Repeat;
   label: string;
   value: string;
   hint: string;
@@ -567,7 +567,15 @@ function Tile({
       <View style={styles.tileFill}>
         <View style={styles.tileHead}>
           <View style={[styles.tileIcon, { backgroundColor: colors.surfaceSoft }]}>
-            <Icon size={18} color={accent} strokeWidth={2.1} />
+            <Icon
+              size={18}
+              color={
+                accent.toLowerCase() === colors.accent.toLowerCase()
+                  ? colors.glyph
+                  : accent
+              }
+              strokeWidth={2.1}
+            />
           </View>
           <Text style={[styles.tileLabel, { color: labelColor }]} numberOfLines={1}>
             {label}

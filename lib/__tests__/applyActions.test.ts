@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import { applyChatActions, normalizeDateField } from '../chat/applyActions';
 import { composeAppliedReply } from '../chat/composeReply';
 import type { ChatAction } from '../chat/types';
+import { localDayKey } from '../dates';
 import { findDuplicateExpense } from '../expenses';
 import { findDuplicateSubscription } from '../subscriptions';
 import {
@@ -996,6 +997,46 @@ describe('applyChatActions', () => {
     assert.equal(patched[0]?.remindAt, nextTue);
     assert.equal(result.updatedReminder, true);
     assert.equal(result.reminderLabel, 'Pack lunch');
+  });
+
+  it('does not claim an update when the reminder is already that day', async () => {
+    const todayKey = localDayKey();
+    let wrote = false;
+    const result = await applyChatActions(
+      [{ type: 'none' }] as ChatAction[],
+      unusedInv,
+      'talk',
+      {
+        lastUserText: 'Update it to today',
+        lastTalkFocus: { kind: 'lastDone', id: 'ld-fab' },
+        lastDoneList: [
+          { id: 'ld-fab', label: 'FAB clearance letter', remindAt: todayKey },
+        ],
+        lastDone: {
+          logDone: async () => {
+            throw new Error('should not mark done');
+          },
+          setReminder: async () => {
+            throw new Error('should update, not create');
+          },
+          updateActivity: async () => {
+            wrote = true;
+            throw new Error('should not write');
+          },
+        },
+      }
+    );
+    assert.equal(wrote, false);
+    assert.equal(result.updatedReminder, false);
+    assert.equal(result.reminderUnchanged, true);
+    assert.match(
+      composeAppliedReply({
+        actions: [{ type: 'update_last_done' } as ChatAction],
+        modelReply: 'Updated.',
+        ...result,
+      }),
+      /already set for today/
+    );
   });
 
   it('renames a focused habit from a follow-up', async () => {

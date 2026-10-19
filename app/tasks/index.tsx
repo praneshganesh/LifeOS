@@ -18,7 +18,6 @@ import { type ThemeColors, fonts, radius, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
 const FILTERS = [
   { key: 'open', label: 'Open' },
-  { key: 'urgent', label: 'Urgent' },
   { key: 'soon', label: 'Soon' },
 ];
 
@@ -47,12 +46,10 @@ export default function TasksScreen() {
   );
 
   const list = useMemo(() => {
-    if (filter === 'urgent') return queue.filter((a) => a.urgency === 'urgent');
     if (filter === 'soon') return queue.filter((a) => a.urgency === 'soon');
     return queue;
   }, [queue, filter]);
 
-  const urgent = queue.filter((a) => a.urgency === 'urgent').length;
   const soon = queue.filter((a) => a.urgency === 'soon').length;
 
   function openAddReminder() {
@@ -71,7 +68,6 @@ export default function TasksScreen() {
       <StatStrip
         items={[
           { label: 'Open', value: String(queue.length) },
-          { label: 'Urgent', value: String(urgent) },
           { label: 'Soon', value: String(soon) },
         ]}
       />

@@ -475,6 +475,8 @@ export type ApplyActionsResult = {
   reminderAt: string | null;
   /** Existing reminder due date / label was patched this turn. */
   updatedReminder: boolean;
+  /** Asked to change a reminder to the date it already has. */
+  reminderUnchanged: boolean;
   removedLastDoneLabel: string | null;
   updatedClassPack: boolean;
   renamedPersonFrom: string | null;
@@ -509,7 +511,12 @@ export async function applyChatActions(
     subscriptionsList?: { id: string; title: string }[];
     habitsList?: { id: string; title: string }[];
     classPacksList?: { id: string; title: string }[];
-    lastDoneList?: { id: string; label: string }[];
+    lastDoneList?: {
+      id: string;
+      label: string;
+      remindAt?: string | null;
+      notes?: string | null;
+    }[];
     /** Prior-turn expense so “show it” opens juice, not the old TV. */
     lastFocusExpenseId?: string | null;
     /** Last module Talk touched, vague show/delete/update uses this. */
@@ -572,6 +579,7 @@ export async function applyChatActions(
   let reminderLabel: string | null = null;
   let reminderAt: string | null = null;
   let updatedReminder = false;
+  let reminderUnchanged = false;
   let removedLastDoneLabel: string | null = null;
   let updatedClassPack = false;
   let renamedPersonFrom: string | null = null;
@@ -1333,6 +1341,20 @@ export async function applyChatActions(
         console.log('[LifeOS chat] skip update_last_done: empty patch');
         continue;
       }
+      const sameDay =
+        typeof patch.remindAt === 'string' &&
+        Boolean(row?.remindAt) &&
+        patch.remindAt.slice(0, 10) === String(row?.remindAt).slice(0, 10);
+      const labelSame = !patch.label || patch.label === row?.label;
+      const notesSame =
+        patch.notes === undefined || (patch.notes || '') === (row?.notes || '');
+      if (sameDay && labelSame && notesSame) {
+        reminderLabel = row?.label || null;
+        reminderAt = row?.remindAt || patch.remindAt || null;
+        reminderUnchanged = true;
+        console.log('[LifeOS chat] skip update_last_done: already that day', id);
+        continue;
+      }
       const saved = await options.lastDone.updateActivity(id, patch);
       reminderLabel = saved.label || row?.label || null;
       reminderAt = saved.remindAt || (typeof patch.remindAt === 'string' ? patch.remindAt : null);
@@ -2031,6 +2053,7 @@ export async function applyChatActions(
     reminderLabel,
     reminderAt,
     updatedReminder,
+    reminderUnchanged,
     removedLastDoneLabel,
     updatedClassPack,
     renamedPersonFrom,
@@ -2274,7 +2297,8 @@ function looksLikeReminderDateUpdate(text?: string): boolean {
       t
     ) ||
     /\b(due\s+date|remind(?:er)?\s+(?:date|to|for))\b/i.test(t) ||
-    /\b(due|date)\s+(to|for|on)\b/i.test(t);
+    /\b(due|date)\s+(to|for|on)\b/i.test(t) ||
+    /\b(update|change|move|reschedule)\b/i.test(t);
   return cue && (Boolean(remindAtFromUtterance(t)) || utteranceNamesRemindDate(t));
 }
 

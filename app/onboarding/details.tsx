@@ -142,7 +142,7 @@ export default function OnboardingDetails() {
 function Badge({ Icon, colors }: { Icon: LucideIcon; colors: ThemeColors }) {
   return (
     <View style={[badgeStyle, { backgroundColor: colors.accentWash }]}>
-      <Icon size={18} color={colors.accent} strokeWidth={2.1} />
+      <Icon size={18} color={colors.glyph} strokeWidth={2.1} />
     </View>
   );
 }

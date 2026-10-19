@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, Pressable as GesturePressable } from 'react-native-gesture-handler';
 import Animated, {
   interpolate,
   runOnJS,
@@ -110,25 +110,40 @@ export function SwipeActions({
       if (canReveal && x < -revealW) x = -revealW - (-revealW - x) * 0.15;
       drag.value = x;
     })
-    .onEnd(() => {
+    .onEnd((e) => {
       if (drag.value > TRIGGER && start.value >= 0) {
         drag.value = withTiming(0, { duration: 220 });
         runOnJS(fire)('right');
       } else if (canSnooze && drag.value < -TRIGGER) {
         drag.value = withTiming(0, { duration: 220 });
         runOnJS(fire)('left');
-      } else if (canReveal && drag.value < -revealW * 0.45) {
-        drag.value = withSpring(-revealW, SPRING);
-        runOnJS(markOpen)(true);
+      } else if (canReveal) {
+        const wasOpen = start.value < -revealW * 0.5;
+        const flungShut = e.velocityX > 500;
+        const stayOpen = wasOpen
+          ? !flungShut && drag.value < -revealW * 0.25
+          : drag.value < -revealW * 0.45 || e.velocityX < -500;
+        if (stayOpen) {
+          drag.value = withSpring(-revealW, SPRING);
+          runOnJS(markOpen)(true);
+        } else {
+          drag.value = withSpring(0, SPRING);
+          runOnJS(markOpen)(false);
+        }
       } else {
         drag.value = withSpring(0, SPRING);
         runOnJS(markOpen)(false);
       }
     });
 
-  const faceStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: drag.value }],
-  }));
+  const faceStyle = useAnimatedStyle(() => {
+    // Slide right to complete. Revealing Delete shrinks the row from the
+    // right so the name stays put and ellipsizes beside the button.
+    if (drag.value >= 0) {
+      return { marginRight: 0, transform: [{ translateX: drag.value }] };
+    }
+    return { marginRight: -drag.value, transform: [{ translateX: 0 }] };
+  });
   const completeStyle = useAnimatedStyle(() => ({
     opacity: drag.value > 0 ? 1 : 0,
     transform: [{ scale: interpolate(drag.value, [0, TRIGGER], [0.7, 1], 'clamp') }],
@@ -234,10 +249,10 @@ export function SwipeActions({
             ) : null}
           </Animated.View>
         ) : null}
-        <Animated.View style={faceStyle}>
+        <Animated.View style={[styles.face, faceStyle]}>
           {children}
           {open ? (
-            <Pressable
+            <GesturePressable
               style={StyleSheet.absoluteFill}
               onPress={close}
               accessibilityLabel="Close actions"
@@ -251,6 +266,10 @@ export function SwipeActions({
 
 const styles = StyleSheet.create({
   shell: {
+    overflow: 'hidden',
+  },
+  face: {
+    alignSelf: 'stretch',
     overflow: 'hidden',
   },
   under: {

@@ -62,6 +62,11 @@ export type LastDoneItem = {
   alertMode?: AlertMode;
   /** When alertMode is custom, up to two user-chosen alerts. */
   userAlerts?: UserAlertSpec[];
+  /**
+   * A Once reminder the user already marked done. The date stays so the
+   * schedule still reads as Once, and it is no longer due.
+   */
+  onceDone?: boolean;
   /** Last local mutation time, the last-write-wins clock for row sync. */
   updatedAt?: string;
 };
@@ -117,14 +122,14 @@ export function reminderTodayProgress(
 ): { done: number; total: number } {
   const today = localDayKey(now);
   const open = items.filter((i) => {
+    if (i.onceDone && !i.remindInterval) return false;
     if (!i.remindAt) return false;
     return daysUntil(i.remindAt, now) <= 0;
   });
   const done = items.filter((i) => {
     if (i.logs?.[0]?.doneAt?.slice(0, 10) !== today) return false;
     if (i.remindInterval) return true;
-    // One-shot: mark-done clears remindAt.
-    if (!i.remindAt) return true;
+    if (i.onceDone || !i.remindAt) return true;
     // Logged today and next fire already rolled past today.
     return daysUntil(i.remindAt, now) > 0;
   });
@@ -691,6 +696,7 @@ export function appendLog(
     inventoryItemId?: string | null;
     personId?: string | null;
     assignedTo?: string | null;
+    onceDone?: boolean;
     /** When true, replace remind fields from opts (including clear). */
     replaceRemind?: boolean;
   } = {}
@@ -730,12 +736,17 @@ export function appendLog(
   if (opts.replaceRemind) {
     if (opts.remindAt) next.remindAt = opts.remindAt;
     if (opts.remindInterval) next.remindInterval = opts.remindInterval;
+    if (opts.onceDone) next.onceDone = true;
   } else {
     if (existing.remindAt) next.remindAt = existing.remindAt;
     if (existing.remindInterval) next.remindInterval = existing.remindInterval;
     if (opts.remindAt) next.remindAt = opts.remindAt;
     if (opts.remindInterval) next.remindInterval = opts.remindInterval;
+    if (existing.onceDone) next.onceDone = true;
   }
+  if (existing.notes) next.notes = existing.notes;
+  if (existing.alertMode) next.alertMode = existing.alertMode;
+  if (existing.userAlerts) next.userAlerts = existing.userAlerts;
 
   return next;
 }

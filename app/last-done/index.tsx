@@ -479,7 +479,7 @@ export default function LastDoneModal() {
     >
       {linkedThing ? (
         <View style={styles.linkChip}>
-          <Package size={14} color={colors.forest} strokeWidth={2.2} />
+          <Package size={14} color={colors.glyph} strokeWidth={2.2} />
           <Text style={styles.linkChipText} numberOfLines={1}>
             {linkedThing.name}
             {linkedThing.brand && linkedThing.brand !== '—'
@@ -512,7 +512,7 @@ export default function LastDoneModal() {
               style={({ pressed }) => [styles.inlineRow, pressed && styles.pressed]}
             >
               <View style={styles.inlineIconMuted}>
-                <Check size={14} color={colors.forest} strokeWidth={2.4} />
+                <Check size={14} color={colors.glyph} strokeWidth={2.4} />
               </View>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text variant="caption" style={{ color: colors.forest }}>
@@ -590,7 +590,7 @@ export default function LastDoneModal() {
               pressed && styles.pressed,
             ]}
           >
-            <Calendar size={13} color={colors.forest} strokeWidth={2.2} />
+            <Calendar size={13} color={colors.glyph} strokeWidth={2.2} />
             <Text style={styles.metaBtnText} numberOfLines={1}>
               Done · {formatFriendlyDate(doneOn)}
             </Text>
@@ -608,7 +608,7 @@ export default function LastDoneModal() {
               pressed && styles.pressed,
             ]}
           >
-            <Bell size={13} color={colors.forest} strokeWidth={2.2} />
+            <Bell size={13} color={colors.glyph} strokeWidth={2.2} />
             <Text
               style={[
                 styles.metaBtnText,
@@ -689,7 +689,7 @@ export default function LastDoneModal() {
                     {choice.label}
                   </Text>
                   {active ? (
-                    <Check size={14} color={colors.forest} strokeWidth={2.4} />
+                    <Check size={14} color={colors.glyph} strokeWidth={2.4} />
                   ) : null}
                 </Pressable>
               );
@@ -710,7 +710,7 @@ export default function LastDoneModal() {
                 On a specific date
               </Text>
               {remindKey === 'on' ? (
-                <Check size={14} color={colors.forest} strokeWidth={2.4} />
+                <Check size={14} color={colors.glyph} strokeWidth={2.4} />
               ) : null}
             </Pressable>
             {remindKey === 'on' ? (

@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/DetailKit';
 import { Text } from '@/components/ui/Text';
 import { DateField } from '@/components/ui/DateField';
+import { SuggestField } from '@/components/ui/SuggestField';
 import { useSubscriptions } from '@/lib/SubscriptionsContext';
 import { useToast } from '@/lib/ToastContext';
 import { useCurrency } from '@/lib/CurrencyContext';
@@ -37,6 +38,7 @@ import {
 } from '@/lib/subscriptions';
 import { confirmDelete } from '@/lib/confirmDelete';
 import { MODULE_TONE_FALLBACK, moduleTone } from '@/lib/moduleTone';
+import { useProviderSuggestions } from '@/lib/useFieldSuggestions';
 import { type ThemeColors, fonts, radius, spacing } from '@/constants/theme';
 
 export function SubscriptionForm({
@@ -56,6 +58,7 @@ export function SubscriptionForm({
     useSubscriptions();
   const { showToast, showError } = useToast();
   const { currency: defaultCurrency } = useCurrency();
+  const providers = useProviderSuggestions();
   const existing = editId ? getById(editId) : undefined;
   const editing = Boolean(existing);
   const currency = existing?.currency || defaultCurrency;
@@ -176,10 +179,12 @@ export function SubscriptionForm({
       </DetailSection>
 
       <DetailSection label="Provider">
-        <DetailField
+        <SuggestField
           value={provider}
           onChangeText={setProvider}
+          suggestions={providers}
           placeholder="e.g. Apple"
+          autoCapitalize="words"
         />
       </DetailSection>
 

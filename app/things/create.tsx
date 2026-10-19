@@ -5,6 +5,7 @@ import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { Camera } from 'lucide-react-native';
 import { Screen } from '@/components/ui/Screen';
 import { KeyboardFormScroll } from '@/components/ui/KeyboardFormScroll';
+import { SuggestField } from '@/components/ui/SuggestField';
 import {
   DetailChip,
   DetailChipRow,
@@ -24,6 +25,7 @@ import { useCurrency } from '@/lib/CurrencyContext';
 import { useToast } from '@/lib/ToastContext';
 import { sanitizeAmountInput } from '@/lib/currency';
 import { inferMeta } from '@/lib/chat/applyActions';
+import { useBrandSuggestions, useStoreSuggestions } from '@/lib/useFieldSuggestions';
 import { captureHref, type CaptureContextKind } from '@/lib/captureContext';
 import { messageForPlanLimit } from '@/lib/planLimits';
 import { localDayKey } from '@/lib/dates';
@@ -99,6 +101,8 @@ export default function CreateThingScreen() {
   const { members } = useHousehold();
   const { currency } = useCurrency();
   const { showToast, showError } = useToast();
+  const brands = useBrandSuggestions();
+  const stores = useStoreSuggestions();
 
   const [name, setName] = useState('');
   const [brand, setBrand] = useState('');
@@ -183,10 +187,12 @@ export default function CreateThingScreen() {
 
         {kind === 'document' ? null : (
           <DetailSection label={kind === 'insurance' ? 'Provider' : 'Brand'}>
-            <DetailField
+            <SuggestField
               value={brand}
               onChangeText={setBrand}
+              suggestions={brands}
               placeholder={kind === 'insurance' ? 'e.g. AXA' : 'e.g. Samsung'}
+              autoCapitalize="words"
             />
           </DetailSection>
         )}
@@ -242,10 +248,12 @@ export default function CreateThingScreen() {
         {isPaper ? null : (
           <>
             <DetailSection label="Bought from">
-              <DetailField
+              <SuggestField
                 value={purchasedFrom}
                 onChangeText={setPurchasedFrom}
+                suggestions={stores}
                 placeholder="Amazon, Sharaf DG…"
+                autoCapitalize="words"
               />
             </DetailSection>
 
@@ -280,7 +288,7 @@ export default function CreateThingScreen() {
           style={({ pressed }) => [styles.photoRow, pressed && { opacity: 0.7 }]}
           accessibilityRole="button"
         >
-          <Camera size={18} color={colors.accent} strokeWidth={2} />
+          <Camera size={18} color={colors.glyph} strokeWidth={2} />
           <Text style={[styles.photoText, { color: colors.accent }]}>
             Use the camera instead
           </Text>

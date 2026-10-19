@@ -117,7 +117,7 @@ export function buildDashboard(input: {
     urgency: 'soon',
     href: `/habits/${h.id}`,
     habitId: h.id,
-    icon: 'sparkles',
+    icon: 'habit',
   }));
 
   const doneHabitDash: DashRow[] = doneHabits.map((h) => {
@@ -132,7 +132,7 @@ export function buildDashboard(input: {
       urgency: 'ok',
       href: `/habits/${h.id}`,
       habitId: h.id,
-      icon: 'sparkles',
+      icon: 'habit',
     };
   });
 

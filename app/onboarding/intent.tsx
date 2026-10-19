@@ -21,7 +21,7 @@ const MAX_INTENTS = 3;
 const LOOK: Record<OnboardingIntent, { tone: ModuleToneKey; icon: Icon3DName }> = {
   things: { tone: 'things', icon: 'package' },
   reminders: { tone: 'tasks', icon: 'tasks' },
-  habits: { tone: 'habits', icon: 'check' },
+  habits: { tone: 'habits', icon: 'habit' },
   classes: { tone: 'classes', icon: 'today' },
   money: { tone: 'expenses', icon: 'wallet' },
   family: { tone: 'subscriptions', icon: 'family' },

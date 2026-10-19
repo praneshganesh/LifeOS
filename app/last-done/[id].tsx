@@ -156,6 +156,7 @@ export default function LastDoneDetailScreen() {
 
   const [labelDraft, setLabelDraft] = useState('');
   const [notesDraft, setNotesDraft] = useState('');
+  const [notesHeight, setNotesHeight] = useState(72);
   const [calendarYear, setCalendarYear] = useState(() => new Date().getFullYear());
   const [pickingSpecificDate, setPickingSpecificDate] = useState(false);
   /** Remember last custom days so switching away from Weekdays isn’t a one-way trip. */
@@ -407,6 +408,7 @@ export default function LastDoneDetailScreen() {
   const showHeatmap = item ? shouldShowActivityHeatmap(item) : false;
   // One-shot reminder (Once), never "again". Recurring / plain activities keep it.
   const onceReminder = Boolean(item?.remindAt) && !item?.remindInterval;
+  const finishedOnce = Boolean(item?.onceDone) && !item?.remindInterval;
   const doneLabel =
     showHistory && !onceReminder ? 'Mark done again' : 'Mark done';
 
@@ -516,7 +518,7 @@ export default function LastDoneDetailScreen() {
             />
             {scheduleLine ? (
               <Text style={[styles.heroSchedule, { color: colors.mute }]}>
-                {scheduleLine}
+                {finishedOnce ? `${scheduleLine} · Done` : scheduleLine}
               </Text>
             ) : null}
           </View>
@@ -535,9 +537,15 @@ export default function LastDoneDetailScreen() {
           value={notesDraft}
           onChangeText={setNotesDraft}
           multiline
+          scrollEnabled={notesHeight >= 160}
+          onContentSizeChange={(e) => {
+            const next = Math.ceil(e.nativeEvent.contentSize.height) + 28;
+            setNotesHeight(Math.max(72, Math.min(160, next)));
+          }}
           style={[
             styles.notesField,
             {
+              height: notesHeight,
               color: colors.ink,
               backgroundColor: colors.surfaceSoft,
               borderColor: colors.lineStrong,
@@ -754,7 +762,7 @@ export default function LastDoneDetailScreen() {
           </FormGroup>
         </View>
 
-        {item.remindAt && item.remindInterval?.unit !== 'weekdays' ? (
+        {item.remindAt && !finishedOnce && item.remindInterval?.unit !== 'weekdays' ? (
           <AlertsSection
             item={item}
             categoryColor={category.color}
@@ -824,13 +832,15 @@ export default function LastDoneDetailScreen() {
         ) : null}
       </ScrollView>
 
-      <DetailStickyActions>
-        <DetailPrimaryButton
-          label={doneLabel}
-          accent={colors.accent}
-          onPress={() => void logDone({ id: item.id })}
-        />
-      </DetailStickyActions>
+      {finishedOnce ? null : (
+        <DetailStickyActions>
+          <DetailPrimaryButton
+            label={doneLabel}
+            accent={colors.accent}
+            onPress={() => void logDone({ id: item.id })}
+          />
+        </DetailStickyActions>
+      )}
     </Screen>
   );
 }

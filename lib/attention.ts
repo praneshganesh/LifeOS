@@ -168,7 +168,7 @@ export function buildAttentionItems(
   }
 
   for (const activity of lastDone) {
-    if (!activity.remindAt) continue;
+    if (!activity.remindAt || (activity.onceDone && !activity.remindInterval)) continue;
     const daysLeft = daysUntil(activity.remindAt, now);
     if (daysLeft > 14) continue;
     const urgency: AttentionUrgency =

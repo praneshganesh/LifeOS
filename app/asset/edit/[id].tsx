@@ -5,6 +5,7 @@ import { Redirect, useLocalSearchParams, type Href } from 'expo-router';
 import { Text } from '@/components/ui/Text';
 import { OptionalDateField } from '@/components/ui/DateField';
 import { DetailPrimaryButton } from '@/components/ui/DetailKit';
+import { SuggestionRow } from '@/components/ui/SuggestField';
 import { PersonChips } from '@/components/PersonChips';
 import { useHousehold } from '@/lib/HouseholdContext';
 import { useInventory } from '@/lib/InventoryContext';
@@ -13,6 +14,7 @@ import { parseDateInput } from '@/lib/lastDone';
 import { useLastDone } from '@/lib/LastDoneContext';
 import { defaultDocumentReminder } from '@/lib/documentReminders';
 import { useToast } from '@/lib/ToastContext';
+import { useBrandSuggestions, useStoreSuggestions } from '@/lib/useFieldSuggestions';
 import { type ThemeColors, fonts, radius, spacing } from '@/constants/theme';
 
 export function AssetEditor({ assetId }: { assetId: string }) {
@@ -23,6 +25,8 @@ export function AssetEditor({ assetId }: { assetId: string }) {
   const { spaces, roomsForSpace } = useSpaces();
   const { members } = useHousehold();
   const { showToast, showError } = useToast();
+  const brands = useBrandSuggestions();
+  const stores = useStoreSuggestions();
   const item = assetId ? getById(assetId) : undefined;
 
   const [name, setName] = useState('');
@@ -139,7 +143,13 @@ export function AssetEditor({ assetId }: { assetId: string }) {
   return (
     <View>
           <Field label="Name" value={name} onChangeText={setName} />
-          <Field label="Brand" value={brand} onChangeText={setBrand} />
+          <Field
+            label="Brand"
+            value={brand}
+            onChangeText={setBrand}
+            suggestions={brands}
+            autoCapitalize="words"
+          />
           <Field label="Category" value={category} onChangeText={setCategory} />
 
           <Text style={styles.fieldLabel}>Space</Text>
@@ -231,6 +241,8 @@ export function AssetEditor({ assetId }: { assetId: string }) {
                 value={purchasedFrom}
                 onChangeText={setPurchasedFrom}
                 placeholder="Amazon, Sharaf DG…"
+                suggestions={stores}
+                autoCapitalize="words"
               />
               <View style={styles.field}>
                 <Text style={styles.fieldLabel}>Purchased on</Text>
@@ -284,6 +296,7 @@ function Field({
   multiline,
   autoCorrect,
   autoCapitalize,
+  suggestions,
 }: {
   label: string;
   value: string;
@@ -292,6 +305,7 @@ function Field({
   multiline?: boolean;
   autoCorrect?: boolean;
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
+  suggestions?: string[];
 }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -308,6 +322,9 @@ function Field({
         style={[styles.input, multiline && styles.inputMulti]}
         multiline={multiline}
       />
+      {suggestions?.length && !multiline ? (
+        <SuggestionRow value={value} suggestions={suggestions} onPick={onChangeText} />
+      ) : null}
     </View>
   );
 }

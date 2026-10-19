@@ -112,7 +112,7 @@ export default function SpacesScreen() {
     },
     {
       title: 'Habits',
-      icon: 'check',
+      icon: 'habit',
       href: '/habits',
       count: habits.length,
       dots: moduleTone('habits', colors, light).dots,
@@ -175,7 +175,7 @@ export default function SpacesScreen() {
           {
             title: 'Habit',
             subtitle: 'Track a streak',
-            icon: 'check' as Icon3DName,
+            icon: 'habit' as Icon3DName,
             href: '/habits/create' as Href,
           },
           {

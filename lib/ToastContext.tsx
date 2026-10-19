@@ -89,7 +89,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           {tone === 'error' ? (
             <AlertCircle size={18} color={colors.coral} strokeWidth={2.2} />
           ) : (
-            <CheckCircle2 size={18} color={colors.accent} strokeWidth={2.2} />
+            <CheckCircle2 size={18} color={colors.glyph} strokeWidth={2.2} />
           )}
           <View style={{ flexShrink: 1 }}>
             <Animated.Text style={[styles.text, { color: colors.ink }]}>
