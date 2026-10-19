@@ -29,7 +29,7 @@ export function manualSearchUrl(brand: string, name: string): string {
   return `https://www.google.com/search?q=${encodeURIComponent(q)}`;
 }
 
-/** Well-known brand support hubs — used only when the model omits manualUrl. */
+/** Well-known brand support hubs, used only when the model omits manualUrl. */
 const BRAND_SUPPORT: Array<{ test: RegExp; url: string }> = [
   { test: /\bapple\b/i, url: 'https://support.apple.com' },
   { test: /\bde'?longhi\b/i, url: 'https://www.delonghi.com/en-us/support' },

@@ -59,7 +59,7 @@ export async function saveSeatUsage(seats: StoredSeats): Promise<void> {
   );
 }
 
-/** After a successful accept on this device — join Family as a member. */
+/** After a successful accept on this device, join Family as a member. */
 export async function joinAsMember(householdId: string): Promise<void> {
   await saveMembership({ role: 'member', householdId });
 }

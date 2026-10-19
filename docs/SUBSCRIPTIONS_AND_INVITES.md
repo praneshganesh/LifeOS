@@ -11,10 +11,10 @@ Product rules for Saavi billing and shared logins (v1).
 | **Trial** | 1 | Unlimited | `TRIAL_DAYS` (default 7, override `EXPO_PUBLIC_TRIAL_DAYS`) from `trialStartedAt`, then paywall |
 | **Pro** | 1 | Unlimited | Solo. Invite login → upgrade to Family |
 | **Family** | 4 (owner + 3) | Unlimited | Owner pays; invitees ride the plan |
-| **Member** | — | — | Joined via invite; no separate subscription |
+| **Member** | n/a | n/a | Joined via invite; no separate subscription |
 
-- **Person** = tag (child, pet, “Ishaan”) — never a seat.
-- **Member** = app login that syncs — consumes a Family seat.
+- **Person** = tag (child, pet, “Ishaan”): never a seat.
+- **Member** = app login that syncs: consumes a Family seat.
 - **One active household per login** (v1).
 
 ## Trial → paywall
@@ -50,7 +50,7 @@ Product IDs:
 2. **EAS builds must bake** `EXPO_PUBLIC_REVENUECAT_IOS_KEY` (EAS secret / env for the profile). Local `.env` does not ship to TestFlight.
 3. **App Store Connect** needs those subscription products (Ready to Submit / approved) + Paid Applications agreement.
 4. **RevenueCat** current offering must include packages whose identifiers match `pickOffer` (`$rc_annual` / `annual` / `yearly`, `family_annual`, etc.) and map to the App Store product IDs.
-5. **Sandbox:** TestFlight uses Sandbox Apple ID — tap Continue → Apple’s sheet (not a fake in-app charge).
+5. **Sandbox:** TestFlight uses Sandbox Apple ID, tap Continue → Apple’s sheet (not a fake in-app charge).
 
 Until (2)–(4) are done, `billingReady` is false or offers are empty → paywall shows “not connected” / “Unavailable”, not store prices.
 
@@ -68,7 +68,7 @@ The steps below are the intended button flow. What the code does today, and the 
 
 ### Invitee (iOS / Android)
 1. Opens link → `/invite/[code]` (or enters code on `/invite`)
-2. App ensures a Supabase session (`ensureCloudSession`) — required for a seat
+2. App ensures a Supabase session (`ensureCloudSession`): required for a seat
 3. Accept → `joinAsMember` (one household on this login)
 4. Soft nudge **Save with Apple** so the seat survives reinstall (Settings → Account later)
 5. Onboarding if needed → home

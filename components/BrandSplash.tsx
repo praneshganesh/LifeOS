@@ -10,7 +10,7 @@ type Props = {
 
 const NATIVE_DRIVER = Platform.OS !== 'web';
 
-/** In-app brand beat — HDR lockup on the linen field, no pattern behind it. */
+/** In-app brand beat, HDR lockup on the linen field, no pattern behind it. */
 export function BrandSplash({ onFinished }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);

@@ -21,7 +21,7 @@ import {
 } from 'expo-camera';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import { FileText, Image as ImageIcon, RefreshCw, Sparkles, X } from 'lucide-react-native';
+import { FileText, Image as ImageIcon, Keyboard, RefreshCw, Sparkles, X } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { OptionalDateField } from '@/components/ui/DateField';
 import { blurActiveElement } from '@/lib/a11y';
@@ -55,6 +55,7 @@ import { guessExpenseCategory, parseAmount, findDuplicateExpense, formatAmount, 
 import { currencyFromSpokenText, sanitizeAmountInput } from '@/lib/currency';
 import { useCurrency } from '@/lib/CurrencyContext';
 import { resolveCapturePreset } from '@/lib/captureContext';
+import { inferMeta } from '@/lib/chat/applyActions';
 import {
   findTalkMatches,
   listIncompleteTalkStubs,
@@ -80,7 +81,7 @@ const SAVE_DESTINATIONS: {
 /**
  * Capture opens the camera immediately.
  * AI assist (default on): on-device OCR. Opt-in cloud Identify for products.
- * AI off: photo only — for passports / sensitive docs.
+ * AI off: photo only, for passports / sensitive docs.
  */
 export default function CaptureModal() {
   const { colors } = useTheme();
@@ -120,6 +121,7 @@ export default function CaptureModal() {
   /** When off, skip OCR + cloud Identify (manual fields only). */
   const [aiAssist, setAiAssist] = useState(true);
   const [identifying, setIdentifying] = useState(false);
+  const [identifiedCategory, setIdentifiedCategory] = useState('');
 
   const [name, setName] = useState('');
   const [brand, setBrand] = useState('');
@@ -150,7 +152,7 @@ export default function CaptureModal() {
     blurActiveElement();
   }, []);
 
-  // Opened from an item screen — lock attach target and prefill fields
+  // Opened from an item screen, lock attach target and prefill fields
   useEffect(() => {
     if (!linkItemId) return;
     const item = items.find((i) => i.id === linkItemId);
@@ -178,11 +180,17 @@ export default function CaptureModal() {
     if (router.canGoBack()) router.back();
   }
 
+  function typeInstead() {
+    blurActiveElement();
+    router.replace('/things/create' as Href);
+  }
+
   function resetToCamera() {
     setPhase('camera');
     setPhotoUri(null);
     setBusy(false);
     setIdentifying(false);
+    setIdentifiedCategory('');
     setMatchCandidates([]);
     setLinkedStubId(linkItemId ?? null);
     setOcrText('');
@@ -196,31 +204,43 @@ export default function CaptureModal() {
     setDuplicateExpense(null);
   }
 
-  async function runIdentify() {
-    if (!photoUri || identifying || !aiAssist) return;
+  async function runIdentify(opts?: { uri?: string; auto?: boolean; text?: string }) {
+    const uri = opts?.uri ?? photoUri;
+    if (!uri || identifying || !aiAssist) return;
     setIdentifying(true);
     try {
-      const result = await identifyCaptureImage(photoUri, entitlement.planId);
-      if (result.name) setName(result.name);
+      const result = await identifyCaptureImage(uri, entitlement.planId);
+      if (!result.name) {
+        if (opts?.auto) {
+          setOcrNote('AI couldn’t tell what this is. Type a name below and save.');
+        }
+        return;
+      }
+      setName(result.name);
       if (result.brand) setBrand(result.brand);
       if (result.serial) setSerial(result.serial);
+      if (result.category) setIdentifiedCategory(result.category);
       setIsDocument(false);
       setReceiptLooksLike(false);
       setSaveDestination('thing');
       const confNote =
         result.confidence >= 0.65
-          ? 'Identified with AI — check before saving.'
-          : 'AI guess (low confidence) — edit anything that looks off.';
+          ? 'Identified with AI. Check before saving.'
+          : 'AI guess (low confidence). Edit anything that looks off.';
       setOcrNote(result.note ? `${confNote} ${result.note}` : confNote);
       setStatus('Identified');
-      proposeTalkLinks(result.name || name, result.brand || brand, ocrText);
+      proposeTalkLinks(result.name, result.brand || brand, opts?.text ?? ocrText);
     } catch (err) {
-      if (err instanceof AiDailyLimitError) {
-        Alert.alert('Daily AI limit', err.message);
-      } else if (err instanceof IdentifyError) {
-        Alert.alert('Identify', err.message);
+      const message =
+        err instanceof AiDailyLimitError || err instanceof IdentifyError
+          ? err.message
+          : 'Something went wrong. Try again.';
+      if (opts?.auto) {
+        setOcrNote(`Couldn’t identify it automatically. ${message} Type a name below.`);
+      } else if (err instanceof AiDailyLimitError) {
+        Alert.alert('Daily AI limit', message);
       } else {
-        Alert.alert('Identify', 'Something went wrong. Try again.');
+        Alert.alert('Identify', message);
       }
     } finally {
       setIdentifying(false);
@@ -292,8 +312,8 @@ export default function CaptureModal() {
           : suggestReceiptDestination(hints);
     setSaveDestination(dest);
     if (dest === 'document') setIsDocument(true);
-    setStatus('Receipt read on device — confirm amount and log as expense.');
-    setOcrNote('On-device OCR. Pick Expense (or both) — then save.');
+    setStatus('Receipt read on device. Confirm the amount and log it as an expense.');
+    setOcrNote('Read on device. Pick Expense (or both), then save.');
     proposeTalkLinks(nextName, hints.brand || '', text);
     return nextName;
   }
@@ -319,7 +339,7 @@ export default function CaptureModal() {
       category: preset.category,
     });
     setMatchCandidates(matches);
-    // High confidence only — avoid wrong-merging mid-score stubs
+    // High confidence only, avoid wrong-merging mid-score stubs
     if (matches[0] && matches[0].score >= 0.82) {
       setLinkedStubId(matches[0].item.id);
     } else {
@@ -336,7 +356,7 @@ export default function CaptureModal() {
     if (!aiAssist) {
       setOcrText('');
       setOcrNote(
-        'AI off — photo stays on this phone. Nothing was read or sent. Fill in what you want, then save.'
+        'AI is off. The photo stays on this phone. Nothing was read or sent. Fill in what you want, then save.'
       );
       setStatus('Private capture');
       if (forcedLink && linkedItem) {
@@ -353,23 +373,23 @@ export default function CaptureModal() {
 
     setPhase('reading');
     setStatus('Reading text on your device…');
-    setOcrNote('On-device text recognition — nothing is sent to AI or the cloud yet.');
+    setOcrNote('Read on your device. Nothing is sent to AI or the cloud.');
 
-    // Prefer the durable copy — camera temp URIs can disappear mid-read on some devices.
+    // Prefer the durable copy, camera temp URIs can disappear mid-read on some devices.
     let result = await recognizeImage(durable);
     if (!result.text?.trim() && durable !== uri) {
       result = await recognizeImage(uri);
     }
     setOcrText(result.text || '');
-    // Surface OCR failure — otherwise blank fields read as "found nothing"
+    // Surface OCR failure, otherwise blank fields read as "found nothing"
     // when the engine never ran at all.
     if (result.engine === 'none') {
       setOcrNote(
-        'Couldn’t read the photo automatically — fill in the details below and save.'
+        'Couldn’t read the photo automatically. Fill in the details below and save.'
       );
     }
     const receiptHints = extractReceiptHints(result.text);
-    // Policy schedules and IDs also contain "total/amount" + prices — don't
+    // Policy schedules and IDs also contain "total/amount" + prices, don't
     // let those route to Expense just because they mention money.
     const looksLikeDocInstead =
       /\b(policy|premium|passport|emirates\s*id|identity\s*card|driving\s*licen[cs]e|certificate)\b/i.test(
@@ -383,7 +403,7 @@ export default function CaptureModal() {
         /\b(invoice|receipt|tax\s*invoice)\b/i.test(result.text));
 
     if (forcedLink && linkedItem) {
-      // Attach to existing item — keep identity, enrich from OCR when useful
+      // Attach to existing item, keep identity, enrich from OCR when useful
       setIsDocument(Boolean(linkedItem.isDocument));
       setName(linkedItem.name);
       setBrand(linkedItem.brand === 'Unknown' ? '' : linkedItem.brand);
@@ -433,7 +453,7 @@ export default function CaptureModal() {
         : kindLabel;
       setName(nextName);
       setStatus('Document fields filled from the MRZ on your device.');
-      setOcrNote('Read on your device — nothing sent to AI or the cloud.');
+      setOcrNote('Read on your device. Nothing is sent to AI or the cloud.');
       proposeTalkLinks(nextName, result.identity.issuingCountry || '', result.text);
     } else {
       const fieldHints = extractDocumentFieldHints(result.text);
@@ -461,20 +481,20 @@ export default function CaptureModal() {
         setBrand(kind === 'emirates_id' || kind === 'driving_licence' ? 'UAE' : '');
         setStatus(
           fieldHints?.documentNumber
-            ? `${kindLabel} detected — check the fields and save.`
+            ? `${kindLabel} detected. Check the fields and save.`
             : `${kindLabel} detected. Tip: scan the back (MRZ) for auto-fill, or enter details below.`
         );
         setOcrNote(
           kind === 'emirates_id' && !fieldHints?.documentNumber
-            ? 'Front of Emirates ID often needs the ID number typed in — or retake the back for MRZ.'
-            : 'Read on your device — nothing sent to AI or the cloud.'
+            ? 'Front of Emirates ID often needs the ID number typed in. You can also retake the back of the card.'
+            : 'Read on your device. Nothing is sent to AI or the cloud.'
         );
         proposeTalkLinks(nextName, '', result.text);
       } else if (preset.preferDocument) {
         applyContextDefaults(true);
         setDocKind('unknown');
         setName(preset.defaultName);
-        setStatus(`No MRZ found — save as a ${preset.label.toLowerCase()} document.`);
+        setStatus(`Couldn’t read the ID strip. Save it as a ${preset.label.toLowerCase()} document.`);
         proposeTalkLinks(preset.defaultName, '', result.text);
       } else {
         applyContextDefaults(false);
@@ -484,20 +504,15 @@ export default function CaptureModal() {
         if ((receiptHints.looksLikeReceipt && !looksLikeDocInstead) || attachKind === 'receipt') {
           applyReceiptFromOcr(result.text, receiptHints);
         } else {
-          setName(preset.defaultName);
+          setName('');
           setReceiptLooksLike(false);
           setSaveDestination('thing');
-          setStatus(
-            result.text?.trim()
-              ? `Couldn’t classify this photo — saving to ${preset.label}. Rename if it’s an ID or licence.`
-              : `No text found — try better light, or the back of an ID. Saving to ${preset.label}.`
-          );
-          if (result.engine !== 'none' && !result.text?.trim()) {
-            setOcrNote(
-              'No readable text in this photo. For Emirates ID, use the back (MRZ strip). For licences, fill in the name and number below.'
-            );
-          }
+          setStatus('Identifying with AI…');
+          setOcrNote('No document or receipt text found, so AI is having a look. Uses 1 AI turn.');
           proposeTalkLinks(preset.defaultName, '', result.text);
+          setPhase('review');
+          void runIdentify({ uri: durable, auto: true, text: result.text });
+          return;
         }
       }
     }
@@ -526,7 +541,7 @@ export default function CaptureModal() {
   async function pickImage() {
     try {
       if (Platform.OS === 'web') {
-        // Own input with a no-HEIC accept list — iOS then converts library
+        // Own input with a no-HEIC accept list, iOS then converts library
         // photos to JPEG on pick. expo-image-picker's image/* hands us raw
         // HEIC that neither the browser nor Tesseract can decode.
         const picked = await pickFileWeb();
@@ -570,7 +585,7 @@ export default function CaptureModal() {
           setOcrNote(
             aiAssist
               ? 'PDF stored. Open a photo of the ID page for MRZ reading.'
-              : 'AI off — PDF stays on this phone. Fill in details, then save.'
+              : 'AI is off. The PDF stays on this phone. Fill in the details, then save.'
           );
           setPhase('review');
           return;
@@ -593,7 +608,7 @@ export default function CaptureModal() {
         setOcrNote(
           aiAssist
             ? 'PDF stored on device. Open a photo of the ID page for MRZ reading.'
-            : 'AI off — PDF stays on this phone. Fill in details, then save.'
+            : 'AI is off. The PDF stays on this phone. Fill in the details, then save.'
         );
         setPhase('review');
         return;
@@ -627,6 +642,7 @@ export default function CaptureModal() {
       const saveThing = forcedLink || !expenseOnly;
 
       const identityDoc = asDocument && isIdentityDocumentKind(docKind);
+      const guessed = inferMeta(`${name} ${brand} ${identifiedCategory}`);
       const icon: Icon3DName = identityDoc
         ? docKind === 'passport'
           ? 'passport'
@@ -635,7 +651,9 @@ export default function CaptureModal() {
           ? preset.preferDocument
             ? preset.icon
             : 'document'
-          : preset.icon;
+          : preset.icon === 'package'
+            ? guessed.icon
+            : preset.icon;
 
       const spaceId = identityDoc || asDocument ? 's5' : preset.spaceId;
       const room =
@@ -646,7 +664,9 @@ export default function CaptureModal() {
           ? preset.category
           : asDocument
             ? 'Documents'
-            : preset.category;
+            : preset.kind === 'general' && (identifiedCategory || guessed.category)
+              ? identifiedCategory || guessed.category
+              : preset.category;
 
       const fields = {
         name:
@@ -782,7 +802,7 @@ export default function CaptureModal() {
         });
         expenseId = expense.id;
       } else if (expenseOnly) {
-        setSaveError('Add an amount in Price — expense needs a number greater than zero.');
+        setSaveError('Add an amount in Price. An expense needs a number greater than zero.');
         return;
       }
 
@@ -795,7 +815,7 @@ export default function CaptureModal() {
         return;
       }
 
-      // Capture is a full-screen modal — dismiss back to Today/Ask instead of
+      // Capture is a full-screen modal, dismiss back to Today/Ask instead of
       // pushing detail screens the user has to claw back from.
       dismissCaptureAfterSave();
     } catch (err) {
@@ -830,6 +850,11 @@ export default function CaptureModal() {
         <Pressable onPress={() => void pickDocument()} style={{ marginTop: 10 }}>
           <Text style={styles.link}>Upload a file</Text>
         </Pressable>
+        {!forcedLink ? (
+          <Pressable onPress={typeInstead} style={{ marginTop: 10 }}>
+            <Text style={styles.link}>Type it in</Text>
+          </Pressable>
+        ) : null}
         <Pressable onPress={close} style={{ marginTop: 20 }}>
           <Text style={styles.linkMuted}>Not now</Text>
         </Pressable>
@@ -868,7 +893,7 @@ export default function CaptureModal() {
               : preset.label;
 
     return (
-      // KAV so the absolute-positioned save bar lifts above the keyboard —
+      // KAV so the absolute-positioned save bar lifts above the keyboard.
       // otherwise editing a lower field leaves Save unreachable.
       <KeyboardAvoidingView
         style={[styles.reviewRoot, { paddingTop: insets.top + 8 }]}
@@ -897,7 +922,7 @@ export default function CaptureModal() {
               {ocrNote ||
                 (aiAssist
                   ? 'Edit anything that looks off, then save.'
-                  : 'AI was off — fill in what you want, then save.')}
+                  : 'AI was off. Fill in what you want, then save.')}
             </Text>
           </View>
 
@@ -921,7 +946,7 @@ export default function CaptureModal() {
                   {identifying ? 'Identifying…' : 'Identify with AI'}
                 </Text>
                 <Text style={styles.identifyHint}>
-                  Opt-in — sends this photo once. Uses 1 AI turn today.
+                  Optional. Sends this photo once and uses 1 AI turn today.
                 </Text>
               </View>
             </Pressable>
@@ -931,7 +956,7 @@ export default function CaptureModal() {
             <View style={styles.matchCard}>
               <Text style={styles.matchTitle}>Link to a Talk item?</Text>
               <Text style={styles.matchLead}>
-                Added on the go earlier — confirm to attach this receipt. Matched automatically.
+                You added this on the go earlier. Confirm to attach this receipt.
               </Text>
               {matchCandidates.map((m) => {
                 const on = linkedStubId === m.item.id;
@@ -1007,7 +1032,7 @@ export default function CaptureModal() {
           ) : null}
 
           {forcedLink ? (
-            // Keep attach flow light — no enterprise form dump
+            // Keep attach flow light, no enterprise form dump
             <>
               {(!price || price === '—') && attachKind === 'receipt' ? (
                 <Field label="Price (optional)" value={price} onChange={(t) => setPrice(sanitizeAmountInput(t))} placeholder={`${defaultCurrency} 0`} />
@@ -1243,7 +1268,7 @@ export default function CaptureModal() {
                 : `Snap a photo of ${linkedItem.name}`
               : aiAssist
                 ? preset.hint
-                : 'AI off — photo only, nothing is read or uploaded'}
+                : 'AI is off. Photo only, nothing is read or uploaded.'}
           </Text>
         </View>
         <Pressable
@@ -1284,7 +1309,7 @@ export default function CaptureModal() {
         <Text style={styles.aiToggleHint}>
           {aiAssist
             ? 'Reads text on device · Identify is opt-in after'
-            : 'Sensitive docs — keep this photo private'}
+            : 'Sensitive document. Keep this photo private.'}
         </Text>
 
         <View style={styles.altRow}>
@@ -1313,6 +1338,12 @@ export default function CaptureModal() {
             <Text style={styles.altLabel}>File</Text>
           </Pressable>
         </View>
+        {!forcedLink ? (
+          <Pressable onPress={typeInstead} hitSlop={8} style={styles.typeInstead}>
+            <Keyboard size={15} color="rgba(255,255,255,0.75)" strokeWidth={2} />
+            <Text style={styles.typeInsteadText}>No photo? Type it in</Text>
+          </Pressable>
+        ) : null}
       </View>
     </View>
   );
@@ -1366,7 +1397,7 @@ function DateRow({
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <OptionalDateField
-        // OCR can leave non-ISO junk here — show it as "not set" so the
+        // OCR can leave non-ISO junk here, show it as "not set" so the
         // picker always round-trips a clean YYYY-MM-DD.
         value={parseDateInput(value) ? value : ''}
         onChange={onChange}
@@ -1510,6 +1541,18 @@ function makeStyles(colors: ThemeColors) {
     fontFamily: fonts.sansMedium,
     fontSize: 16,
     color: 'rgba(255,255,255,0.8)',
+  },
+  typeInstead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 18,
+    paddingVertical: 6,
+  },
+  typeInsteadText: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.75)',
   },
   shutterOuter: {
     width: 76,

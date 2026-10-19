@@ -1,5 +1,6 @@
 import type { ClassPack, ScheduleDay } from '@/lib/classes';
 import {
+  classLabel,
   packStatus,
   remainingCount,
 } from '@/lib/classes';
@@ -143,8 +144,8 @@ export function calculateUpcomingClassTriggers(
     if (dayBeforeDate.getTime() > now.getTime()) {
       triggers.push({
         identifier: `${classReminderIdPrefix(pack.id)}-eve-${dateStr}`,
-        title: `${whoPrefix}${pack.title} class tomorrow`,
-        body: `${who}${pack.title} class is tomorrow${pack.scheduleTime ? ` at ${pack.scheduleTime}` : ''}.`,
+        title: `${whoPrefix}${classLabel(pack.title)} tomorrow`,
+        body: `${who}${classLabel(pack.title)}${who ? '' : ' is'} tomorrow${pack.scheduleTime ? ` at ${pack.scheduleTime}` : ''}.`,
         date: dayBeforeDate,
         data: {
           type: 'class',
@@ -168,8 +169,8 @@ export function calculateUpcomingClassTriggers(
     if (isMorningBeforeClass && dayOfDate.getTime() > now.getTime()) {
       triggers.push({
         identifier: `${classReminderIdPrefix(pack.id)}-day-${dateStr}`,
-        title: `${whoPrefix}${pack.title} class today`,
-        body: `${who}${pack.title} class is today${pack.scheduleTime ? ` at ${pack.scheduleTime}` : ''}.`,
+        title: `${whoPrefix}${classLabel(pack.title)} today`,
+        body: `${who}${classLabel(pack.title)}${who ? '' : ' is'} today${pack.scheduleTime ? ` at ${pack.scheduleTime}` : ''}.`,
         date: dayOfDate,
         data: {
           type: 'class',

@@ -1,4 +1,4 @@
-# Saavi (LifeOS) — Comprehensive Master Task List & Roadmap
+# Saavi (LifeOS): Comprehensive Master Task List & Roadmap
 
 This master checklist breaks down every single task required across **TestFlight Beta**, **App Store / Google Play Production Readiness**, and **Post-Launch Maintenance**, specifically tailored to the verified codebase.
 
@@ -42,8 +42,8 @@ This master checklist breaks down every single task required across **TestFlight
 See also [`docs/SUBSCRIPTIONS_AND_INVITES.md`](./SUBSCRIPTIONS_AND_INVITES.md) for product rules (trial gate, Pro→Family upgrade, invites) and [`docs/FAMILY_SHARING.md`](./FAMILY_SHARING.md) for the Family gaps and scenarios.
 
 ### 2.0 Client entitlement foundation (in progress)
-- [x] Entitlement model (`lib/entitlements.ts`) — trial active/expired, Pro, Family, member.
-- [x] `PlanGate` + `/paywall` — block app after trial until subscribe.
+- [x] Entitlement model (`lib/entitlements.ts`): trial active/expired, Pro, Family, member.
+- [x] `PlanGate` + `/paywall`: block app after trial until subscribe.
 - [x] Post-subscribe → onboarding if needed, else home.
 - [x] Sharing: Invite gated (Pro→Family upgrade) + join-with-code.
 - [x] RevenueCat dashboard: products, entitlements `pro`/`family`, offering `default`.
@@ -56,7 +56,7 @@ See also [`docs/SUBSCRIPTIONS_AND_INVITES.md`](./SUBSCRIPTIONS_AND_INVITES.md) f
 - [ ] **App Store Connect**:
   - Sign Paid Applications Agreement in Agreements, Tax, and Banking.
   - Create In-App Purchase / Subscription Group: `Saavi Subscriptions`.
-  - Create Subscriptions with 7-Day Introductory Free Trial:
+  - Create Subscriptions **without** an introductory free trial. Launch uses the in-app, no-card 7-day trial (server clock on `profiles.trial_started_at`). An Apple intro offer on top would give 14 free days and mismatch the paywall copy. Revisit only if trial conversion is weak (Phase 6).
     - `saavi_pro_monthly` (e.g. $4.99 / mo)
     - `saavi_pro_yearly` (e.g. $39.99 / yr)
     - `saavi_family_yearly` (e.g. $69.99 / yr)
@@ -111,7 +111,7 @@ See also [`docs/SUBSCRIPTIONS_AND_INVITES.md`](./SUBSCRIPTIONS_AND_INVITES.md) f
 - [x] New device: rows arrive with `imagePath` / `receiptPath` and the engine downloads via signed URL into the app cache, then repoints the local URI.
 - [x] Budgeted (4 transfers per sync run) with per-file attempt backoff.
 - [x] Safety rule enforced: local media files are never deleted by sync.
-- [ ] Media Cache Management UI (clear cached downloads) — deferred to Phase 6.
+- [ ] Media Cache Management UI (clear cached downloads): deferred to Phase 6.
 
 ---
 
@@ -134,6 +134,10 @@ See also [`docs/SUBSCRIPTIONS_AND_INVITES.md`](./SUBSCRIPTIONS_AND_INVITES.md) f
 ---
 
 ## 🔮 Phase 6: Post-Launch & Deferred Items (Not Blocking Launch)
+
+- [ ] **Watch trial conversion** in RevenueCat. If weak, switch to an Apple intro-offer trial (card on file, one per Apple ID): App Store Connect offer, paywall price/renewal copy, "trial ends tomorrow" reminder, drop the in-app trial.
+- [ ] **Reinstall trial reset** (accepted gap at launch): keep the anonymous session in the Keychain so a reinstall returns to the same account; DeviceCheck "trial used" bit so a wiped phone doesn't get a new trial.
+- [ ] **Offline trial tampering**: ignore device clock rollbacks (remember the latest time seen) and require a server check-in every 7 days for trial and paid plans.
 
 - [ ] **Live Real-Time Household Invites** (Supabase Realtime WebSocket replication).
 - [ ] **Media Cache Management Settings** (UI button to clear cached images under storage pressure).

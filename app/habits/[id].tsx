@@ -46,7 +46,7 @@ export default function HabitDetailScreen() {
   const { logDone } = useLastDone();
   const { members } = useHousehold();
   const { showToast, showError } = useToast();
-  const saveFailed = () => showError('Couldn’t save — try again.');
+  const saveFailed = () => showError('Couldn’t save. Try again.');
 
   const linkables = useMemo(
     () =>
@@ -102,7 +102,7 @@ export default function HabitDetailScreen() {
     try {
       await removeHabit(habit.id);
     } catch {
-      showError('Couldn’t delete — try again.');
+      showError('Couldn’t delete. Try again.');
       return;
     }
     if (router.canGoBack()) router.back();

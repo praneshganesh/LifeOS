@@ -1,9 +1,9 @@
 /**
- * Native OCR via Google ML Kit — fully on-device, no network.
+ * Native OCR via Google ML Kit, fully on-device, no network.
  * Metro resolves this file on iOS/Android; web keeps the Tesseract.js
  * implementation in recognize.ts. Both export the same interface.
  *
- * Requires a dev-client / production build (native module) — not Expo Go.
+ * Requires a dev-client / production build (native module), not Expo Go.
  */
 import TextRecognition from '@react-native-ml-kit/text-recognition';
 import {
@@ -49,5 +49,5 @@ export async function recognizeImage(uri: string): Promise<OcrResult> {
   }
 }
 
-/** ML Kit holds no long-lived worker — nothing to tear down. */
+/** ML Kit holds no long-lived worker, nothing to tear down. */
 export async function terminateOcr() {}

@@ -39,7 +39,7 @@ export function paintLastDoneCategory(
   return { ...base, color: c.slate, soft: c.surfaceSoft };
 }
 
-/** Soft keyword grouping — users never pick a category. */
+/** Soft keyword grouping, users never pick a category. */
 export function categorizeLastDone(label: string): LastDoneCategory {
   const l = label.toLowerCase();
 

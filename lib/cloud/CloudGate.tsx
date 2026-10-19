@@ -22,7 +22,7 @@ export function CloudGate({ children }: { children: ReactNode }) {
     void bootstrapCloud().finally(() => {
       clearTimeout(timeout);
       if (!cancelled) setReady(true);
-      // Row-level sync (docs/SYNC_ARCHITECTURE.md) runs after hydration —
+      // Row-level sync (docs/SYNC_ARCHITECTURE.md) runs after hydration.
       // it never blocks first paint and merges via last-write-wins.
       void syncRowsNow();
     });

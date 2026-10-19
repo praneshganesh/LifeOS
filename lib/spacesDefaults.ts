@@ -1,6 +1,6 @@
 import type { Icon3DName } from '@/components/ui/Icon3D';
 
-/** Canonical space / room shapes — owned by SpacesContext, not demo mock. */
+/** Canonical space / room shapes, owned by SpacesContext, not demo mock. */
 export type Space = {
   id: string;
   name: string;
@@ -15,7 +15,7 @@ export type Room = {
   name: string;
   icon: Icon3DName;
   spaceId: string;
-  /** Legacy field — room contents come from inventory, not this list */
+  /** Legacy field, room contents come from inventory, not this list */
   assetIds: string[];
 };
 
@@ -41,7 +41,7 @@ export const DEFAULT_SPACES: Space[] = [
   },
 ];
 
-/** Default rooms for Home — empty assetIds; inventory is the source of truth. */
+/** Default rooms for Home, empty assetIds; inventory is the source of truth. */
 export const DEFAULT_ROOMS: Room[] = [
   { id: 'rm1', name: 'Living Room', icon: 'sofa', spaceId: 's1', assetIds: [] },
   { id: 'rm2', name: 'Kitchen', icon: 'kitchen', spaceId: 's1', assetIds: [] },

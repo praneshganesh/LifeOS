@@ -17,7 +17,7 @@ export type Expense = {
   id: string;
   /** Merchant or short description */
   title: string;
-  /** Amount in minor units avoided — store major units as number */
+  /** Amount in minor units avoided, store major units as number */
   amount: number;
   currency: string;
   category: ExpenseCategory;
@@ -29,14 +29,14 @@ export type Expense = {
   receiptUri?: string;
   /** Private Storage path once the receipt is uploaded */
   receiptPath?: string;
-  /** POS slip / transaction id from OCR — used to block re-scans */
+  /** POS slip / transaction id from OCR, used to block re-scans */
   receiptRef?: string;
   /** Optional link to a Thing */
   inventoryItemId?: string;
   personId?: string;
   source?: 'manual' | 'talk' | 'capture' | 'apple_pay';
   createdAt: string;
-  /** Last local mutation — LWW clock for row sync */
+  /** Last local mutation, LWW clock for row sync */
   updatedAt?: string;
 };
 

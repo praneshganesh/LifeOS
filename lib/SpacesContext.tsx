@@ -38,7 +38,7 @@ export type SpaceKind = Space['kind'];
 export type ManagedSpace = Space & {
   /** User-created (not from system defaults) */
   custom?: boolean;
-  /** Last local mutation — LWW clock for row sync. */
+  /** Last local mutation, LWW clock for row sync. */
   updatedAt?: string;
 };
 

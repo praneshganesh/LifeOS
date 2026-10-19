@@ -22,7 +22,7 @@ const APP_DIR = path.resolve(
   '../../app'
 );
 
-/** Modules that must use /create next to [id] — never /new (Expo swallows "new" as an id). */
+/** Modules that must use /create next to [id], never /new (Expo swallows "new" as an id). */
 const CREATE_MODULES = [
   'habits',
   'classes',

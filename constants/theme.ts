@@ -1,5 +1,5 @@
 /**
- * LifeOS theme — Ink light / dark only.
+ * LifeOS theme, Ink light / dark only.
  * Prefer `useTheme().colors` in UI. StyleSheet.create snapshots values at
  * import time, so color tokens used there stay stale unless applied at render.
  */
@@ -11,16 +11,16 @@ export type ThemeId = ThemeFamily | 'linen' | 'hearth' | 'system';
 export type ThemeResolved = 'light' | 'dark';
 
 /**
- * Token roles — the elevation & emphasis contract every screen relies on:
+ * Token roles, the elevation & emphasis contract every screen relies on:
  * - `bg`            screen background (mid stop of the Screen gradient)
  * - `bgDeep`        bottom gradient stop / recessed areas
  * - `bgElevated`    top gradient stop / raised page zones
- * - `surface`       cards — one clear step lighter (dark) / whiter (light) than bg
+ * - `surface`       cards, one clear step lighter (dark) / whiter (light) than bg
  * - `surfaceSoft`   insets ON a card: chips, input fills, secondary tiles
  * - `surfaceHover`  pressed/hover state of surfaceSoft
  * - `accent`        PRIMARY CTA fill (with `accentOn` text)
  * - `accentSoft`    SECONDARY CTA fill (with `accent` text)
- * - `accentWash`    tertiary tint — highlighted rows, selected states
+ * - `accentWash`    tertiary tint, highlighted rows, selected states
  * - `ink`           primary text; `onInk` = text on ink-filled buttons
  */
 export type ThemeColors = {
@@ -173,7 +173,7 @@ function paint(p: {
   };
 }
 
-/** Earth light — warm linen, sage accent (legacy Linen). */
+/** Earth light, warm linen, sage accent (legacy Linen). */
 export const earthLight: ThemeColors = paint({
   bg: '#F4EFE7',
   bgDeep: '#ECE5D9',
@@ -210,7 +210,7 @@ export const earthLight: ThemeColors = paint({
   listenGradient: ['#7A9066', '#C08A3E', '#4F6840', '#E5A95C', '#7A9066'],
 });
 
-/** Earth dark — firelit hearth: warm brown depths, sage accent. */
+/** Earth dark, firelit hearth: warm brown depths, sage accent. */
 export const earthDark: ThemeColors = paint({
   bg: '#1C1712',
   bgDeep: '#110E0A',
@@ -247,7 +247,7 @@ export const earthDark: ThemeColors = paint({
   listenGradient: ['#A9C78D', '#E3B76D', '#8FA87A', '#E5A95C', '#A9C78D'],
 });
 
-/** Ocean light — cool mist, deep teal. */
+/** Ocean light, cool mist, deep teal. */
 export const oceanLight: ThemeColors = paint({
   bg: '#E8F0F4',
   bgDeep: '#D9E6ED',
@@ -284,7 +284,7 @@ export const oceanLight: ThemeColors = paint({
   listenGradient: ['#3D8AAD', '#5BA3C4', '#1B6B86', '#7EB8D4', '#3D8AAD'],
 });
 
-/** Ocean dark — deep water: saturated navy depths, seafoam accent. */
+/** Ocean dark, deep water: saturated navy depths, seafoam accent. */
 export const oceanDark: ThemeColors = paint({
   bg: '#0D1C25',
   bgDeep: '#06121A',
@@ -321,7 +321,7 @@ export const oceanDark: ThemeColors = paint({
   listenGradient: ['#66C6E4', '#5BA3C4', '#3D8AAD', '#E7BC72', '#66C6E4'],
 });
 
-/** Clay light — sand, terracotta (not green). */
+/** Clay light, sand, terracotta (not green). */
 export const clayLight: ThemeColors = paint({
   bg: '#F6EDE4',
   bgDeep: '#EDDFD2',
@@ -358,7 +358,7 @@ export const clayLight: ThemeColors = paint({
   listenGradient: ['#C46A3A', '#E08A5C', '#B44A28', '#D4A45C', '#C46A3A'],
 });
 
-/** Clay dark — glowing ember: red-brown depths, terracotta accent. */
+/** Clay dark, glowing ember: red-brown depths, terracotta accent. */
 export const clayDark: ThemeColors = paint({
   bg: '#201310',
   bgDeep: '#140C08',
@@ -395,7 +395,7 @@ export const clayDark: ThemeColors = paint({
   listenGradient: ['#EE9F6F', '#E3B76D', '#C46A3A', '#F6B98F', '#EE9F6F'],
 });
 
-/** Ink light — paper and graphite. */
+/** Ink light, paper and graphite. */
 export const inkLight: ThemeColors = paint({
   bg: '#F2F2F7',
   bgDeep: '#E5E5EA',
@@ -432,7 +432,7 @@ export const inkLight: ThemeColors = paint({
   listenGradient: ['#3F3F46', '#111113', '#71717A', '#18181B', '#3F3F46'],
 });
 
-/** Ink dark — charcoal studio, white type. Monochrome, but with real depth. */
+/** Ink dark, charcoal studio, white type. Monochrome, but with real depth. */
 export const inkDark: ThemeColors = paint({
   bg: '#0D0D0F',
   bgDeep: '#050506',
@@ -515,15 +515,15 @@ export function migrateAppearancePrefs(parsed: Record<string, unknown>): Appeara
     }
   }
 
-  // Ink is the only palette — force family regardless of stored prefs.
+  // Ink is the only palette, force family regardless of stored prefs.
   return { family: 'ink', mode };
 }
 
-/** Legacy names — kept for older tests / imports. */
+/** Legacy names, kept for older tests / imports. */
 export const linenColors = inkLight;
 export const hearthColors = inkDark;
 
-/** Live palette — ThemeProvider assigns into this so JSX `colors.*` follows the active theme.
+/** Live palette, ThemeProvider assigns into this so JSX `colors.*` follows the active theme.
  *  StyleSheet.create still snapshots; those modules must call makeStyles(colors). */
 export const colors: ThemeColors = { ...inkDark };
 
@@ -597,7 +597,7 @@ export const radius = {
   md: 5,
   lg: 5,
   xl: 5,
-  /** Fully rounded — only for non-interactive pills / badges. */
+  /** Fully rounded, only for non-interactive pills / badges. */
   full: 999,
 } as const;
 
@@ -611,7 +611,7 @@ export const fonts = {
 } as const;
 
 /**
- * Soft elevation — closer to iOS: light drop, no heavy neumorphic inset glow.
+ * Soft elevation, closer to iOS: light drop, no heavy neumorphic inset glow.
  */
 export const shadows = {
   card: {

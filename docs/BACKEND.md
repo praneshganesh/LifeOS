@@ -1,6 +1,6 @@
 # Backend (staging)
 
-LifeOS stays **offline-capable**. Supabase is Auth + Postgres + Storage for sync — not a dump of the whole household as one JSON blob.
+LifeOS stays **offline-capable**. Supabase is Auth + Postgres + Storage for sync, not a dump of the whole household as one JSON blob.
 
 **Architecture (household-scoped rows, outbox, airplane mode, media bucket):** see [`docs/SYNC_ARCHITECTURE.md`](./SYNC_ARCHITECTURE.md).  
 The `life_stores` JSON snapshot is now **prefs only**; domain data lives in per-module tables.
@@ -97,7 +97,7 @@ Turn on **Anonymous** sign-ins in the staging Auth providers (or `enable_anonymo
 
 The app opens an anonymous session automatically when `EXPO_PUBLIC_SUPABASE_URL` + publishable key are set. Settings → Export & backup shows last sync and the recovery code.
 
-**Sign in with Apple** links the anonymous user (`linkIdentity` + IdToken) or reclaims on a new device (`signInWithIdToken`). Setup: App Store Connect capability + Supabase Apple provider + Manual linking — see [`AUTH_APPLE.md`](./AUTH_APPLE.md). Settings → Account exposes the UI; paywall / invite soft-nudge “Save with Apple”.
+**Sign in with Apple** links the anonymous user (`linkIdentity` + IdToken) or reclaims on a new device (`signInWithIdToken`). Setup: App Store Connect capability + Supabase Apple provider + Manual linking, see [`AUTH_APPLE.md`](./AUTH_APPLE.md). Settings → Account exposes the UI; paywall / invite soft-nudge “Save with Apple”.
 
 ## Onboarding vs Apple App Privacy
 
@@ -114,7 +114,7 @@ Those are the product. They are **not** required for an account.
 **Sign in with Apple (see `AUTH_APPLE.md`):**
 
 - Collect **User ID** only → App Functionality (sync / seats)
-- Hide My Email / private relay — do not also ask for a personal email
+- Hide My Email / private relay: do not also ask for a personal email
 - Do **not** request name from Apple unless we show it in UI we cannot get another way
 - Notifications: optional permission, not an account field
 

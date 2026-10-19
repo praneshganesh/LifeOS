@@ -86,7 +86,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setFamily = useCallback(async (_family: ThemeFamily) => {
-    // Ink is the only palette — ignore family changes.
+    // Ink is the only palette, ignore family changes.
     await persist({ ...prefs, family: 'ink' });
   }, [persist, prefs]);
 

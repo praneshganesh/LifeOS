@@ -33,6 +33,7 @@ import { TalkOverlayProvider } from '@/lib/TalkOverlayContext';
 import { ToastProvider } from '@/lib/ToastContext';
 import { CurrencyProvider } from '@/lib/CurrencyContext';
 import { FloatingNav, TalkOrb } from '@/components/TalkOverlay';
+import { ExpiryNotificationSync } from '@/components/ExpiryNotificationSync';
 import 'react-native-reanimated';
 
 export { ErrorBoundary } from 'expo-router';
@@ -122,6 +123,7 @@ function RootNavigation({
         <Stack.Screen name="notifications/index" options={{ headerShown: false }} />
         <Stack.Screen name="reports/index" options={{ headerShown: false }} />
         <Stack.Screen name="things/index" options={{ headerShown: false }} />
+        <Stack.Screen name="things/create" options={{ title: 'New thing', headerBackTitle: 'Cancel' }} />
       </Stack>
       {!showBrandSplash ? <TalkOverlayHost /> : null}
       {showBrandSplash ? <BrandSplash onFinished={onBrandSplashFinished} /> : null}
@@ -171,6 +173,7 @@ export default function RootLayout() {
                         <TalkOverlayProvider>
                           <ToastProvider>
                             <CurrencyProvider>
+                            <ExpiryNotificationSync />
                             <AppLockGate>
                               <OnboardingGate>
                                 <PlanGate>

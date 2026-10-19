@@ -132,7 +132,7 @@ export function AssetEditor({ assetId }: { assetId: string }) {
 
       showToast('Changes saved');
     } catch {
-      showError('Couldn’t save changes — try again.');
+      showError('Couldn’t save changes. Try again.');
     }
   }
 

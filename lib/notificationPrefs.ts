@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const STORAGE_KEY = 'lifeos:notif-prefs:v1';
 
 export type NotificationPrefs = {
-  /** Master switch — request OS permission when enabled */
+  /** Master switch, request OS permission when enabled */
   push: boolean;
   maintenance: boolean;
   warranties: boolean;
@@ -11,6 +11,7 @@ export type NotificationPrefs = {
   returns: boolean;
   documents: boolean;
   family: boolean;
+  subscriptions: boolean;
   /**
    * Quiet hours start HH:MM local (inclusive). Planning alerts are suppressed
    * while the clock is inside [start, end) wrapping midnight.
@@ -28,6 +29,7 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   returns: true,
   documents: true,
   family: true,
+  subscriptions: true,
   quietHoursStart: '22:00',
   quietHoursEnd: '07:00',
 };

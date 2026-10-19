@@ -5,7 +5,7 @@
  *
  * Offline-first invariants:
  * - Local writes never wait on this module (outbox is drained best-effort).
- * - Failures are recorded and retried on the next schedule/boot — never thrown
+ * - Failures are recorded and retried on the next schedule/boot, never thrown
  *   into UI code paths.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -517,7 +517,7 @@ export async function syncRowsNow(): Promise<void> {
     await saveIdMapIfDirty();
     if (changedTables.size) emitApplied([...changedTables]);
   } catch {
-    // Offline / auth hiccup — the outbox keeps everything; retry later.
+    // Offline / auth hiccup, the outbox keeps everything; retry later.
     await saveIdMapIfDirty().catch(() => undefined);
   } finally {
     syncing = false;
@@ -530,7 +530,7 @@ export async function syncRowsNow(): Promise<void> {
 
 let syncTimer: ReturnType<typeof setTimeout> | null = null;
 
-/** Debounced sync — call after any local mutation (fire-and-forget). */
+/** Debounced sync, call after any local mutation (fire-and-forget). */
 export function scheduleRowSync(): void {
   if (!isSupabaseConfigured()) return;
   if (syncTimer) clearTimeout(syncTimer);

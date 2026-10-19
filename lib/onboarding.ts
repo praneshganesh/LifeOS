@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const ONBOARDING_STORAGE_KEY = 'lifeos:onboarding:v1';
 
-/** What the user said they care about during setup — product signal + UI hints. */
+/** What the user said they care about during setup, product signal + UI hints. */
 export type OnboardingIntent =
   | 'things'
   | 'reminders'
@@ -16,12 +16,12 @@ export const ONBOARDING_INTENT_OPTIONS: Array<{
   label: string;
   hint: string;
 }> = [
-  { id: 'things', label: 'Things I own', hint: 'Warranties, gear, documents' },
-  { id: 'reminders', label: 'Reminders', hint: 'Last-done & due dates' },
-  { id: 'habits', label: 'Habits', hint: 'Daily check-ins' },
-  { id: 'classes', label: 'Classes', hint: 'Sessions & packs' },
-  { id: 'money', label: 'Money', hint: 'Expenses & subscriptions' },
-  { id: 'family', label: 'Household', hint: 'People you share life with' },
+  { id: 'things', label: 'My things', hint: 'Warranties, receipts, IDs' },
+  { id: 'reminders', label: 'Reminders', hint: 'Chores and due dates' },
+  { id: 'habits', label: 'Habits', hint: 'Small daily wins' },
+  { id: 'classes', label: 'Classes', hint: 'Lessons and packs' },
+  { id: 'money', label: 'Money', hint: 'Spending and bills' },
+  { id: 'family', label: 'Family', hint: 'Everyone at home' },
 ];
 
 export type OnboardingState = {
@@ -56,7 +56,7 @@ export async function isOnboardingDone(): Promise<boolean> {
       const parsed = JSON.parse(raw) as Partial<OnboardingState>;
       if (parsed?.done === true) return true;
     }
-    // Pre-P1 installs already using the app — don't force the tour
+    // Pre-P1 installs already using the app, don't force the tour
     if (await hasExistingUserData()) {
       await completeOnboarding();
       return true;

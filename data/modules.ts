@@ -453,7 +453,7 @@ export const notifications: NotificationItem[] = [
   {
     id: 'n1',
     title: 'Return window closing',
-    body: 'WH-1000XM5 — 2 days left to return on Amazon.',
+    body: 'WH-1000XM5: 2 days left to return on Amazon.',
     when: 'Just now',
     unread: true,
     type: 'return',

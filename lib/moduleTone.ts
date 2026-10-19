@@ -40,7 +40,7 @@ function themeHex(key: ModuleToneKey, colors: ThemeColors): string {
 
 /**
  * Shared tile + detail-hero color for a module (Today and Life).
- * Primary CTAs stay `colors.accent` — this is only for module identity.
+ * Primary CTAs stay `colors.accent`, this is only for module identity.
  */
 export function moduleTone(
   key: ModuleToneKey,
@@ -50,7 +50,7 @@ export function moduleTone(
   const fallback = MODULE_TONE_FALLBACK[key];
   let hex = themeHex(key, colors);
 
-  // Ink maps accent and amber to the same gold — Things vs Expenses would collide.
+  // Ink maps accent and amber to the same gold, Things vs Expenses would collide.
   const accentIsAmber =
     colors.accent.replace(/#/g, '').toLowerCase() ===
     colors.amber.replace(/#/g, '').toLowerCase();

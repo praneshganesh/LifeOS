@@ -40,7 +40,7 @@ export function confirmShareDocument(
 }
 
 /**
- * For passports / Emirates ID — photo+details, or number+expiry text only.
+ * For passports / Emirates ID, photo+details, or number+expiry text only.
  */
 export function chooseShareMode(item: ShareableDocument): Promise<ShareMode | null> {
   if (!isIdentityDoc(item.documentKind)) {
@@ -61,7 +61,7 @@ export function chooseShareMode(item: ShareableDocument): Promise<ShareMode | nu
   });
 }
 
-/** Number + expiry first — what people usually need when sharing an ID. */
+/** Number + expiry first, what people usually need when sharing an ID. */
 export function buildTextSummary(item: ShareableDocument, mode: ShareMode): string {
   const kind =
     item.documentKind === 'passport'

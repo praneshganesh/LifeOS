@@ -37,7 +37,7 @@ export type LastDoneLog = {
 
 export type LastDoneItem = {
   id: string;
-  /** Free-form activity, e.g. "Changed AC filter" — reused across logs */
+  /** Free-form activity, e.g. "Changed AC filter", reused across logs */
   label: string;
   createdAt: string;
   /** History of times done, newest first */
@@ -48,7 +48,7 @@ export type LastDoneItem = {
   assignedTo?: string;
   /** Absolute next-reminder date, if set */
   remindAt?: string;
-  /** Extra context the user spoke — not shown in lists. */
+  /** Extra context the user spoke, not shown in lists. */
   notes?: string;
   /**
    * Optional recurring interval. When set, each mark-done
@@ -60,16 +60,16 @@ export type LastDoneItem = {
    * `auto` = due-time band rules; `custom` = userAlerts only.
    */
   alertMode?: AlertMode;
-  /** When alertMode is custom — up to two user-chosen alerts. */
+  /** When alertMode is custom, up to two user-chosen alerts. */
   userAlerts?: UserAlertSpec[];
-  /** Last local mutation time — the last-write-wins clock for row sync. */
+  /** Last local mutation time, the last-write-wins clock for row sync. */
   updatedAt?: string;
 };
 
 export type LogDoneInput = {
   id?: string;
   label?: string;
-  /** When it was done — defaults to now (YYYY-MM-DD or ISO) */
+  /** When it was done, defaults to now (YYYY-MM-DD or ISO) */
   doneAt?: string;
   /** Link (or re-link) this activity to an inventory item */
   inventoryItemId?: string | null;
@@ -107,7 +107,7 @@ export function daysUntil(iso: string, now = new Date()): number {
 }
 
 /**
- * Today’s reminder progress — same shape as Habits (`done / total`).
+ * Today’s reminder progress, same shape as Habits (`done / total`).
  * Open = due today or overdue. Done = completed today (recurring rolled
  * forward, or a one-shot whose schedule was cleared on mark-done).
  */
@@ -184,16 +184,16 @@ export function hasActivityHistory(item: LastDoneItem): boolean {
 }
 
 /**
- * Year heatmap is for recurring habits — not one-shot reminders.
+ * Year heatmap is for recurring habits, not one-shot reminders.
  * Marking a Once reminder done clears `remindAt`, so we also require either a
  * recurring interval or multiple logs (real history) before showing the grid.
  */
 export function shouldShowActivityHeatmap(item: LastDoneItem): boolean {
   const logs = item.logs?.length ?? 0;
   if (logs === 0) return false;
-  // Weekly / Every — habit calendar.
+  // Weekly / Every, habit calendar.
   if (item.remindInterval) return true;
-  // Still scheduled as Once — never.
+  // Still scheduled as Once, never.
   if (item.remindAt) return false;
   // Unscheduled (or completed one-shot): only after more than one completion.
   return logs >= 2;
@@ -209,7 +209,7 @@ export function yearsWithLogs(item: LastDoneItem): number[] {
   return [...years].sort((a, b) => b - a);
 }
 
-/** Default year grid — most recent year with activity, else this year. */
+/** Default year grid, most recent year with activity, else this year. */
 export function defaultActivityYear(item: LastDoneItem, now = new Date()): number {
   return yearsWithLogs(item)[0] ?? now.getFullYear();
 }
@@ -549,7 +549,7 @@ export function findMatches(items: LastDoneItem[], query: string): LastDoneItem[
 export function startOfDayISO(date: Date | string = new Date()): string {
   const d = typeof date === 'string' ? parseDateInput(date) : new Date(date);
   if (!d || Number.isNaN(d.getTime())) return localDayKey();
-  // Store calendar days as YYYY-MM-DD (local) — never UTC ISO midnight.
+  // Store calendar days as YYYY-MM-DD (local), never UTC ISO midnight.
   return localDayKey(d);
 }
 

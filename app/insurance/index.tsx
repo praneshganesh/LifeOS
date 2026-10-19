@@ -5,7 +5,9 @@ import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { FilterChips, ListCard, ListRow, StatStrip } from '@/components/ui/ListKit';
 import { Text } from '@/components/ui/Text';
 import { CaptureContextButton } from '@/components/CaptureContextButton';
+import { AddButton, HeaderActions } from '@/components/ui/AddButton';
 import { useInventory } from '@/lib/InventoryContext';
+import { useDeleteWithConfirm } from '@/lib/useDeleteWithConfirm';
 import {
   expiryDaysLeft,
   expiryMeta,
@@ -35,7 +37,8 @@ const BUCKET_LABEL: Record<InsuranceBucket, string> = {
 
 export default function InsuranceScreen() {
   const router = useRouter();
-  const { items } = useInventory();
+  const { items, removeItem } = useInventory();
+  const deleteWithConfirm = useDeleteWithConfirm();
   const [filter, setFilter] = useState('all');
 
   const policies = useMemo(
@@ -72,7 +75,15 @@ export default function InsuranceScreen() {
     <ModuleScreen
       title="Insurance"
       defaultOrigin="things"
-      right={<CaptureContextButton kind="insurance" label="Capture insurance" />}
+      right={
+        <HeaderActions>
+          <CaptureContextButton kind="insurance" label="Capture insurance" />
+          <AddButton
+            onPress={() => router.push('/things/create?kind=insurance' as Href)}
+            label="Add policy"
+          />
+        </HeaderActions>
+      }
     >
       <StatStrip
         items={[
@@ -113,6 +124,7 @@ export default function InsuranceScreen() {
                           : undefined
                   }
                   onPress={() => router.push(`/asset/${p.id}` as Href)}
+                  onDelete={() => void deleteWithConfirm(p.name, () => removeItem(p.id))}
                   last={i === list.length - 1}
                 />
               );

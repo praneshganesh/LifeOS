@@ -1,4 +1,4 @@
-# Saavi Chat API & Talk System — Consolidated Master Tracker
+# Saavi Chat API & Talk System: Consolidated Master Tracker
 
 This master document tracks all reviews, architectural decisions, code changes, and pending roadmap items across the entire Saavi Chat & Talk integration (Server API, Client Action Engine, Context Builders, Network Transport, and Domain Layer).
 
@@ -117,7 +117,7 @@ This master document tracks all reviews, architectural decisions, code changes, 
 2. **Shared `localDate` Integration**:
    - Added `localDate?: string` parameter to `runChatAgent()`, forwarding `params.localDate || localDayKey()`.
 3. **Domain Type Optionality Verified**:
-   - Checked `ClassPack` in `lib/classes.ts` and `Subscription` in `lib/subscriptions.ts` — verified `startsOn`, `endsOn`, and `renewsOn` are mandatory domain fields and kept them mandatory in `agent.ts`.
+   - Checked `ClassPack` in `lib/classes.ts` and `Subscription` in `lib/subscriptions.ts`, verified `startsOn`, `endsOn`, and `renewsOn` are mandatory domain fields and kept them mandatory in `agent.ts`.
 4. **Development Network Error Logging**:
    - Added `if (__DEV__) console.warn('[Saavi chat] request failed', err);` for technical debugging while preserving user-friendly `ChatAgentError`.
 
@@ -143,7 +143,7 @@ This master document tracks all reviews, architectural decisions, code changes, 
    - When user provides `scheduleDays` without `scheduleTime`, `createClassPack` defaults time to `9:00 AM` and sets `scheduleTimeInferred = true`.
    - When user explicitly supplies or updates `scheduleTime`, `scheduleTimeInferred = false`.
 2. **Assumption Disclosure & Edit Route**:
-   - Chat confirmation for inferred class time discloses the assumption: *"Added Skating — 12 classes. I've assumed 9:00 AM since you didn't specify a time."*
+   - Chat confirmation for inferred class time discloses the assumption: *"Added Skating, 12 classes. I've assumed 9:00 AM since you didn't specify a time."*
    - Automatically maintains `class` session focus so the user can easily tap or navigate to edit.
    - UI (`app/classes/[id].tsx`) shows *"Time assumed"* on class packs with inferred times and clears the inference flag upon saving edited details.
 3. **Trigger Calculation Logic**:

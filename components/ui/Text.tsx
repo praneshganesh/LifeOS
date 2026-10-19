@@ -13,7 +13,7 @@ type Variant =
   | 'label'
   | 'score';
 
-/** Prefer Medium over heavy Bold — keeps the UI modern, not shouty. */
+/** Prefer Medium over heavy Bold, keeps the UI modern, not shouty. */
 export function Text({
   variant = 'body',
   style,

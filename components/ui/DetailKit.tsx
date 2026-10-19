@@ -22,7 +22,7 @@ export const DETAIL_DOCK_PAD = 120;
 export const DETAIL_STICKY_PAD = 28;
 
 type FlushActionProps = {
-  /** Edge-to-edge sticky bar — no radius, no gap, safe-area fill. */
+  /** Edge-to-edge sticky bar, no radius, no gap, safe-area fill. */
   flush?: boolean;
   flushSafeBottom?: number;
 };
@@ -38,7 +38,7 @@ export function detailTone(
   };
 }
 
-/** Dotted identity card — title, optional meta, optional children (CTAs). */
+/** Dotted identity card, title, optional meta, optional children (CTAs). */
 export function DetailHero({
   eyebrow,
   title,
@@ -53,7 +53,7 @@ export function DetailHero({
   titlePlaceholder,
   onPress,
   compact,
-  /** Sits on the title row (e.g. a highlight stat) — keeps the hero short. */
+  /** Sits on the title row (e.g. a highlight stat), keeps the hero short. */
   trailing,
   children,
   style,
@@ -69,9 +69,9 @@ export function DetailHero({
   onTitleChange?: (v: string) => void;
   onTitleCommit?: () => void;
   titlePlaceholder?: string;
-  /** Whole hero tap — e.g. open Plan & billing from Profile. */
+  /** Whole hero tap, e.g. open Plan & billing from Profile. */
   onPress?: () => void;
-  /** Less padding — profile identity card. */
+  /** Less padding, profile identity card. */
   compact?: boolean;
   trailing?: ReactNode;
   children?: ReactNode;
@@ -186,7 +186,7 @@ export function DetailSection({
   );
 }
 
-/** 16px field — bordered soft fill (avoids iOS Safari zoom on focus). */
+/** 16px field, bordered soft fill (avoids iOS Safari zoom on focus). */
 export function DetailField(props: TextInputProps & { soft?: boolean }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -355,7 +355,7 @@ export function DetailPrimaryButton({
   );
 }
 
-/** Top-chrome edit — solid accent circle with light icon (reads as a real control). */
+/** Top-chrome edit, solid accent circle with light icon (reads as a real control). */
 export function DetailEditButton({
   onPress,
 }: {
@@ -385,7 +385,7 @@ export function DetailEditButton({
   );
 }
 
-/** Top-chrome delete — bare icon, no fill (secondary to sticky primary). */
+/** Top-chrome delete, bare icon, no fill (secondary to sticky primary). */
 export function DetailTrashButton({
   onPress,
   disabled,
@@ -414,7 +414,7 @@ export function DetailTrashButton({
   );
 }
 
-/** Soft outlined full-width action — rare; prefer DetailEditButton in chrome. */
+/** Soft outlined full-width action, rare; prefer DetailEditButton in chrome. */
 export function DetailSecondaryButton({
   label,
   onPress,
@@ -454,7 +454,7 @@ export function DetailSecondaryButton({
 }
 
 /**
- * Destructive action — always labeled "Remove" unless overridden.
+ * Destructive action, always labeled "Remove" unless overridden.
  * Soft coral pill (not plain text).
  */
 export function DetailRemoveButton({
@@ -495,7 +495,7 @@ export function DetailRemoveButton({
   );
 }
 
-/** @deprecated Use DetailRemoveButton — kept so older imports keep working. */
+/** @deprecated Use DetailRemoveButton, kept so older imports keep working. */
 export function DetailRemoveLink(props: {
   label?: string;
   onPress: () => void;
@@ -504,7 +504,7 @@ export function DetailRemoveLink(props: {
 }
 
 /**
- * Sticky bottom action bar — flush edge-to-edge.
+ * Sticky bottom action bar, flush edge-to-edge.
  * One button spans full width; two sit 50/50 with no gap.
  * Pair with ModuleScreen `footer` or place as a sibling under ScrollView.
  */

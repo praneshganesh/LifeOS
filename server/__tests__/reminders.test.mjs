@@ -53,7 +53,7 @@ describe('chat-api reminder repair', () => {
   });
 
   it('parses every Tuesday and Friday at 6:30 AM', () => {
-    // Wednesday 9 Sep 2026 12:00 — next fire is Friday 11 Sep
+    // Wednesday 9 Sep 2026 12:00, next fire is Friday 11 Sep
     const wed = new Date(2026, 8, 9, 12, 0, 0);
     const utterance =
       'Remind me every Tuesday and Friday at 6:30 AM to stretch';

@@ -5,12 +5,12 @@ export type PersonRef = {
   assignedTo: string;
 };
 
-/** Seed / empty profile — not a real given name. */
+/** Seed / empty profile, not a real given name. */
 export function isPlaceholderName(name: string | undefined): boolean {
   return !name?.trim() || /^you$/i.test(name.trim());
 }
 
-/** The local “You” member — first-person Talk (“I attended”) binds here. */
+/** The local “You” member, first-person Talk (“I attended”) binds here. */
 export function selfMember(
   members: HouseholdMember[]
 ): HouseholdMember | undefined {
@@ -130,7 +130,7 @@ export function resolvePersonMention(
     }
   }
 
-  // ASR rarely spells names right ("Saara" → "Sara"/"Sarah") — fuzzy-bind the
+  // ASR rarely spells names right ("Saara" → "Sara"/"Sarah"), fuzzy-bind the
   // spoken enroll-object / possessive word before inventing a new person.
   const enrollWord = t.match(
     /\b(?:for|to|enrolled|enrolling|booked|registered|signed\s+up)\s+([a-z][a-z'’-]+)\b/i
@@ -164,7 +164,7 @@ export function looksLikeFirstPersonSelf(utterance: string): boolean {
   ) {
     return false;
   }
-  // "I enrolled Maya…" — the verb has a person object, so it isn't about self.
+  // "I enrolled Maya…", the verb has a person object, so it isn't about self.
   if (
     /^i\s+(?:enrolled|enrolling|signed\s+up|registered|booked)\s+(?!for\b|in\b|into\b|to\b|at\b|myself\b|my\b)/i.test(
       t
@@ -213,7 +213,7 @@ export function spokenEnrolleeName(
   if (!word) return null;
   const lower = word.toLowerCase();
   if (ENROLL_OBJECT_STOPWORDS.has(lower)) return null;
-  // Fuzzy too — "Sara" must bind to the member "Saara", not spawn a twin.
+  // Fuzzy too, "Sara" must bind to the member "Saara", not spawn a twin.
   if (fuzzyMatchMember(word, members)) return null;
   return word[0]!.toUpperCase() + word.slice(1);
 }
@@ -222,7 +222,7 @@ function escapeRe(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/** "ishaan" → "ishan" — ASR drops doubled letters constantly. */
+/** "ishaan" → "ishan", ASR drops doubled letters constantly. */
 function collapseRepeats(s: string): string {
   return s.replace(/(.)\1+/g, '$1');
 }
@@ -247,7 +247,7 @@ function editDistance(a: string, b: string): number {
 /**
  * Bind an ASR-mangled spoken name ("Sara", "Sarah") to the one household
  * member it plausibly is ("Saara"). Exact match first; then doubled-letter
- * collapse plus a small edit distance. Returns undefined when ambiguous —
+ * collapse plus a small edit distance. Returns undefined when ambiguous.
  * never guess between two members.
  */
 export function fuzzyMatchMember(
@@ -277,7 +277,7 @@ export function personById(members: HouseholdMember[], id?: string | null) {
 }
 
 /**
- * Live owner name for display — the member's CURRENT name wins over the
+ * Live owner name for display, the member's CURRENT name wins over the
  * assignedTo string copied at creation time (which goes stale on rename).
  */
 export function displayNameFor(
@@ -325,7 +325,7 @@ export function resolveAssignment(params: {
         ? fuzzyMatchMember(name, members)
         : undefined);
     if (hit) return { personId: hit.id, assignedTo: hit.name };
-    // Only trust an unknown name if the user actually said it this turn —
+    // Only trust an unknown name if the user actually said it this turn.
     // that filters model hallucinations but keeps "I enrolled Maya…".
     if (
       !/^(you|me|myself)$/.test(lower) &&

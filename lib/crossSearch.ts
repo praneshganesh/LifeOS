@@ -15,6 +15,7 @@ import {
   labelForCycle,
 } from '@/lib/subscriptions';
 import type { LastDoneItem } from '@/lib/lastDone';
+import { hasValue } from '@/lib/inventoryNormalize';
 
 export type SearchHitKind =
   | 'thing'
@@ -75,7 +76,7 @@ export type CrossSearchResult = {
   chips: string[];
 };
 
-/** Local substring search across LifeOS stores — no LLM. */
+/** Local substring search across LifeOS stores, no LLM. */
 export function crossSearch(input: CrossSearchInput): CrossSearchResult {
   const q = input.query.trim().toLowerCase();
   const chips = suggestChips(input);
@@ -118,11 +119,11 @@ export function crossSearch(input: CrossSearchInput): CrossSearchResult {
       id: a.id,
       title: a.name,
       subtitle: [
-        a.brand !== 'Unknown' ? a.brand : null,
+        a.brand,
         a.room,
         input.spaceNameById[a.spaceId],
       ]
-        .filter(Boolean)
+        .filter(hasValue)
         .join(' · '),
       href: `/asset/${a.id}`,
       icon: a.icon,

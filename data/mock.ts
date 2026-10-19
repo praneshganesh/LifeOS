@@ -56,7 +56,7 @@ export function greetingForNow(date = new Date()) {
   return 'Good evening';
 }
 
-/** @deprecated Use buildAttentionItems — kept empty for F5 */
+/** @deprecated Use buildAttentionItems, kept empty for F5 */
 export const attentionItems: AttentionItem[] = [];
 export const insights: Insight[] = [];
 

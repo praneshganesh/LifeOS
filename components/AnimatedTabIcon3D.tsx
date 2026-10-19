@@ -8,7 +8,7 @@ type Tone = 'soft' | 'forest';
 type Props = {
   name: Icon3DName;
   focused?: boolean;
-  /** Kept for call-site compatibility — unused when static */
+  /** Kept for call-site compatibility, unused when static */
   delayMs?: number;
   size?: number;
   tone?: Tone;
@@ -16,7 +16,7 @@ type Props = {
   style?: ViewStyle;
 };
 
-/** Soft 3D badge — static (no motion). */
+/** Soft 3D badge, static (no motion). */
 export function AnimatedTabIcon3D({
   name,
   focused = false,

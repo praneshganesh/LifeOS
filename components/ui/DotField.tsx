@@ -89,7 +89,7 @@ export function isNearGray(hex: string): boolean {
 }
 
 /**
- * Soft card fill — muted, not candy.
+ * Soft card fill, muted, not candy.
  * Light → airy low-chroma wash. Dark → deep low-chroma wash.
  */
 export function softCardBg(
@@ -113,7 +113,7 @@ export function hubCardBg(themeHex: string, light: boolean, vivid: string): stri
 }
 
 /**
- * Dense dotted field — tight grid, stronger top-left, fades to bottom-right.
+ * Dense dotted field, tight grid, stronger top-left, fades to bottom-right.
  */
 export function DotField({
   tone,

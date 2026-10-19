@@ -49,7 +49,7 @@ export type AlertFire = {
   kind: AlertKind;
   /** Minutes before due when relevant (for copy). */
   minutesBefore?: number;
-  /** Final deadline nudge — may fire inside quiet hours. */
+  /** Final deadline nudge, may fire inside quiet hours. */
   isFinal?: boolean;
 };
 
@@ -96,7 +96,7 @@ export function timeBandForDue(
   if (mins > 8 * 60 && mins < 12 * 60) return 'morning';
   if (mins >= 12 * 60 && mins <= 18 * 60) return 'afternoon';
   if (mins > 18 * 60) return 'evening';
-  // Before 5 AM — treat as early morning (prev evening + 15m before)
+  // Before 5 AM, treat as early morning (prev evening + 15m before)
   return 'early_morning';
 }
 
@@ -292,7 +292,7 @@ function applyFilters(
     })
     .sort((a, b) => a.at.getTime() - b.at.getTime());
 
-  // Consolidate within 30 minutes — keep closer to deadline.
+  // Consolidate within 30 minutes, keep closer to deadline.
   const dueMs = due?.getTime() ?? Number.POSITIVE_INFINITY;
   const consolidated: AlertFire[] = [];
   for (const f of list) {
@@ -486,6 +486,62 @@ export const CUSTOM_ALERT_PRESETS: {
     allDayOnly: true,
   },
 ];
+
+export type PlannedFire = { at: Date; title: string; body: string };
+
+export type DatedReminderInput = {
+  label: string;
+  remindAt?: string;
+  remindInterval?: { hour?: number; minute?: number };
+  createdAt: string;
+  alertMode?: AlertMode;
+  userAlerts?: UserAlertSpec[];
+};
+
+/**
+ * OS alerts for a dated (non-weekday) reminder: the same schedule the detail
+ * screen previews, plus one overdue nudge the morning after the due day.
+ * Only future times are returned, so re-running on every launch never
+ * re-fires a reminder that has already passed.
+ */
+export function planDatedReminderFires(
+  item: DatedReminderInput,
+  prefs: { quietHoursStart?: string; quietHoursEnd?: string },
+  now = new Date()
+): PlannedFire[] {
+  const dueDate = item.remindAt?.trim().slice(0, 10) ?? '';
+  const p = parseDueDate(dueDate);
+  if (!p) return [];
+  const dueTime =
+    item.remindInterval?.hour != null
+      ? { hour: item.remindInterval.hour, minute: item.remindInterval.minute ?? 0 }
+      : null;
+  const createdAt = new Date(item.createdAt);
+  const fires = computeAlertSchedule({
+    dueDate,
+    dueTime,
+    createdAt: Number.isNaN(createdAt.getTime()) ? new Date(0) : createdAt,
+    now,
+    alertMode: item.alertMode,
+    userAlerts: item.userAlerts,
+    quietHoursStart: prefs.quietHoursStart,
+    quietHoursEnd: prefs.quietHoursEnd,
+    label: item.label,
+  });
+  const out: PlannedFire[] = fires.map((f) => ({
+    at: f.at,
+    ...formatAlertFireCopy(f, item.label, dueDate, dueTime),
+  }));
+  const morningAfter = atLocal(p.y, p.m, p.d + 1, 9, 0);
+  if (morningAfter.getTime() > now.getTime()) {
+    out.push({
+      at: morningAfter,
+      title: item.label.trim() || 'Reminder',
+      body: 'This is overdue. Mark it done when you can.',
+    });
+  }
+  return out;
+}
 
 /** Defaults when switching to Custom with no auto fires left. */
 export function defaultCustomAlertSeed(

@@ -5,6 +5,7 @@ import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { FilterChips, ListCard, ListRow, StatStrip } from '@/components/ui/ListKit';
 import { Text } from '@/components/ui/Text';
 import { CaptureContextButton } from '@/components/CaptureContextButton';
+import { AddButton, HeaderActions } from '@/components/ui/AddButton';
 import { useInventory } from '@/lib/InventoryContext';
 import { warrantyRecordsFromInventory } from '@/lib/attention';
 import { colors } from '@/constants/theme';
@@ -56,9 +57,9 @@ export default function WarrantiesScreen() {
 
   const emptyCopy =
     items.length === 0
-      ? 'No things yet — add appliances or electronics to track warranties.'
+      ? 'No things yet. Add appliances or electronics to track warranties.'
       : filter === 'missing'
-        ? 'Every listed thing already has a warranty date — or add expiry on the item.'
+        ? 'Every listed thing already has a warranty date. You can also add an expiry on the item.'
         : filter === 'all'
           ? 'Nothing matched. Capture a warranty card or set expiry on a Thing.'
           : `No ${filter} warranties.`;
@@ -67,7 +68,15 @@ export default function WarrantiesScreen() {
     <ModuleScreen
       title="Warranties"
       defaultOrigin="things"
-      right={<CaptureContextButton kind="warranty" label="Capture warranty" />}
+      right={
+        <HeaderActions>
+          <CaptureContextButton kind="warranty" label="Capture warranty" />
+          <AddButton
+            onPress={() => router.push('/things/create' as Href)}
+            label="Add item with warranty"
+          />
+        </HeaderActions>
+      }
     >
       <StatStrip
         items={[

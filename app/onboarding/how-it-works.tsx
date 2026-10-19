@@ -1,18 +1,43 @@
 import { useMemo } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Camera, MessageSquare, Mic } from 'lucide-react-native';
+import Animated, { ZoomIn } from 'react-native-reanimated';
+import { Camera, MessageCircle, Mic, type LucideIcon } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
+import {
+  OnboardingPrimaryButton,
+  OnboardingScreen,
+  enter,
+  useOnboardingName,
+} from '@/components/OnboardingKit';
 import { completeOnboarding } from '@/lib/onboarding';
-import { type ThemeColors, fonts, radius, spacing } from '@/constants/theme';
+import { type ThemeColors, fonts, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
 
-export default function OnboardingHowItWorks() {
+const WAYS: Array<{
+  key: string;
+  Icon: LucideIcon;
+  title: string;
+  body?: string;
+  example?: string;
+  primary?: boolean;
+}> = [
+  {
+    key: 'capture',
+    Icon: Camera,
+    title: 'Capture',
+    body: 'Snap a receipt, a warranty card, or an ID. You check it before it’s saved.',
+    primary: true,
+  },
+  { key: 'ask', Icon: MessageCircle, title: 'Ask', example: 'When does my passport expire?' },
+  { key: 'talk', Icon: Mic, title: 'Talk', example: 'I just watered the plants.' },
+];
+
+export default function OnboardingDone() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const insets = useSafeAreaInsets();
   const router = useRouter();
+  const name = useOnboardingName();
 
   async function finish() {
     await completeOnboarding();
@@ -20,112 +45,123 @@ export default function OnboardingHowItWorks() {
   }
 
   return (
-    <View style={[styles.root, { paddingBottom: Math.max(insets.bottom, 16) + 8 }]}>
-      <View style={styles.body}>
-        <Text style={styles.step}>Step 5 of 5</Text>
-        <Text style={styles.title}>How you’ll use Saavi</Text>
-        <Text style={styles.lead}>
-          Three ways in — pick whatever fits the moment. Nothing to try right now.
-        </Text>
-
-        <View style={styles.cards}>
-          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.lineStrong }]}>
-            <MessageSquare size={20} color={colors.forest} strokeWidth={2} />
-            <Text style={[styles.cardTitle, { color: colors.ink }]}>Ask</Text>
-            <Text style={[styles.cardHint, { color: colors.mute }]}>
-              Type what happened or what you need — “I walked today”, “when does
-              my passport expire?”
-            </Text>
-          </View>
-          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.lineStrong }]}>
-            <Mic size={20} color={colors.forest} strokeWidth={2} />
-            <Text style={[styles.cardTitle, { color: colors.ink }]}>Talk</Text>
-            <Text style={[styles.cardHint, { color: colors.mute }]}>
-              Speak instead of typing. The floating control opens Talk anytime.
-            </Text>
-          </View>
-          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.lineStrong }]}>
-            <Camera size={20} color={colors.forest} strokeWidth={2} />
-            <Text style={[styles.cardTitle, { color: colors.ink }]}>Capture</Text>
-            <Text style={[styles.cardHint, { color: colors.mute }]}>
-              Snap a receipt, Thing, or ID. We’re still improving auto-read — you
-              can always edit what we pick up.
-            </Text>
-          </View>
+    <OnboardingScreen
+      title={name ? `You’re all set, ${name}.` : 'You’re all set.'}
+      lead="Whenever you want to add or find something, it’s one tap away in the bar at the bottom."
+      footer={<OnboardingPrimaryButton label="Let’s go" onPress={() => void finish()} />}
+    >
+      <Animated.View
+        entering={ZoomIn.springify().damping(15).delay(220)}
+        style={styles.dockWrap}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+      >
+        <View style={[styles.dock, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+          {WAYS.map(({ key, Icon, primary }) => (
+            <View
+              key={key}
+              style={[styles.dockBtn, primary && { backgroundColor: colors.accent }]}
+            >
+              <Icon size={22} color={primary ? colors.accentOn : colors.slate} strokeWidth={2.1} />
+            </View>
+          ))}
         </View>
-      </View>
+      </Animated.View>
 
-      <View style={styles.footer}>
-        <Pressable
-          onPress={() => void finish()}
-          style={({ pressed }) => [styles.cta, pressed && { opacity: 0.92 }]}
-        >
-          <Text style={styles.ctaText}>Enter Saavi</Text>
-        </Pressable>
+      <View style={styles.list}>
+        {WAYS.map(({ key, Icon, title, body, example, primary }, i) => (
+          <Animated.View key={key} entering={enter(3 + i)} style={styles.row}>
+            <View
+              style={[
+                styles.rowIcon,
+                { backgroundColor: primary ? colors.accent : colors.surfaceSoft },
+              ]}
+            >
+              <Icon size={18} color={primary ? colors.accentOn : colors.slate} strokeWidth={2.1} />
+            </View>
+            <View style={styles.rowText}>
+              <Text style={styles.rowTitle}>{title}</Text>
+              {body ? <Text style={styles.rowBody}>{body}</Text> : null}
+              {example ? (
+                <View style={[styles.bubble, { backgroundColor: colors.surfaceSoft }]}>
+                  <Text style={styles.bubbleText}>“{example}”</Text>
+                </View>
+              ) : null}
+            </View>
+          </Animated.View>
+        ))}
       </View>
-    </View>
+    </OnboardingScreen>
   );
 }
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    root: {
-      flex: 1,
-      backgroundColor: colors.bg,
-      paddingHorizontal: spacing.xl,
-      paddingTop: spacing.lg,
-    },
-    body: { flex: 1 },
-    step: {
-      fontFamily: fonts.sansMedium,
-      fontSize: 14,
-      color: colors.mute,
-      marginBottom: spacing.sm,
-    },
-    title: {
-      fontFamily: fonts.sansSemi,
-      fontSize: 28,
-      color: colors.ink,
-      marginBottom: spacing.sm,
-    },
-    lead: {
-      fontFamily: fonts.sans,
-      fontSize: 16,
-      lineHeight: 24,
-      color: colors.mute,
+    dockWrap: {
+      alignItems: 'center',
       marginBottom: spacing.xl,
     },
-    cards: { gap: spacing.md },
-    card: {
-      borderRadius: radius.md,
-      borderWidth: 1.5,
-      padding: spacing.lg,
-      gap: 4,
+    dock: {
+      flexDirection: 'row',
+      gap: 8,
+      padding: 6,
+      borderRadius: 34,
+      borderWidth: StyleSheet.hairlineWidth,
+      shadowColor: '#000',
+      shadowOpacity: 0.25,
+      shadowRadius: 16,
+      shadowOffset: { width: 0, height: 8 },
+      elevation: 6,
     },
-    cardTitle: {
-      fontFamily: fonts.sansSemi,
-      fontSize: 16,
-      marginTop: 6,
-    },
-    cardHint: {
-      fontFamily: fonts.sans,
-      fontSize: 15,
-      lineHeight: 22,
-    },
-    footer: {
-      paddingTop: spacing.lg,
-    },
-    cta: {
+    dockBtn: {
+      width: 52,
       height: 52,
-      borderRadius: radius.md,
-      backgroundColor: colors.forest,
+      borderRadius: 26,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    ctaText: {
-      fontFamily: fonts.sansMedium,
+    list: {
+      gap: spacing.lg,
+    },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 14,
+    },
+    rowIcon: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    rowText: {
+      flex: 1,
+      gap: 6,
+      paddingTop: 7,
+    },
+    rowTitle: {
+      fontFamily: fonts.sansSemi,
       fontSize: 16,
-      color: colors.forestOn,
+      color: colors.ink,
+    },
+    rowBody: {
+      fontFamily: fonts.sans,
+      fontSize: 15,
+      lineHeight: 21,
+      color: colors.mute,
+    },
+    bubble: {
+      alignSelf: 'flex-start',
+      paddingHorizontal: 14,
+      paddingVertical: 9,
+      borderRadius: 18,
+      borderTopLeftRadius: 6,
+    },
+    bubbleText: {
+      fontFamily: fonts.sansMedium,
+      fontSize: 15,
+      color: colors.ink,
     },
   });
 }

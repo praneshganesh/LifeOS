@@ -10,7 +10,7 @@ import {
 export function useModuleBack(options?: {
   /** Used when there is no `from` query param (deep link / replace). */
   defaultOrigin?: ModuleOrigin;
-  /** Parent module label — overrides origin for detail screens (e.g. "Expenses"). */
+  /** Parent module label, overrides origin for detail screens (e.g. "Expenses"). */
   backLabel?: string;
   backFallbackHref?: Href;
   onBack?: () => void;

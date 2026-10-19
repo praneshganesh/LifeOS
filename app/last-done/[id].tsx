@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
+import { webConfirm } from '@/lib/webConfirm';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, Trash2, Bell } from 'lucide-react-native';
 import { Screen } from '@/components/ui/Screen';
@@ -52,7 +53,7 @@ import {
   type AlertFire,
   type UserAlertSpec,
 } from '@/lib/reminderAlerts';
-import { DEFAULT_NOTIFICATION_PREFS } from '@/lib/notificationPrefs';
+import { DEFAULT_NOTIFICATION_PREFS, loadNotificationPrefs } from '@/lib/notificationPrefs';
 import { categorizeLastDone, paintLastDoneCategory } from '@/lib/lastDoneCategories';
 import { blurActiveElement } from '@/lib/a11y';
 import { type ThemeColors, fonts, radius, shadows, spacing } from '@/constants/theme';
@@ -102,13 +103,18 @@ function alertFireTitle(fire: AlertFire): string {
 
 function confirmDelete(message: string): Promise<boolean> {
   if (Platform.OS === 'web') {
-    return Promise.resolve(typeof window !== 'undefined' && window.confirm(message));
+    return webConfirm({ title: 'Delete?', message, confirmLabel: 'Delete', destructive: true });
   }
   return new Promise((resolve) => {
-    Alert.alert('Delete?', message, [
-      { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-      { text: 'Delete', style: 'destructive', onPress: () => resolve(true) },
-    ]);
+    Alert.alert(
+      'Delete?',
+      message,
+      [
+        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+        { text: 'Delete', style: 'destructive', onPress: () => resolve(true) },
+      ],
+      { cancelable: true, onDismiss: () => resolve(false) }
+    );
   });
 }
 
@@ -214,7 +220,7 @@ export default function LastDoneDetailScreen() {
       showToast('Renamed');
     } catch {
       setLabelDraft(item.label);
-      showError('Couldn’t rename — try again.');
+      showError('Couldn’t rename. Try again.');
     }
   }
 
@@ -227,7 +233,7 @@ export default function LastDoneDetailScreen() {
       showToast('Notes saved');
     } catch {
       setNotesDraft(item.notes || '');
-      showError('Couldn’t save notes — try again.');
+      showError('Couldn’t save notes. Try again.');
     }
   }
 
@@ -237,7 +243,7 @@ export default function LastDoneDetailScreen() {
       await updateActivity(item.id, { remindAt: next.trim() });
       showToast('Reminder date updated');
     } catch {
-      showError('Couldn’t update the date — try again.');
+      showError('Couldn’t update the date. Try again.');
     }
   }
 
@@ -266,7 +272,7 @@ export default function LastDoneDetailScreen() {
       });
       if (announce) showToast(announce);
     } catch {
-      showError('Couldn’t update days — try again.');
+      showError('Couldn’t update days. Try again.');
     }
   }
 
@@ -279,7 +285,7 @@ export default function LastDoneDetailScreen() {
       await updateActivity(item.id, { remindInterval: next });
       if (toast) showToast(toast);
     } catch {
-      showError('Couldn’t update the schedule — try again.');
+      showError('Couldn’t update the schedule. Try again.');
     }
   }
 
@@ -324,7 +330,7 @@ export default function LastDoneDetailScreen() {
       await updateActivity(item.id, { remindInterval: null });
       showToast('Reminder off');
     } catch {
-      showError('Couldn’t update the reminder — try again.');
+      showError('Couldn’t update the reminder. Try again.');
     }
   }
 
@@ -340,7 +346,7 @@ export default function LastDoneDetailScreen() {
       await updateActivity(item.id, { remindAt: next });
       showToast('Pick a date');
     } catch {
-      showError('Couldn’t update the reminder — try again.');
+      showError('Couldn’t update the reminder. Try again.');
     }
   }
 
@@ -365,7 +371,7 @@ export default function LastDoneDetailScreen() {
       });
       showToast(`Every ${choice.label}`);
     } catch {
-      showError('Couldn’t update the reminder — try again.');
+      showError('Couldn’t update the reminder. Try again.');
     }
   }
 
@@ -399,7 +405,7 @@ export default function LastDoneDetailScreen() {
     : null;
   const showHistory = item ? hasActivityHistory(item) : false;
   const showHeatmap = item ? shouldShowActivityHeatmap(item) : false;
-  // One-shot reminder (Once) — never "again". Recurring / plain activities keep it.
+  // One-shot reminder (Once), never "again". Recurring / plain activities keep it.
   const onceReminder = Boolean(item?.remindAt) && !item?.remindInterval;
   const doneLabel =
     showHistory && !onceReminder ? 'Mark done again' : 'Mark done';
@@ -863,6 +869,20 @@ function AlertsSection({
     if (draftMode && draftMode === savedMode) setDraftMode(null);
   }, [draftMode, savedMode]);
 
+  const [quiet, setQuiet] = useState({
+    start: DEFAULT_NOTIFICATION_PREFS.quietHoursStart,
+    end: DEFAULT_NOTIFICATION_PREFS.quietHoursEnd,
+  });
+  useEffect(() => {
+    let live = true;
+    void loadNotificationPrefs().then((p) => {
+      if (live) setQuiet({ start: p.quietHoursStart, end: p.quietHoursEnd });
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+
   const fires = useMemo(
     () =>
       computeAlertSchedule({
@@ -872,11 +892,11 @@ function AlertsSection({
         now: new Date(),
         alertMode: mode,
         userAlerts: item.userAlerts,
-        quietHoursStart: DEFAULT_NOTIFICATION_PREFS.quietHoursStart,
-        quietHoursEnd: DEFAULT_NOTIFICATION_PREFS.quietHoursEnd,
+        quietHoursStart: quiet.start,
+        quietHoursEnd: quiet.end,
         label: item.label,
       }),
-    [item, dueTime, mode]
+    [item, dueTime, mode, quiet]
   );
 
   const presets = CUSTOM_ALERT_PRESETS.filter((p) => {
@@ -905,7 +925,7 @@ function AlertsSection({
       item.userAlerts?.[0] ?? null,
       item.userAlerts?.[1] ?? null,
     ];
-    // First pick while Custom has nothing saved yet — start from sensible defaults,
+    // First pick while Custom has nothing saved yet, start from sensible defaults,
     // then apply this tap (so Off on an empty custom stays empty).
     if (mode === 'custom' && !item.userAlerts?.length && spec) {
       const seeded = seedForCustom();
@@ -1021,7 +1041,7 @@ function AlertsSection({
                 dueTime
               );
               if (due && due.getTime() <= Date.now()) {
-                return 'This date has passed — change the schedule date to see upcoming alerts.';
+                return 'This date has passed. Change the schedule date to see upcoming alerts.';
               }
               return 'No upcoming alerts (quiet hours, or too soon after creating).';
             })()}

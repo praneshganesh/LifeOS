@@ -16,7 +16,7 @@ export const CLOUD_PREF_KEYS = [
   'lifeos:talk-voice:v1',
 ] as const;
 
-/** Legacy blob keys — pulled once when the local store is empty; never pushed. */
+/** Legacy blob keys, pulled once when the local store is empty; never pushed. */
 export const LEGACY_DOMAIN_KEYS = [
   'lifeos:inventory:v1',
   'lifeos:expenses:v1',
@@ -53,7 +53,7 @@ function isLocalMediaUri(value: string): boolean {
   );
 }
 
-/** Drop on-device photo URIs — they are useless on another phone. */
+/** Drop on-device photo URIs, they are useless on another phone. */
 export function stripLocalMedia(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(stripLocalMedia);

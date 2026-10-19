@@ -24,7 +24,7 @@ export async function loadLocalProfile(): Promise<LocalProfile> {
     const currency = parsed.currency?.trim().toUpperCase() || '';
     return {
       displayName: parsed.displayName?.trim() || DEFAULT_PROFILE.displayName,
-      // 'On this device' was the old default placeholder — treat as unset.
+      // 'On this device' was the old default placeholder, treat as unset.
       locale: locale === 'On this device' ? '' : locale,
       currency: /^[A-Z]{3}$/.test(currency) ? currency : '',
     };

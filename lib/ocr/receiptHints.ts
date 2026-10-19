@@ -1,6 +1,6 @@
 /**
  * Lightweight receipt field hints from on-device OCR text.
- * Keyword / regex only — no cloud AI.
+ * Keyword / regex only, no cloud AI.
  */
 
 export type ReceiptHints = {
@@ -10,12 +10,12 @@ export type ReceiptHints = {
   price?: string;
   purchaseDate?: string;
   merchant?: string;
-  /** POS slip / VAT trans id — strongest duplicate signal */
+  /** POS slip / VAT trans id, strongest duplicate signal */
   receiptRef?: string;
   looksLikeReceipt: boolean;
 };
 
-/** Transaction / slip number from receipt OCR — unique per purchase. */
+/** Transaction / slip number from receipt OCR, unique per purchase. */
 export function extractReceiptRef(ocrText: string): string | undefined {
   const text = ocrText || '';
   const patterns = [
@@ -41,7 +41,7 @@ export function suggestReceiptDestination(hints: ReceiptHints): ReceiptSaveDesti
   // Brand alone doesn't count: on store receipts (IKEA, Apple Store) the
   // "brand" is usually just the merchant, not a possession worth tracking.
   if (hints.name && hints.price) return 'both';
-  // Receipts are spend records first — default to expense, never thing.
+  // Receipts are spend records first, default to expense, never thing.
   return 'expense';
 }
 
@@ -136,7 +136,7 @@ function inferMerchant(text: string, lower: string): string | undefined {
 }
 
 /**
- * Expense / capture title from receipt OCR only — never a module preset like
+ * Expense / capture title from receipt OCR only, never a module preset like
  * "Insurance document".
  */
 export function receiptTitleFromOcr(ocrText: string, hints: ReceiptHints): string {
@@ -203,7 +203,7 @@ export function extractReceiptHints(ocrText: string): ReceiptHints {
   }
 
   // Explicit serial markers always count. The loose pattern (letters+digits)
-  // is only safe off-receipt — on receipts it matches TRN/tax-reg numbers
+  // is only safe off-receipt, on receipts it matches TRN/tax-reg numbers
   // when OCR drops the colon (e.g. "TRN100228723100003").
   const serialMatch =
     text.match(/\b(?:s\/?n|serial(?:\s*no\.?| number)?|imei)[:\s#]*([A-Z0-9-]{6,})\b/i) ||
@@ -227,7 +227,7 @@ export function extractReceiptHints(ocrText: string): ReceiptHints {
     priceValue = amountIn(lines[totalIdx]) ?? amountIn(lines[totalIdx + 1] ?? '');
   }
   if (!priceValue) {
-    // Currency-tagged amount must sit on the SAME line as the code — on
+    // Currency-tagged amount must sit on the SAME line as the code, on
     // column-split OCR "AED" can land right before the EFT/receipt number
     // ("AED\n60141"), which is not a price.
     priceValue = text.match(
@@ -235,7 +235,7 @@ export function extractReceiptHints(ocrText: string): ReceiptHints {
     )?.[1];
   }
   if (!priceValue) {
-    // Largest amount ≈ the total — but skip tender lines, where the cash
+    // Largest amount ≈ the total, but skip tender lines, where the cash
     // handed over ("CASH 500.00 / CHANGE 485.20") dwarfs the real total,
     // and POS bookkeeping lines (EFT/auth/receipt numbers).
     let best = 0;
@@ -264,7 +264,7 @@ export function extractReceiptHints(ocrText: string): ReceiptHints {
     : undefined;
 
   // --- Date ----------------------------------------------------------------
-  // Accept 2-digit years too — POS receipts print "08/08/26", not 2026.
+  // Accept 2-digit years too, POS receipts print "08/08/26", not 2026.
   const dateMatch =
     text.match(/\b(20\d{2}[-/.]\d{1,2}[-/.]\d{1,2})\b/) ||
     text.match(/\b(\d{1,2}[-/.]\d{1,2}[-/.](?:20)?\d{2})\b/);

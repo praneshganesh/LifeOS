@@ -32,7 +32,7 @@ type Props = {
 >;
 
 /**
- * Form scroll that keeps the focused field above the keyboard — Apple-style.
+ * Form scroll that keeps the focused field above the keyboard, Apple-style.
  * Uses keyboard insets + scrolls the focused input into view when the keyboard opens.
  */
 export const KeyboardFormScroll = forwardRef<ScrollView, Props>(

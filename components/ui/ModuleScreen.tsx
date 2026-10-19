@@ -28,7 +28,7 @@ export interface ModuleScreenProps {
   showBack?: boolean;
   /** Fallback origin when there is no `?from=` param. Defaults to 'today'. */
   defaultOrigin?: ModuleOrigin;
-  /** Parent module label — overrides origin (e.g. detail → "Expenses"). */
+  /** Parent module label, overrides origin (e.g. detail → "Expenses"). */
   backLabel?: string;
   /** Custom back action. If omitted, calls router.back() or router.replace(backFallbackHref). */
   onBack?: () => void;

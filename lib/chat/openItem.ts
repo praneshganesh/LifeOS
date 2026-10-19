@@ -21,6 +21,6 @@ export function resolveOpenItemId(params: {
   if (!wantsOpen) return null;
 
   // Model often emits open_item with a missing/hallucinated id.
-  // Never fall back to “newest inventory” — that opens a stale MacBook/TV.
+  // Never fall back to “newest inventory”, that opens a stale MacBook/TV.
   return focus;
 }

@@ -5,7 +5,7 @@ import { Text } from '@/components/ui/Text';
 import { useInventory } from '@/lib/InventoryContext';
 import { colors } from '@/constants/theme';
 
-/** Purchase detail is the Thing — redirect when the inventory id exists. */
+/** Purchase detail is the Thing, redirect when the inventory id exists. */
 export default function PurchaseDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();

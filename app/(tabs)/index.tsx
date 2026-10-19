@@ -3,14 +3,15 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  ArrowUpRight,
   Bell,
   CalendarDays,
   Check,
+  ChevronRight,
   Package,
   Sparkles,
 } from 'lucide-react-native';
 import { Screen } from '@/components/ui/Screen';
+import { SwipeActions } from '@/components/ui/SwipeActions';
 import { Text } from '@/components/ui/Text';
 import { AppIcon } from '@/components/ui/Icon3D';
 import { DotField, type DotTone } from '@/components/ui/DotField';
@@ -35,6 +36,7 @@ import { useTheme } from '@/lib/ThemeContext';
 import { dayKey } from '@/lib/habits';
 import { remainingCount } from '@/lib/classes';
 import { reminderTodayProgress } from '@/lib/lastDone';
+import { startOfTomorrow, useAttentionDismissals } from '@/lib/attentionDismiss';
 
 const DOCK_CLEARANCE = 108;
 
@@ -53,6 +55,13 @@ export default function HomeDashboard() {
   const [profileName, setProfileName] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const { dismiss, isDismissed, reload: reloadDismissed } = useAttentionDismissals();
+
+  useFocusEffect(
+    useCallback(() => {
+      void reloadDismissed();
+    }, [reloadDismissed])
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -105,10 +114,18 @@ export default function HomeDashboard() {
   );
 
   const hello = first ? `${greetingForNow()}, ${first}` : greetingForNow();
-  const featured = dash.featured;
-  const restOverdue = dash.overdueRows.filter((row) => row.id !== featured?.id);
-  const restToday = dash.today.filter((row) => row.id !== featured?.id);
-  const restNext = dash.next.filter((row) => row.id !== featured?.id);
+  const visible = (row: DashRow) => !isDismissed(row.id);
+  const featured =
+    dash.featured && visible(dash.featured)
+      ? dash.featured
+      : ([...dash.overdueRows, ...dash.today].find(visible) ?? null);
+  const restOverdue = dash.overdueRows.filter(
+    (row) => row.id !== featured?.id && visible(row)
+  );
+  const restToday = dash.today.filter((row) => row.id !== featured?.id && visible(row));
+  const restNext = dash.next.filter((row) => row.id !== featured?.id && visible(row));
+  const overdueCount = dash.overdueRows.filter(visible).length;
+  const dueTodayCount = dash.today.filter((row) => !row.habitId && visible(row)).length;
   const doneToday = dash.doneToday.filter((row) => row.id !== featured?.id);
   const clear =
     !featured &&
@@ -149,6 +166,10 @@ export default function HomeDashboard() {
     return undefined;
   }
 
+  function snoozeFor(row: DashRow) {
+    return () => void dismiss(row.id, startOfTomorrow());
+  }
+
   if (!ready) {
     return <Screen />;
   }
@@ -171,51 +192,57 @@ export default function HomeDashboard() {
           {hello}
         </Text>
 
-        {dash.overdue || dash.dueToday ? (
+        {overdueCount || dueTodayCount ? (
           <View style={styles.pills}>
-            {dash.overdue ? (
-              <StatPill n={dash.overdue} label="overdue" bg={colors.coralSoft} fg={colors.coral} />
+            {overdueCount ? (
+              <StatPill n={overdueCount} label="overdue" bg={colors.coralSoft} fg={colors.coral} />
             ) : null}
-            {dash.dueToday ? (
-              <StatPill n={dash.dueToday} label="due today" bg={colors.amberSoft} fg={colors.amber} />
+            {dueTodayCount ? (
+              <StatPill n={dueTodayCount} label="due today" bg={colors.amberSoft} fg={colors.amber} />
             ) : null}
           </View>
         ) : null}
 
         {featured ? (
-          <Pressable
-            onPress={() => open(featured.href)}
-            style={({ pressed }) => [
-              styles.featured,
-              { backgroundColor: colors.ink, opacity: pressed ? 0.92 : 1 },
-              shade.card,
-            ]}
+          <SwipeActions
+            onComplete={checkFor(featured)}
+            onSnooze={snoozeFor(featured)}
+            snoozeLabel="Tomorrow"
+            style={[styles.featuredShell, shade.card]}
           >
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={[styles.featuredTitle, { color: colors.onInk }]} numberOfLines={1}>
-                {featured.title}
-              </Text>
-              <Text style={[styles.featuredSub, { color: colors.onInk }]} numberOfLines={1}>
-                {featured.subtitle}
-              </Text>
-            </View>
-            {checkFor(featured) ? (
-              <Pressable
-                onPress={checkFor(featured)}
-                disabled={busyId === featured.habitId || busyId === featured.lastDoneId}
-                hitSlop={8}
-                style={({ pressed }) => [
-                  styles.featuredCheck,
-                  { borderColor: colors.onInk, opacity: pressed ? 0.7 : 1 },
-                ]}
-                accessibilityLabel={`Mark ${featured.title} done`}
-              >
-                <Check size={18} color={colors.onInk} strokeWidth={2.4} />
-              </Pressable>
-            ) : (
-              <ArrowUpRight size={20} color={colors.onInk} strokeWidth={2} />
-            )}
-          </Pressable>
+            <Pressable
+              onPress={() => open(featured.href)}
+              style={({ pressed }) => [
+                styles.featured,
+                {
+                  backgroundColor: resolved === 'dark' ? colors.surfaceTint : colors.surface,
+                  borderColor: colors.line,
+                  opacity: pressed ? 0.92 : 1,
+                },
+              ]}
+            >
+              <View style={[styles.featuredRail, { backgroundColor: colors.accent }]} />
+              <AppIcon name={featured.icon} size={36} />
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={[styles.featuredKicker, { color: colors.accent }]}>Up next</Text>
+                <Text style={[styles.featuredTitle, { color: colors.ink }]} numberOfLines={1}>
+                  {featured.title}
+                </Text>
+                <Text style={[styles.featuredSub, { color: colors.mute }]} numberOfLines={1}>
+                  {featured.subtitle}
+                </Text>
+              </View>
+              {checkFor(featured) ? (
+                <CheckRing
+                  label={featured.title}
+                  busy={busyId === featured.habitId || busyId === featured.lastDoneId}
+                  onPress={checkFor(featured)!}
+                />
+              ) : featured.href ? (
+                <ChevronRight size={18} color={colors.faint} strokeWidth={2} />
+              ) : null}
+            </Pressable>
+          </SwipeActions>
         ) : null}
 
         {clear ? (
@@ -266,6 +293,7 @@ export default function HomeDashboard() {
                 busy={busyId === row.habitId || busyId === row.lastDoneId}
                 onOpen={() => open(row.href)}
                 onCheck={checkFor(row)}
+                onSnooze={snoozeFor(row)}
               />
             ))}
           </Section>
@@ -280,6 +308,7 @@ export default function HomeDashboard() {
                 busy={busyId === row.habitId || busyId === row.lastDoneId}
                 onOpen={() => open(row.href)}
                 onCheck={checkFor(row)}
+                onSnooze={snoozeFor(row)}
               />
             ))}
           </Section>
@@ -305,7 +334,13 @@ export default function HomeDashboard() {
         {restNext.length ? (
           <Section title="Coming up">
             {restNext.map((row) => (
-              <RowCard key={row.id} row={row} busy={false} onOpen={() => open(row.href)} />
+              <RowCard
+                key={row.id}
+                row={row}
+                busy={false}
+                onOpen={() => open(row.href)}
+                onSnooze={snoozeFor(row)}
+              />
             ))}
           </Section>
         ) : null}
@@ -318,7 +353,7 @@ export default function HomeDashboard() {
                   key: 'habits' as const,
                   Icon: Sparkles,
                   label: 'Habits',
-                  value: habits.length ? `${dash.habitsDone}/${habits.length}` : '—',
+                  value: habits.length ? `${dash.habitsDone}/${habits.length}` : '0',
                   hint: habits.length ? 'done today' : 'start one',
                   href: moduleHref('/habits', 'today'),
                 },
@@ -328,7 +363,7 @@ export default function HomeDashboard() {
                   label: 'Reminders',
                   value: reminderToday.total
                     ? `${reminderToday.done}/${reminderToday.total}`
-                    : '—',
+                    : '0',
                   hint: reminderToday.total ? 'done today' : 'add one',
                   href: moduleHref('/tasks', 'today'),
                 },
@@ -336,7 +371,7 @@ export default function HomeDashboard() {
                   key: 'classes' as const,
                   Icon: CalendarDays,
                   label: 'Classes',
-                  value: classPacks.length ? String(classPacks.length) : '—',
+                  value: classPacks.length ? String(classPacks.length) : '0',
                   hint: !classPacks.length
                     ? 'add a class'
                     : classesLeft
@@ -348,7 +383,7 @@ export default function HomeDashboard() {
                   key: 'things' as const,
                   Icon: Package,
                   label: 'Things',
-                  value: items.length ? String(items.length) : '—',
+                  value: items.length ? String(items.length) : '0',
                   hint: items.length ? 'saved' : 'browse',
                   href: '/(tabs)/spaces' as Href,
                 },
@@ -410,24 +445,58 @@ function Section({
   );
 }
 
+function CheckRing({
+  label,
+  busy,
+  onPress,
+}: {
+  label: string;
+  busy: boolean;
+  onPress: () => void;
+}) {
+  const { colors } = useTheme();
+  return (
+    <Pressable
+      onPress={() => {
+        if (!busy) onPress();
+      }}
+      hitSlop={12}
+      style={({ pressed }) => [
+        styles.checkRing,
+        { borderColor: colors.lineStrong, opacity: busy ? 0.4 : pressed ? 0.6 : 1 },
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={`Mark ${label} done`}
+    />
+  );
+}
+
 function RowCard({
   row,
   busy,
   done,
   onOpen,
   onCheck,
+  onSnooze,
 }: {
   row: DashRow;
   busy: boolean;
   done?: boolean;
   onOpen: () => void;
   onCheck?: () => void;
+  onSnooze?: () => void;
 }) {
   const { colors, resolved } = useTheme();
   const shade = shadowsFor(resolved);
 
   return (
-    <View style={[styles.rowCard, { backgroundColor: colors.surface }, shade.soft]}>
+    <SwipeActions
+      onComplete={onCheck && !busy ? onCheck : undefined}
+      onSnooze={onSnooze}
+      snoozeLabel="Tomorrow"
+      style={[styles.rowShell, shade.soft]}
+    >
+    <View style={[styles.rowCard, { backgroundColor: colors.surface }]}>
       <Pressable
         onPress={onOpen}
         style={({ pressed }) => [styles.rowMain, { opacity: pressed ? 0.9 : 1 }]}
@@ -453,25 +522,12 @@ function RowCard({
         </View>
       </Pressable>
       {onCheck ? (
-        <Pressable
-          onPress={() => {
-            if (!busy) onCheck();
-          }}
-          hitSlop={8}
-          style={[
-            styles.rowCheck,
-            {
-              backgroundColor: busy ? colors.surfaceTint : colors.accentWash,
-            },
-          ]}
-          accessibilityLabel={`Mark ${row.title} done`}
-        >
-          <Check size={16} color={colors.accent} strokeWidth={2.4} />
-        </Pressable>
-      ) : done ? null : (
-        <ArrowUpRight size={18} color={colors.faint} strokeWidth={1.8} />
+        <CheckRing label={row.title} busy={busy} onPress={onCheck} />
+      ) : done || !row.href ? null : (
+        <ChevronRight size={18} color={colors.faint} strokeWidth={2} />
       )}
     </View>
+    </SwipeActions>
   );
 }
 
@@ -505,7 +561,7 @@ function Tile({
         { borderColor: colors.line },
         pressed && { opacity: 0.92, transform: [{ scale: 0.985 }] },
       ]}
-      accessibilityLabel={`${label} — ${value} ${hint}`}
+      accessibilityLabel={`${label}, ${value} ${hint}`}
     >
       <DotField tone={dots} />
       <View style={styles.tileFill}>
@@ -562,35 +618,52 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sansMedium,
     fontSize: 16,
   },
-  featured: {
+  featuredShell: {
     marginTop: spacing.lg,
+    borderRadius: radius.lg,
+  },
+  featured: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
     borderRadius: radius.lg,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingLeft: spacing.md + 4,
+    paddingRight: spacing.md,
+    paddingVertical: 12,
+    overflow: 'hidden',
+  },
+  featuredRail: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 3,
+  },
+  featuredKicker: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 0.2,
+    marginBottom: 1,
   },
   featuredTitle: {
     fontFamily: fonts.sansSemi,
-    fontSize: 16,
-    lineHeight: 20,
+    fontSize: 17,
+    lineHeight: 22,
     letterSpacing: -0.3,
   },
   featuredSub: {
     fontFamily: fonts.sans,
     fontSize: 13,
     lineHeight: 17,
-    opacity: 0.65,
     marginTop: 1,
   },
-  featuredCheck: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+  checkRing: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
   },
   clearCard: {
     marginTop: spacing.lg,
@@ -643,6 +716,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 20,
   },
+  rowShell: {
+    borderRadius: radius.md,
+    marginBottom: 6,
+  },
   rowCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -650,8 +727,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     paddingVertical: 8,
     paddingLeft: 8,
-    paddingRight: spacing.sm,
-    marginBottom: 6,
+    paddingRight: spacing.md,
   },
   rowMain: {
     flex: 1,
@@ -659,13 +735,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     minWidth: 0,
-  },
-  rowCheck: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   doneBadge: {
     width: 32,

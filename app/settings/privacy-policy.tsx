@@ -62,7 +62,11 @@ export default function PrivacyPolicyScreen() {
       />
       <Block
         title="What is stored"
-        body="The things you type or capture: names, dates, amounts, people in your home, rooms, notes, and files you attach (photos and PDFs). Those files sit in private storage tied to your account. They are not public and they are not used for advertising."
+        body="The things you type or capture: names, dates, amounts, people in your home, rooms, notes, and files you attach (photos and PDFs). A home record can include someone else’s name, such as a person in the household or a child’s class. Those files sit in private storage tied to your account. They are not public and they are not used for advertising."
+      />
+      <Block
+        title="How we collect it"
+        body="You type it, use the camera, or choose a photo or PDF. Sign in with Apple can include an email if you allow it. Camera, photos, and the microphone are used only when you capture or talk. You can turn them off in iOS Settings. Speech recognition, Face ID, and on-device text reading stay on the phone. Reminders are scheduled on the device. We use this to keep your record, sync it, answer Talk, Ask, and Identify, and apply your subscription."
       />
       <Block
         title="Talk, Ask, and Identify"
@@ -73,8 +77,12 @@ export default function PrivacyPolicyScreen() {
         body="Apple charges for Pro through the App Store. RevenueCat tells us whether the subscription is active so the app and the server can apply your plan. We do not receive your card number."
       />
       <Block
-        title="What we don’t do"
-        body="We don’t sell your record. We don’t connect Gmail or your bank. We don’t use your data to track you across other companies’ apps."
+        title="Who else sees it"
+        body="Supabase stores the account, the synced record, and attached files. Our server and OpenAI answer Talk, Ask, and Identify. Apple handles Sign in with Apple and payment. RevenueCat reports whether Pro is active. They receive data only for that purpose and protect it to the same standard as this policy. We don’t sell your record, connect Gmail or your bank, or track you across other companies’ apps."
+      />
+      <Block
+        title="How long we keep it"
+        body="We keep the record while the account exists. Settings → Account → Delete account removes it. You can also email hello@ibp-labs.com and ask us to delete it."
       />
       <Block
         title="Deleting your account"

@@ -5,7 +5,7 @@ import { Text } from '@/components/ui/Text';
 import { useInventory } from '@/lib/InventoryContext';
 import { colors } from '@/constants/theme';
 
-/** Insurance detail is the Thing — redirect when present. */
+/** Insurance detail is the Thing, redirect when present. */
 export default function InsuranceDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();

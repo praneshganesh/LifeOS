@@ -46,7 +46,7 @@ export function daysInMonth(year: number, monthIndex: number): number {
 
 /**
  * Fixed 12×31 year grid: months as rows, day-of-month as columns.
- * Invalid calendar days (e.g. Feb 30) are placeholders — never done/empty.
+ * Invalid calendar days (e.g. Feb 30) are placeholders, never done/empty.
  */
 export function buildHabitYearCalendar(
   logs: HabitLog[],
@@ -89,7 +89,7 @@ export function buildHabitYearCalendar(
   return { year, months, dayHeaders };
 }
 
-/** Current calendar month only — default heatmap scope. */
+/** Current calendar month only, default heatmap scope. */
 export function buildHabitMonthCalendar(
   logs: HabitLog[],
   when: Date = new Date(),

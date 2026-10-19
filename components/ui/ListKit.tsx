@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, View } from 'react-native';
-import { ChevronRight, X } from 'lucide-react-native';
+import { ChevronRight } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
+import { SwipeActions } from '@/components/ui/SwipeActions';
 import { AppIcon, type Icon3DName } from '@/components/ui/Icon3D';
 import { fonts, radius, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
@@ -35,6 +36,10 @@ export function ListRow({
   meta,
   onPress,
   onDismiss,
+  onComplete,
+  completeLabel,
+  onEdit,
+  onDelete,
   last,
   tone,
 }: {
@@ -43,18 +48,35 @@ export function ListRow({
   subtitle?: string;
   meta?: string;
   onPress?: () => void;
-  /** Show an X that snoozes/hides the row without opening it. */
+  /** Swipe left to snooze / hide the row without opening it. */
   onDismiss?: () => void;
+  /** Swipe right to mark the row done. */
+  onComplete?: () => void;
+  completeLabel?: string;
+  /** Swipe left reveals Edit / Delete (ignored when onDismiss is set). */
+  onEdit?: () => void;
+  onDelete?: () => void;
   last?: boolean;
   tone?: string;
 }) {
   const { colors } = useTheme();
   const Comp = onPress ? Pressable : View;
-  return (
+  const swipeable = Boolean(onDismiss || onComplete || onEdit || onDelete);
+  const a11yActions = [
+    ...(onComplete ? [{ name: 'complete', label: completeLabel ?? 'Mark done' }] : []),
+    ...(onDismiss ? [{ name: 'snooze', label: 'Snooze' }] : []),
+  ];
+  const row = (
     <Comp
       onPress={onPress}
+      accessibilityActions={a11yActions.length ? a11yActions : undefined}
+      onAccessibilityAction={(e) => {
+        if (e.nativeEvent.actionName === 'complete') onComplete?.();
+        if (e.nativeEvent.actionName === 'snooze') onDismiss?.();
+      }}
       style={[
         styles.row,
+        swipeable && { backgroundColor: colors.surface },
         !last && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
       ]}
     >
@@ -77,24 +99,22 @@ export function ListRow({
           </Text>
         </View>
       ) : null}
-      {onPress && !onDismiss ? (
+      {onPress ? (
         <ChevronRight size={16} color={colors.faint} strokeWidth={1.8} />
       ) : null}
-      {onDismiss ? (
-        <Pressable
-          onPress={onDismiss}
-          hitSlop={10}
-          accessibilityLabel={`Dismiss ${title}`}
-          style={({ pressed }) => [
-            styles.dismissBtn,
-            { backgroundColor: colors.surfaceSoft },
-            pressed && { opacity: 0.7 },
-          ]}
-        >
-          <X size={14} color={colors.mute} strokeWidth={2.2} />
-        </Pressable>
-      ) : null}
     </Comp>
+  );
+  if (!swipeable) return row;
+  return (
+    <SwipeActions
+      onComplete={onComplete}
+      onSnooze={onDismiss}
+      onEdit={onEdit}
+      onDelete={onDelete}
+      completeLabel={completeLabel}
+    >
+      {row}
+    </SwipeActions>
   );
 }
 
@@ -222,13 +242,6 @@ const styles = StyleSheet.create({
   meta: {
     fontFamily: fonts.sansMedium,
     fontSize: 12,
-  },
-  dismissBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   stats: {
     flexDirection: 'row',

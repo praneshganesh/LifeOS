@@ -9,19 +9,19 @@ Saavi is **not** a local-only app. Local storage exists so the product works **o
 
 ## Source of truth
 
-- **Supabase Auth** — every user has an identity (`auth.users`). Anonymous is a temporary on-ramp; ship toward Sign in with Apple / linked identity. Do not design features that assume “no auth forever.”
-- **Supabase Postgres (+ RLS)** — durable shared state: households, membership, domain rows, AI usage counters, recovery. Prefer row-level sync (`docs/SYNC_ARCHITECTURE.md`) over growing the legacy `life_stores` JSON blob.
-- **RevenueCat** — subscription entitlement source of truth; mirror plan onto the user/household in Supabase for server enforcement (Talk caps, invites).
-- **Local (AsyncStorage / later SQLite)** — offline reads/writes, outbox, device-only prefs (app lock, biometrics). Sync when online.
+- **Supabase Auth**: every user has an identity (`auth.users`). Anonymous is a temporary on-ramp; ship toward Sign in with Apple / linked identity. Do not design features that assume “no auth forever.”
+- **Supabase Postgres (+ RLS)**: durable shared state: households, membership, domain rows, AI usage counters, recovery. Prefer row-level sync (`docs/SYNC_ARCHITECTURE.md`) over growing the legacy `life_stores` JSON blob.
+- **RevenueCat**: subscription entitlement source of truth; mirror plan onto the user/household in Supabase for server enforcement (Talk caps, invites).
+- **Local (AsyncStorage / later SQLite)**: offline reads/writes, outbox, device-only prefs (app lock, biometrics). Sync when online.
 
 ## AI / Talk / Ask
 
 - OpenAI spend caps must be enforced **server-side** (chat API + Supabase counter), keyed by authenticated user (and household for Family shared pools).
-- Client-side counters are UX / offline mirror only — never the sole cost guard.
+- Client-side counters are UX / offline mirror only, never the sole cost guard.
 - Chat proxy must accept a **Supabase access token**, not only a shared static proxy token.
 
 ## Anti-patterns
 
 - Shipping “final” plan/AI/invite limits that live only in AsyncStorage.
 - Treating anonymous backup as a substitute for real auth.
-- Blocking core CRUD on network — offline capability stays; cloud features (Talk AI, sync, media) require connectivity + auth session.
+- Blocking core CRUD on network: offline capability stays; cloud features (Talk AI, sync, media) require connectivity + auth session.

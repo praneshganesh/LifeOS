@@ -1,23 +1,37 @@
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { ZoomIn } from 'react-native-reanimated';
+import { Check } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
+import { AppIcon, type Icon3DName } from '@/components/ui/Icon3D';
+import { DotField } from '@/components/ui/DotField';
+import { OnboardingPrimaryButton, OnboardingScreen, enter } from '@/components/OnboardingKit';
 import {
   ONBOARDING_INTENT_OPTIONS,
   saveOnboardingIntents,
   type OnboardingIntent,
 } from '@/lib/onboarding';
-import { type ThemeColors, fonts, radius, spacing } from '@/constants/theme';
+import { moduleTone, type ModuleToneKey } from '@/lib/moduleTone';
+import { type ThemeColors, fonts, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
 
 const MAX_INTENTS = 3;
 
+const LOOK: Record<OnboardingIntent, { tone: ModuleToneKey; icon: Icon3DName }> = {
+  things: { tone: 'things', icon: 'package' },
+  reminders: { tone: 'tasks', icon: 'tasks' },
+  habits: { tone: 'habits', icon: 'check' },
+  classes: { tone: 'classes', icon: 'today' },
+  money: { tone: 'expenses', icon: 'wallet' },
+  family: { tone: 'subscriptions', icon: 'family' },
+};
+
 export default function OnboardingIntent() {
-  const { colors } = useTheme();
+  const { colors, resolved } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const insets = useSafeAreaInsets();
   const router = useRouter();
+  const light = resolved === 'light';
   const [picked, setPicked] = useState<OnboardingIntent[]>([]);
   const [saving, setSaving] = useState(false);
 
@@ -29,161 +43,124 @@ export default function OnboardingIntent() {
     });
   }
 
-  async function continueNext(intents: OnboardingIntent[]) {
+  async function next() {
     if (saving) return;
     setSaving(true);
     try {
-      await saveOnboardingIntents(intents);
-      router.push('/onboarding/family');
+      await saveOnboardingIntents(picked);
+      router.push('/onboarding/details');
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <View style={[styles.root, { paddingBottom: Math.max(insets.bottom, 16) + 8 }]}>
-      <ScrollView
-        contentContainerStyle={styles.body}
-        keyboardShouldPersistTaps="handled"
-      >
-        <Text style={styles.step}>Step 1 of 5</Text>
-        <Text style={styles.title}>What do you want help with?</Text>
-        <Text style={styles.lead}>
-          Pick up to {MAX_INTENTS}. We’ll tune Today around this — you can use
-          everything either way.
-        </Text>
-
-        <View style={styles.chips}>
-          {ONBOARDING_INTENT_OPTIONS.map((opt) => {
-            const on = picked.includes(opt.id);
-            const lockedOut = !on && picked.length >= MAX_INTENTS;
-            return (
+    <OnboardingScreen
+      step={3}
+      title="What would you like a hand with?"
+      lead={`Pick up to ${MAX_INTENTS} and we’ll put them first on Today. Everything else is still there.`}
+      footer={
+        <OnboardingPrimaryButton
+          label={picked.length ? 'Continue' : 'Skip for now'}
+          onPress={() => void next()}
+        />
+      }
+    >
+      <View style={styles.grid}>
+        {ONBOARDING_INTENT_OPTIONS.map((opt, i) => {
+          const on = picked.includes(opt.id);
+          const lockedOut = !on && picked.length >= MAX_INTENTS;
+          const look = LOOK[opt.id];
+          const tone = moduleTone(look.tone, colors, light);
+          return (
+            <Animated.View key={opt.id} entering={enter(2 + i * 0.5)} style={styles.cell}>
               <Pressable
-                key={opt.id}
                 onPress={() => toggle(opt.id)}
                 disabled={lockedOut}
-                style={[
-                  styles.chip,
-                  on && styles.chipOn,
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: on, disabled: lockedOut }}
+                accessibilityLabel={`${opt.label}, ${opt.hint}`}
+                style={({ pressed }) => [
+                  styles.tile,
+                  { borderColor: on ? colors.accent : colors.line },
+                  on && styles.tileOn,
                   lockedOut && { opacity: 0.4 },
+                  pressed && { transform: [{ scale: 0.97 }] },
                 ]}
               >
-                <Text style={[styles.chipLabel, on && styles.chipLabelOn]}>
-                  {opt.label}
-                </Text>
-                <Text style={[styles.chipHint, on && styles.chipHintOn]}>
-                  {opt.hint}
-                </Text>
+                <DotField tone={tone.dots} />
+                <View style={styles.tileTop}>
+                  <AppIcon name={look.icon} size={36} tone="soft" />
+                  {on ? (
+                    <Animated.View
+                      entering={ZoomIn.springify().damping(14)}
+                      style={[styles.tick, { backgroundColor: colors.accent }]}
+                    >
+                      <Check size={13} color={colors.accentOn} strokeWidth={3} />
+                    </Animated.View>
+                  ) : null}
+                </View>
+                <View>
+                  <Text style={styles.label}>{opt.label}</Text>
+                  <Text style={styles.hint} numberOfLines={1}>
+                    {opt.hint}
+                  </Text>
+                </View>
               </Pressable>
-            );
-          })}
-        </View>
-      </ScrollView>
-
-      <View style={styles.footer}>
-        <Pressable
-          onPress={() => void continueNext(picked)}
-          disabled={picked.length === 0}
-          style={({ pressed }) => [
-            styles.cta,
-            pressed && { opacity: 0.92 },
-            picked.length === 0 && { opacity: 0.45 },
-          ]}
-        >
-          <Text style={styles.ctaText}>{saving ? 'Saving…' : 'Continue'}</Text>
-        </Pressable>
-        <Pressable onPress={() => void continueNext([])} hitSlop={8}>
-          <Text style={styles.skip}>Skip for now</Text>
-        </Pressable>
+            </Animated.View>
+          );
+        })}
       </View>
-    </View>
+    </OnboardingScreen>
   );
 }
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    root: { flex: 1, backgroundColor: colors.bg },
-    body: {
-      paddingHorizontal: spacing.xl,
-      paddingTop: spacing.md,
-      paddingBottom: spacing.xxl,
-    },
-    step: {
-      fontFamily: fonts.sansMedium,
-      fontSize: 14,
-      color: colors.mute,
-      marginBottom: spacing.sm,
-    },
-    title: {
-      fontFamily: fonts.sansSemi,
-      fontSize: 28,
-      color: colors.ink,
-      marginBottom: spacing.sm,
-    },
-    lead: {
-      fontFamily: fonts.sans,
-      fontSize: 16,
-      lineHeight: 24,
-      color: colors.mute,
-      marginBottom: spacing.lg,
-    },
-    chips: {
+    grid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 8,
+      justifyContent: 'space-between',
+      rowGap: 10,
     },
-    chip: {
-      width: '47%',
-      flexGrow: 1,
-      borderRadius: radius.md,
-      borderWidth: 1.5,
-      borderColor: colors.lineStrong,
-      backgroundColor: colors.surface,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
-      minHeight: 64,
+    cell: {
+      width: '48.5%',
+    },
+    tile: {
+      height: 124,
+      borderRadius: 22,
+      borderWidth: StyleSheet.hairlineWidth,
+      overflow: 'hidden',
+      padding: spacing.md,
+      justifyContent: 'space-between',
+    },
+    tileOn: {
+      borderWidth: 2,
+      padding: spacing.md - 1.5,
+    },
+    tileTop: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+    },
+    tick: {
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      alignItems: 'center',
       justifyContent: 'center',
     },
-    chipOn: {
-      backgroundColor: colors.ink,
-      borderColor: colors.ink,
-    },
-    chipLabel: {
+    label: {
       fontFamily: fonts.sansSemi,
-      fontSize: 15,
+      fontSize: 17,
+      letterSpacing: -0.3,
       color: colors.ink,
     },
-    chipLabelOn: { color: colors.onInk },
-    chipHint: {
+    hint: {
       fontFamily: fonts.sans,
       fontSize: 13,
       color: colors.mute,
-      marginTop: 2,
-    },
-    chipHintOn: { color: colors.onInk, opacity: 0.75 },
-    footer: {
-      paddingHorizontal: spacing.xl,
-      paddingTop: spacing.sm,
-      gap: spacing.md,
-      alignItems: 'center',
-    },
-    cta: {
-      alignSelf: 'stretch',
-      height: 52,
-      borderRadius: radius.md,
-      backgroundColor: colors.forest,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    ctaText: {
-      fontFamily: fonts.sansMedium,
-      fontSize: 16,
-      color: colors.forestOn,
-    },
-    skip: {
-      fontFamily: fonts.sansMedium,
-      fontSize: 15,
-      color: colors.mute,
+      marginTop: 1,
     },
   });
 }

@@ -24,7 +24,7 @@ Physical phone on Wi‑Fi: `http://<mac-lan-ip>:8787/chat` (`ipconfig getifaddr 
 
 ## Hosted on Fly.io (TestFlight + external testers)
 
-Config lives in `server/fly.toml` (app `saavi-chat-pranesh`, region **Singapore `sin`** — closest Fly region to UAE that still accepts new VMs).
+Config lives in `server/fly.toml` (app `saavi-chat-pranesh`, region **Singapore `sin`**, closest Fly region to UAE that still accepts new VMs).
 
 ### 1. Install Fly CLI
 
@@ -74,7 +74,7 @@ Chat endpoint: `https://saavi-chat-pranesh.fly.dev/chat`
 
 ### 5. Point the app at it
 
-**Local dev** — add to `.env`:
+**Local dev**: add to `.env`:
 
 ```
 EXPO_PUBLIC_CHAT_API_URL=https://saavi-chat-pranesh.fly.dev/chat

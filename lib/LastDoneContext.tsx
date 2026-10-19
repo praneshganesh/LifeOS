@@ -50,7 +50,7 @@ type LastDoneContextValue = {
    * Optional doneAt / remind fields layer on when provided.
    */
   logDone: (input: LogDoneInput) => Promise<LastDoneItem>;
-  /** One-off future reminder — does not mark the activity done. */
+  /** One-off future reminder, does not mark the activity done. */
   setReminder: (input: {
     label: string;
     remindAt: string;

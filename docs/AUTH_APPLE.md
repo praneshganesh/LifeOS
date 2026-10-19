@@ -25,7 +25,7 @@ Expo: `ios.usesAppleSignIn` + `expo-apple-authentication` plugin in `app.json`.
 3. If using a Services ID for web later, register it and return URLs; native
    iOS uses the app’s bundle ID as the client
 4. Rebuild with EAS / Xcode so the entitlement is in the binary (capability is
-   not enough in Expo Go alone — use a dev client or TestFlight)
+   not enough in Expo Go alone: use a dev client or TestFlight)
 
 ## Supabase Dashboard
 
@@ -33,7 +33,7 @@ Expo: `ios.usesAppleSignIn` + `expo-apple-authentication` plugin in `app.json`.
 2. **Client IDs**: iOS bundle ID `com.praneshganesh.lifeos` (and Services ID if web)
 3. For native IdToken flow (`signInWithIdToken` / `linkIdentity` with token),
    you typically need the Apple provider enabled; Secret Key / Team ID / Key ID
-   are required when using OAuth code flow — follow current Supabase Apple docs
+   are required when using OAuth code flow, follow current Supabase Apple docs
    for your project
 4. **Authentication → Providers → Anonymous** → Enable (on-ramp stays)
 5. **Authentication → Settings** (or Providers): turn on **Manual linking** so
@@ -58,5 +58,5 @@ Accept invite requires a session (`ensureCloudSession`). After join, nudge
 ## Privacy labels
 
 - Collect **User ID** for App Functionality (sync / seats)
-- Hide My Email / private relay is fine — do not also force a personal email
+- Hide My Email / private relay is fine, do not also force a personal email
 - Name from Apple is optional metadata only when the user provides it once

@@ -8,7 +8,7 @@ const publishableKey =
   process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() ||
   process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim();
 
-/** Expo web SSR runs in Node without `window` — skip client init there. */
+/** Expo web SSR runs in Node without `window`, skip client init there. */
 function canInitSupabaseClient(): boolean {
   if (!url || !publishableKey) return false;
   if (Platform.OS === 'web' && typeof window === 'undefined') return false;

@@ -45,7 +45,7 @@ export function openingLineForFocus(focus: TalkFocus): string {
   }
 }
 
-/** Named module in the utterance — not a brand/store map. */
+/** Named module in the utterance, not a brand/store map. */
 export function talkFocusKindFromUtterance(text?: string): TalkFocusKind | null {
   if (!text?.trim()) return null;
   const t = text.trim().toLowerCase().replace(/[’']/g, "'");

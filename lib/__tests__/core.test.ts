@@ -153,7 +153,7 @@ describe('document classification', () => {
 
   it('rejects dense text lines starting with P as passport MRZ (no valid dates)', () => {
     // cleanLine strips spaces, so address/phone lines can become 40+ char
-    // alnum lines starting with P — a real MRZ always has valid YYMMDD dates.
+    // alnum lines starting with P, a real MRZ always has valid YYMMDD dates.
     const noisy = [
       'Ph 97147076055 PB No 60188 Motor City Dubai UAE Branch Office',
       'Phone 97147076055 TRN 100228723100003 Dubai United Arab Emirates',
@@ -189,7 +189,7 @@ describe('document classification', () => {
   });
 
   it('parses Emirates ID back MRZ when OCR drops < fillers', () => {
-    // Realistic OCR of UAE ID back — line1 often becomes ILARE… without <
+    // Realistic OCR of UAE ID back, line1 often becomes ILARE… without <
     const back = [
       'Occupation Fumigator',
       'Issuing Place Abu Dhabi',

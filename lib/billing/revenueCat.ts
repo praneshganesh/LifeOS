@@ -34,7 +34,7 @@ export type OfferSummary = {
   title: string;
   description: string;
   priceString: string;
-  /** Underlying RC package — native only */
+  /** Underlying RC package, native only */
   raw: PurchasesPackage;
 };
 

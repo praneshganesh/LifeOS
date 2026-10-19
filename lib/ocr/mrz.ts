@@ -1,5 +1,5 @@
 /**
- * Local MRZ + ID heuristics — no network, no AI.
+ * Local MRZ + ID heuristics, no network, no AI.
  * ICAO 9303 TD3 (passport) and TD1 (Emirates ID / residence cards).
  * Front-side Emirates ID / driving licence use keyword + number patterns.
  */
@@ -50,7 +50,7 @@ function parseYyMmDd(raw: string, preferFuture = false): string {
   const yy = Number(raw.slice(0, 2));
   const mm = raw.slice(2, 4);
   const dd = raw.slice(4, 6);
-  // Reject impossible calendar dates — random digit runs from receipts and
+  // Reject impossible calendar dates, random digit runs from receipts and
   // addresses otherwise "parse" into things like 2002-28-72.
   if (Number(mm) < 1 || Number(mm) > 12 || Number(dd) < 1 || Number(dd) > 31) return '';
   let century = 2000;
@@ -94,7 +94,7 @@ export function extractMrzLines(ocrText: string): string[] {
   return scored.slice(0, 6);
 }
 
-/** Pick TD1 lines by role — OCR order is unreliable and `<` is often dropped/misread. */
+/** Pick TD1 lines by role, OCR order is unreliable and `<` is often dropped/misread. */
 function pickTd1Lines(lines: string[]): [string, string, string] | null {
   const cleaned = lines.map((l) => cleanLine(l));
   const line1 =
@@ -133,7 +133,7 @@ export function parseTd3Passport(line1: string, line2: string): ParsedIdentity |
 
   // Real MRZ always carries valid YYMMDD dates. Without them this is almost
   // certainly a dense text line (address, phone numbers) that merely starts
-  // with P — cleanLine strips spaces, so receipts can produce such lines.
+  // with P, cleanLine strips spaces, so receipts can produce such lines.
   if (!dateOfBirth && !expiryDate) return null;
 
   return {
@@ -151,7 +151,7 @@ export function parseTd3Passport(line1: string, line2: string): ParsedIdentity |
   };
 }
 
-/** TD1 — 3×30 (Emirates ID / many national ID cards). */
+/** TD1, 3×30 (Emirates ID / many national ID cards). */
 export function parseTd1Id(line1: string, line2: string, line3: string): ParsedIdentity | null {
   // OCR often turns `I<ARE` into `ILARE` ( < → L ) or `IARE` ( < dropped ).
   let raw1 = cleanLine(line1);
@@ -201,7 +201,7 @@ export function parseTd1Id(line1: string, line2: string, line3: string): ParsedI
 export function parseMrzFromOcr(ocrText: string): ParsedIdentity | null {
   const lines = extractMrzLines(ocrText);
   if (lines.length >= 2) {
-    // Try TD3 (passport) — longest lines
+    // Try TD3 (passport), longest lines
     const long = [...lines].sort((a, b) => b.length - a.length);
     const td3 = long.filter((l) => l.length >= 40);
     if (td3.length >= 2) {
@@ -264,10 +264,10 @@ function extractLicenceNumber(text: string): string | undefined {
   return undefined;
 }
 
-/** Keyword / pattern fallback when MRZ is unreadable — still on-device, no AI. */
+/** Keyword / pattern fallback when MRZ is unreadable, still on-device, no AI. */
 export function classifyDocumentFromText(text: string): MrzDocumentKind {
   const t = text.toUpperCase();
-  // Receipts beat weak doc heuristics — "PB No" on UAE invoices used to
+  // Receipts beat weak doc heuristics, "PB No" on UAE invoices used to
   // match the old `\nP[A-Z]` passport sniff and mis-file groceries as Passport.
   if (looksLikeReceiptNotId(t, text)) {
     return 'unknown';
@@ -328,7 +328,7 @@ export function extractDocumentFieldHints(text: string): DocumentFieldHints | nu
     if (passNo?.[1]) hints.documentNumber = passNo[1].toUpperCase();
   }
 
-  // ID Number: / License No.: / Name: — labels as printed on UAE cards
+  // ID Number: / License No.: / Name:, labels as printed on UAE cards
   const nameLine = text.match(
     /(?:^|\n)\s*(?:name|الاسم|full\s*name|holder)\s*[:：]?\s*([A-Za-z][A-Za-z '. -]{2,60})/im
   );
@@ -342,7 +342,7 @@ export function extractDocumentFieldHints(text: string): DocumentFieldHints | nu
     }
   }
 
-  // UAE cards put Arabic between the English label and the value — allow
+  // UAE cards put Arabic between the English label and the value, allow
   // non-digit noise so "Expiry Date / تاريخ الانتهاء\n26/08/2024" still matches.
   // Prefer "Expiry Date" over bare "expiry" so Issuing Date is not stolen.
   const expiry = text.match(

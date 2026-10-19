@@ -95,9 +95,9 @@ export function messageForAiDailyLimit(
     return `You've used today's ${limit} free Talk turns. Upgrade to Pro for more, or keep adding things manually.`;
   }
   if (planId === 'family') {
-    return `Household Talk limit reached (${used}/${limit} today). Try again tomorrow — manual capture stays unlimited.`;
+    return `Household Talk limit reached (${used}/${limit} today). Try again tomorrow. Manual capture stays unlimited.`;
   }
-  return `Daily Talk limit reached (${used}/${limit}). Try again tomorrow — manual capture stays unlimited.`;
+  return `Daily Talk limit reached (${used}/${limit}). Try again tomorrow. Manual capture stays unlimited.`;
 }
 
 export async function loadAiUsage(

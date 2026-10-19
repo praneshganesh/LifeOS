@@ -1,4 +1,4 @@
-# Family sharing — gaps and scenarios
+# Family sharing: gaps and scenarios
 
 > Launch note: Family is not sold. The current cut, the gaps, and how to build it are in [`FAMILY.md`](./FAMILY.md). This file is the earlier scenario list.
 

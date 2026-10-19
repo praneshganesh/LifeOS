@@ -4,7 +4,7 @@
  * WebKit never exposes HEIC decoding to web content, so an `image/*` input on
  * iOS hands us raw HEIC bytes that neither <img> nor Tesseract can read. When
  * the accept list omits HEIC, iOS Safari transparently transcodes library
- * photos to JPEG during selection — which is exactly what we want.
+ * photos to JPEG during selection, which is exactly what we want.
  */
 
 export type PickedWebFile = {

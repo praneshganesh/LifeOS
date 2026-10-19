@@ -1,4 +1,4 @@
-# Saavi Chat API — Architecture Review & Low-Risk Improvement Plan
+# Saavi Chat API: Architecture Review & Low-Risk Improvement Plan
 
 ## Objective
 
@@ -47,7 +47,7 @@ The combination of LLM interpretation plus deterministic repair is particularly 
 
 ---
 
-## 2. Priority 1 — Fix User-Local Date Handling
+## 2. Priority 1: Fix User-Local Date Handling
 
 ### Current Issue
 The server currently determines today using:
@@ -77,7 +77,7 @@ This returns the date in UTC. Around midnight, UTC may represent a different cal
 
 ---
 
-## 3. Priority 2 — Add Action Validation
+## 3. Priority 2: Add Action Validation
 
 ### Current Issue
 Model-generated actions after `repairActions()` are sent directly to the client. Malformed, incomplete, or destructive actions without required identifiers could reach the client.
@@ -103,7 +103,7 @@ Return Valid Actions to Client
 
 ---
 
-## 4. Priority 3 — Break Up `repairActions()` Internally
+## 4. Priority 3: Break Up `repairActions()` Internally
 
 ### Current State
 `repairActions()` in `server/chat.mjs` handles multiple responsibilities in a single large function:

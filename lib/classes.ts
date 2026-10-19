@@ -42,7 +42,7 @@ export type ClassPack = {
   scheduleTimeInferred?: boolean;
   notes?: string;
   createdAt: string;
-  /** Last local mutation — LWW clock for row sync. */
+  /** Last local mutation, LWW clock for row sync. */
   updatedAt?: string;
 };
 
@@ -53,7 +53,7 @@ export type NewClassPackInput = {
   completed?: number;
   startsOn?: string;
   endsOn?: string;
-  /** Used when endsOn is omitted — default 3 */
+  /** Used when endsOn is omitted, default 3 */
   months?: number;
   scheduleDays?: (ScheduleDay | string)[];
   scheduleTime?: string;
@@ -268,6 +268,14 @@ export function normalizeClassPack(raw: unknown): ClassPack | null {
   };
 }
 
+const CLASS_WORDS = /\b(class|classes|lesson|lessons|session|sessions|practice|training|tuition|coaching|course)$/i;
+
+/** "Skating" → "Skating class"; "Skating class" and "Piano lesson" stay as they are. */
+export function classLabel(title: string): string {
+  const t = title.trim();
+  return CLASS_WORDS.test(t) ? t : `${t} class`;
+}
+
 export function usedCount(pack: ClassPack): number {
   const days = new Set(pack.logs.map((l) => l.doneAt));
   return days.size;
@@ -423,7 +431,7 @@ const MONTH_NAMES = [
 
 /**
  * "before November" / "by end of March" → the next upcoming occurrence of
- * that month as YYYY-MM-DD. Talk deadlines are always in the future — a
+ * that month as YYYY-MM-DD. Talk deadlines are always in the future, a
  * month that already passed this year means next year.
  */
 export function classDeadlineFromUtterance(
@@ -665,7 +673,7 @@ export function paceHint(pack: ClassPack, now = new Date()): string | undefined 
   const remaining = remainingCount(pack);
   if (remaining == null || remaining <= 0) return undefined;
   const days = daysLeftInWindow(pack, now);
-  if (days <= 0) return `${remaining} session${remaining === 1 ? '' : 's'} left — window has ended`;
+  if (days <= 0) return `${remaining} session${remaining === 1 ? '' : 's'} left, but the window has ended`;
   const weeks = days / 7;
   const perWeek = remaining / weeks;
   if (perWeek <= 1.05)

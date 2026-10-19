@@ -66,7 +66,7 @@ type UiMessage = {
   id: string;
   role: 'user' | 'assistant';
   text: string;
-  /** Optional — only when an item was added this turn */
+  /** Optional, only when an item was added this turn */
   itemId?: string;
 };
 
@@ -614,7 +614,7 @@ export default function ChatScreen() {
             styles.composer,
             {
               // Flush on the keyboard when open; respect the home indicator when closed.
-              // No own background — sits on the Screen wash like everything else.
+              // No own background, sits on the Screen wash like everything else.
               paddingBottom: keyboardOpen ? 8 : Math.max(insets.bottom, 12),
             },
           ]}

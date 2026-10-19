@@ -5,7 +5,9 @@ import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { FilterChips, ListCard, ListRow, StatStrip } from '@/components/ui/ListKit';
 import { Text } from '@/components/ui/Text';
 import { CaptureContextButton } from '@/components/CaptureContextButton';
+import { AddButton, HeaderActions } from '@/components/ui/AddButton';
 import { useInventory } from '@/lib/InventoryContext';
+import { useDeleteWithConfirm } from '@/lib/useDeleteWithConfirm';
 import { useSpaces } from '@/lib/SpacesContext';
 import {
   docBucket,
@@ -27,7 +29,8 @@ const CATEGORIES = [
 
 export default function DocumentsScreen() {
   const router = useRouter();
-  const { items } = useInventory();
+  const { items, removeItem } = useInventory();
+  const deleteWithConfirm = useDeleteWithConfirm();
   const { spaces } = useSpaces();
   const [filter, setFilter] = useState('all');
   const documentsSpaceId = spaceIdByKind(spaces, 'documents');
@@ -64,11 +67,17 @@ export default function DocumentsScreen() {
       title="Documents"
       defaultOrigin="things"
       right={
-        <CaptureContextButton
-          kind="documents"
-          spaceId={documentsSpaceId}
-          label="Capture document"
-        />
+        <HeaderActions>
+          <CaptureContextButton
+            kind="documents"
+            spaceId={documentsSpaceId}
+            label="Capture document"
+          />
+          <AddButton
+            onPress={() => router.push('/things/create?kind=document' as Href)}
+            label="Add document"
+          />
+        </HeaderActions>
       }
     >
       <StatStrip
@@ -110,6 +119,7 @@ export default function DocumentsScreen() {
                           : undefined
                   }
                   onPress={() => router.push(`/asset/${d.id}` as Href)}
+                  onDelete={() => void deleteWithConfirm(d.name, () => removeItem(d.id))}
                   last={i === list.length - 1}
                 />
               );

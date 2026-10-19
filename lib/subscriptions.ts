@@ -29,7 +29,7 @@ export type Subscription = {
   personId?: string;
   source?: 'manual' | 'talk' | 'capture';
   createdAt: string;
-  /** Last local mutation — LWW clock for row sync. */
+  /** Last local mutation, LWW clock for row sync. */
   updatedAt?: string;
 };
 

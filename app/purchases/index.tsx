@@ -5,6 +5,7 @@ import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { FilterChips, ListCard, ListRow, StatStrip } from '@/components/ui/ListKit';
 import { Text } from '@/components/ui/Text';
 import { CaptureContextButton } from '@/components/CaptureContextButton';
+import { AddButton, HeaderActions } from '@/components/ui/AddButton';
 import { useInventory } from '@/lib/InventoryContext';
 import { formatAmount } from '@/lib/expenses';
 import {
@@ -56,7 +57,12 @@ export default function PurchasesScreen() {
     <ModuleScreen
       title="Purchases"
       defaultOrigin="things"
-      right={<CaptureContextButton kind="purchase" label="Capture purchase" />}
+      right={
+        <HeaderActions>
+          <CaptureContextButton kind="purchase" label="Capture receipt" />
+          <AddButton onPress={() => router.push('/things/create' as Href)} label="Add purchase" />
+        </HeaderActions>
+      }
     >
       <StatStrip
         items={[
@@ -65,7 +71,7 @@ export default function PurchasesScreen() {
             label: 'Logged spend',
             value: sum.counted
               ? formatAmount(sum.total, sum.currency)
-              : '—',
+              : 'None',
           },
           { label: 'Photos', value: String(withPhoto.length) },
         ]}

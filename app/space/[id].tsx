@@ -3,8 +3,10 @@ import { useToast } from '@/lib/ToastContext';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Redirect, Stack, useFocusEffect, useLocalSearchParams, useRouter, type Href } from 'expo-router';
+import { AddButton, HeaderActions } from '@/components/ui/AddButton';
+import { CaptureContextButton } from '@/components/CaptureContextButton';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import {
@@ -16,6 +18,7 @@ import { SpaceEditor } from '@/app/space/edit/[id]';
 import { MODULE_TONE_FALLBACK, moduleTone } from '@/lib/moduleTone';
 import { SwipeableThingRow } from '@/components/SwipeableThingRow';
 import { useInventory } from '@/lib/InventoryContext';
+import { hasValue } from '@/lib/inventoryNormalize';
 import { useSpaces } from '@/lib/SpacesContext';
 import { inventoryToAsset } from '@/lib/mergeAssets';
 import { confirmDelete } from '@/lib/confirmDelete';
@@ -68,7 +71,7 @@ export default function SpaceDetailScreen() {
     if (!getById(assetId)) return;
     const ok = await confirmDelete(name);
     if (!ok) return;
-    await removeItem(assetId).catch(() => showError('Couldn’t delete — try again.'));
+    await removeItem(assetId).catch(() => showError('Couldn’t delete. Try again.'));
   }
 
   if (!space) {
@@ -118,24 +121,22 @@ export default function SpaceDetailScreen() {
             <ChevronLeft size={20} color={colors.ink} strokeWidth={2.4} />
             <Text style={styles.backLabel}>{backLabel}</Text>
           </Pressable>
-          <View style={styles.headerActions}>
-            <Pressable
-              onPress={() => {
-                blurActiveElement();
-                router.push(
-                  captureHref({ kind: captureKind, spaceId: space.id })
-                );
-              }}
-              style={({ pressed }) => [
-                styles.addBtn,
-                { backgroundColor: colors.accent },
-                pressed && { opacity: 0.9 },
-              ]}
-              accessibilityLabel={`Capture for ${space.name}`}
-            >
-              <Plus size={18} color={colors.accentOn} strokeWidth={2.2} />
-            </Pressable>
-          </View>
+          <HeaderActions>
+            <CaptureContextButton
+              kind={captureKind}
+              spaceId={space.id}
+              label={`Capture for ${space.name}`}
+            />
+            <AddButton
+              onPress={() =>
+                router.push({
+                  pathname: '/things/create',
+                  params: { spaceId: space.id },
+                } as Href)
+              }
+              label={`Add to ${space.name}`}
+            />
+          </HeaderActions>
         </View>
 
         <DetailHero
@@ -185,13 +186,8 @@ export default function SpaceDetailScreen() {
                   key={asset.id}
                   name={asset.name}
                   icon={asset.icon}
-                  subtitle={[asset.brand, asset.room].filter(Boolean).join(' · ')}
+                  subtitle={[asset.brand, asset.room].filter(hasValue).join(' · ')}
                   onPress={() => router.push(`/asset/${asset.id}`)}
-                  onEdit={
-                    getById(asset.id)
-                      ? () => router.push(`/asset/${asset.id}`)
-                      : undefined
-                  }
                   onDelete={
                     getById(asset.id)
                       ? () => void onDeleteThing(asset.id, asset.name)
@@ -242,11 +238,6 @@ function makeStyles(colors: ThemeColors) {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerActions: {
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'center',
-  },
   softIconBtn: {
     width: 36,
     height: 36,
@@ -254,14 +245,6 @@ function makeStyles(colors: ThemeColors) {
     backgroundColor: colors.surfaceSoft,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  addBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadows.soft,
   },
   roomGrid: {
     flexDirection: 'row',

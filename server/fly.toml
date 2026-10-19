@@ -1,4 +1,4 @@
-# Fly.io — sparse Talk traffic (machines auto-stop when idle).
+# Fly.io, sparse Talk traffic (machines auto-stop when idle).
 # From repo root:
 #   npm run deploy:chat-api
 # Secrets (once):

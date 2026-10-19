@@ -55,7 +55,7 @@ export default function ClassPackDetailScreen() {
   const { getById, logClass, removePack, updatePack } = useClasses();
   const { members } = useHousehold();
   const { showError } = useToast();
-  const saveFailed = () => showError('Couldn’t save — try again.');
+  const saveFailed = () => showError('Couldn’t save. Try again.');
 
   const packEarly = id && id !== 'new' ? getById(id) : undefined;
   const [title, setTitle] = useState('');
@@ -104,7 +104,7 @@ export default function ClassPackDetailScreen() {
     try {
       await removePack(pack.id);
     } catch {
-      showError('Couldn’t delete — try again.');
+      showError('Couldn’t delete. Try again.');
       return;
     }
     if (router.canGoBack()) router.back();

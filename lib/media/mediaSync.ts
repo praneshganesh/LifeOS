@@ -32,7 +32,7 @@ async function loadAttempts(): Promise<AttemptMap> {
 }
 
 async function saveAttempts(map: AttemptMap): Promise<void> {
-  // Keep the map small — drop entries older than 7 days.
+  // Keep the map small, drop entries older than 7 days.
   const cutoff = Date.now() - 7 * 86400000;
   const next: AttemptMap = {};
   for (const [k, v] of Object.entries(map)) if (v.at > cutoff) next[k] = v;

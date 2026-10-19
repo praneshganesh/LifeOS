@@ -42,7 +42,7 @@ export type InventoryItem = {
   imagePath?: string;
   purchaseDate: string;
   price: string;
-  /** Retailer / marketplace — e.g. Amazon, Sharaf DG (not talk|capture source) */
+  /** Retailer / marketplace, e.g. Amazon, Sharaf DG (not talk|capture source) */
   purchasedFrom?: string;
   /** Official product manual / support page URL when known */
   manualUrl?: string;
@@ -70,7 +70,7 @@ export type InventoryItem = {
   /** How the item entered LifeOS */
   source?: 'talk' | 'capture' | 'manual';
   createdAt: string;
-  /** Last local mutation time — the last-write-wins clock for row sync. */
+  /** Last local mutation time, the last-write-wins clock for row sync. */
   updatedAt?: string;
 };
 
@@ -125,7 +125,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
   // itemsRef is the authoritative list (updated synchronously), so mutators
   // can compute from it, show the optimistic state, and then AWAIT the disk
-  // write — a failed write rejects instead of silently losing data.
+  // write, a failed write rejects instead of silently losing data.
   const persist = async (next: InventoryItem[]) => {
     itemsRef.current = next;
     setItems(next);

@@ -1,5 +1,5 @@
 /**
- * Production guards for the chat proxy — no OpenAI spend from drive-by traffic.
+ * Production guards for the chat proxy, no OpenAI spend from drive-by traffic.
  */
 
 export function parseOriginList(raw) {
@@ -12,7 +12,7 @@ export function parseOriginList(raw) {
     .filter(Boolean);
 }
 
-/** Native apps often omit Origin — allow those. Restrict browsers when a list is set. */
+/** Native apps often omit Origin, allow those. Restrict browsers when a list is set. */
 export function originAllowed(origin, allowlist) {
   if (!allowlist || allowlist.length === 0) return true;
   if (!origin) return true;

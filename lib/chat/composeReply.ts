@@ -22,18 +22,18 @@ function habitAppliedReply(
   const name = title.trim();
   if (days > 1) {
     if (streak && streak >= days) {
-      return `Nice — ${name} for the last ${days} days. You’re on a ${streak}-day streak.`;
+      return `Nice, ${name} for the last ${days} days. You’re on a ${streak}-day streak.`;
     }
-    return `Nice — ${name} for the last ${days} days.`;
+    return `Nice, ${name} for the last ${days} days.`;
   }
   if (streak && streak > 1) {
-    return `Nice — ${name} today. You’re on a ${streak}-day streak.`;
+    return `Nice, ${name} today. You’re on a ${streak}-day streak.`;
   }
-  return `Nice — ${name} today.`;
+  return `Nice, ${name} today.`;
 }
 
 /**
- * Toast from what was actually applied — never celebrate a skipped action.
+ * Toast from what was actually applied, never celebrate a skipped action.
  * Model reply is only used when nothing actionable applied (or as last resort).
  */
 export function composeAppliedReply(params: {
@@ -87,11 +87,11 @@ export function composeAppliedReply(params: {
 
   if (params.renamedPersonTo?.trim()) {
     return params.renamedPersonFrom?.trim()
-      ? `Got it — ${params.renamedPersonFrom.trim()} is now ${params.renamedPersonTo.trim()}.`
+      ? `Got it, ${params.renamedPersonFrom.trim()} is now ${params.renamedPersonTo.trim()}.`
       : `Renamed to ${params.renamedPersonTo.trim()}.`;
   }
   if (actions.some((a) => a?.type === 'rename_person')) {
-    return 'Couldn’t find that person to rename — check Household.';
+    return 'Couldn’t find that person to rename. Check Household.';
   }
 
   if (removed.length === 1) {
@@ -106,31 +106,31 @@ export function composeAppliedReply(params: {
     return `Deleted ${params.removedExpenseTitle.trim()}.`;
   }
   if (actions.some((a) => a?.type === 'remove_expense')) {
-    return 'Couldn’t delete that expense — name it first.';
+    return 'Couldn’t delete that expense. Name it first.';
   }
   if (params.removedSubscriptionTitle?.trim()) {
     return `Removed ${params.removedSubscriptionTitle.trim()}.`;
   }
   if (actions.some((a) => a?.type === 'remove_subscription')) {
-    return 'Couldn’t remove that subscription — name it first.';
+    return 'Couldn’t remove that subscription. Name it first.';
   }
   if (params.removedHabitTitle?.trim()) {
     return `Removed ${params.removedHabitTitle.trim()}.`;
   }
   if (actions.some((a) => a?.type === 'remove_habit')) {
-    return 'Couldn’t remove that habit — name it first.';
+    return 'Couldn’t remove that habit. Name it first.';
   }
   if (params.removedClassTitle?.trim()) {
     return `Removed ${params.removedClassTitle.trim()}.`;
   }
   if (actions.some((a) => a?.type === 'remove_class_pack')) {
-    return 'Couldn’t remove that class — name it first.';
+    return 'Couldn’t remove that class. Name it first.';
   }
   if (params.removedLastDoneLabel?.trim()) {
     return `Removed ${params.removedLastDoneLabel.trim()}.`;
   }
   if (actions.some((a) => a?.type === 'remove_last_done')) {
-    return 'Couldn’t remove that activity — name it first.';
+    return 'Couldn’t remove that activity. Name it first.';
   }
 
   // Only confirm add when apply produced a name
@@ -148,7 +148,7 @@ export function composeAppliedReply(params: {
     return `${bits.join(' · ')}.`;
   }
   if (actions.some((a) => a?.type === 'add_item')) {
-    return 'Couldn’t add that — try again.';
+    return 'Couldn’t add that. Try again.';
   }
 
   if (params.loggedExpenseTitle?.trim()) {
@@ -163,10 +163,10 @@ export function composeAppliedReply(params: {
       : `${verb} ${expense}${at}.`;
   }
   if (actions.some((a) => a?.type === 'add_expense')) {
-    return 'Couldn’t log that expense — check the amount and try again.';
+    return 'Couldn’t log that expense. Check the amount and try again.';
   }
   if (actions.some((a) => a?.type === 'update_expense')) {
-    return 'Couldn’t update that expense — name it or open it first.';
+    return 'Couldn’t update that expense. Name it or open it first.';
   }
 
   if (params.loggedSubscriptionTitle?.trim()) {
@@ -180,17 +180,17 @@ export function composeAppliedReply(params: {
         : `Added ${subscription} to subscriptions.`;
   }
   if (actions.some((a) => a?.type === 'add_subscription')) {
-    return 'Couldn’t add that subscription — check the amount and try again.';
+    return 'Couldn’t add that subscription. Check the amount and try again.';
   }
   if (actions.some((a) => a?.type === 'update_subscription')) {
-    return 'Couldn’t update that subscription — name it first.';
+    return 'Couldn’t update that subscription. Name it first.';
   }
 
   if (params.updatedHabitTitle?.trim()) {
     return `Renamed habit to ${params.updatedHabitTitle.trim()}.`;
   }
   if (actions.some((a) => a?.type === 'update_habit')) {
-    return 'Couldn’t update that habit — open it first.';
+    return 'Couldn’t update that habit. Open it first.';
   }
 
   if (params.addedHabitTitle?.trim()) {
@@ -199,7 +199,7 @@ export function composeAppliedReply(params: {
       return `You already have ${name}. I didn’t mark today done.`;
     }
     const why = params.addedHabitWhy?.trim();
-    return why ? `Added ${name} — ${why}.` : `Added ${name}.`;
+    return why ? `Added ${name} (${why}).` : `Added ${name}.`;
   }
 
   if (params.habitCheckInTitle?.trim()) {
@@ -208,7 +208,7 @@ export function composeAppliedReply(params: {
     return habitAppliedReply(params.habitCheckInTitle.trim(), days, params.habitStreak);
   }
   if (actions.some((a) => a?.type === 'habit_check_in')) {
-    return 'Couldn’t check that in — try naming the habit.';
+    return 'Couldn’t check that in. Try naming the habit.';
   }
 
   if (params.reminderLabel) {
@@ -224,7 +224,7 @@ export function composeAppliedReply(params: {
   }
 
   if (actions.some((a) => a?.type === 'update_last_done')) {
-    return 'Couldn’t update that reminder — open it first.';
+    return 'Couldn’t update that reminder. Open it first.';
   }
 
   if (actions.some((a) => a?.type === 'set_reminder')) {
@@ -275,15 +275,15 @@ export function composeAppliedReply(params: {
   }
   if (actions.some((a) => a?.type === 'add_class_pack' || a?.type === 'update_class_pack')) {
     return params.updatedClassPack
-      ? 'Couldn’t update that class — name it first.'
-      : 'Couldn’t add that class — try again.';
+      ? 'Couldn’t update that class. Name it first.'
+      : 'Couldn’t add that class. Try again.';
   }
 
   if (params.loggedDoneLabel?.trim()) {
     return `Marked “${params.loggedDoneLabel.trim()}” as done.`;
   }
   if (actions.some((a) => a?.type === 'log_done')) {
-    return 'Couldn’t log that — try again.';
+    return 'Couldn’t log that. Try again.';
   }
 
   if (updatedIds.length > 0) {
@@ -301,7 +301,7 @@ export function composeAppliedReply(params: {
     return 'Updated.';
   }
   if (actions.some((a) => a?.type === 'update_item')) {
-    return 'Couldn’t update that — name the Thing or expense.';
+    return 'Couldn’t update that. Name the Thing or expense.';
   }
 
   if (params.openTarget) {
@@ -337,7 +337,7 @@ export function composeAppliedReply(params: {
         ].includes(a?.type)
       )
     ) {
-      return 'I couldn’t complete that — try again.';
+      return 'I couldn’t complete that. Try again.';
     }
     return trimmed;
   }

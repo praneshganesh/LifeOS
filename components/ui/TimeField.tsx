@@ -146,6 +146,8 @@ export function TimeField({
           onChange(dateToHhmm(d));
         }}
         style={[styles.row, !last && styles.border]}
+        accessibilityRole="button"
+        accessibilityLabel={`${label}, ${display}`}
       >
         <Text style={styles.label}>{label}</Text>
         <Text style={styles.value}>{display}</Text>

@@ -69,7 +69,7 @@ export default function SpacesScreen() {
   const [profileName, setProfileName] = useState('');
   const profileLetter = selfAvatarInitial(profileName, members);
   const dockClearance = Math.max(insets.bottom, 10) + 96;
-  /** Cap card height — filling the whole screen made Things (and peers) feel huge. */
+  /** Cap card height, filling the whole screen made Things (and peers) feel huge. */
   const HUB_CARD_H = 132;
 
   const taskCount = useMemo(

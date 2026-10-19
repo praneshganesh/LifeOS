@@ -9,7 +9,7 @@ type Linkable = { id: string; name: string };
 
 /**
  * Shows the current link as “None” (or the thing’s name). Typing filters
- * household things live — the full list is never laid out as chips.
+ * household things live, the full list is never laid out as chips.
  */
 export function ThingLinkPicker({
   items,

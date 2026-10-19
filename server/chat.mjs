@@ -1,5 +1,5 @@
 /**
- * LifeOS Chat API proxy — keeps OPENAI_API_KEY off the device.
+ * LifeOS Chat API proxy, keeps OPENAI_API_KEY off the device.
  * Run: npm run chat-api
  *
  * Cost notes (gpt-4o-mini ~ $0.15 / 1M in, $0.60 / 1M out):
@@ -37,7 +37,7 @@ import {
 
 const PORT = Number(process.env.PORT || process.env.CHAT_API_PORT || 8787);
 const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
-/** Rough list prices USD / 1M tokens — override via env if you change models */
+/** Rough list prices USD / 1M tokens, override via env if you change models */
 const PRICE_IN = Number(process.env.OPENAI_PRICE_IN_PER_M || 0.15);
 const PRICE_OUT = Number(process.env.OPENAI_PRICE_OUT_PER_M || 0.6);
 const MAX_BODY_BYTES = Number(process.env.CHAT_API_MAX_BODY || 65_536);
@@ -82,12 +82,12 @@ function loadDotEnv() {
 loadDotEnv();
 
 /** Keep this stable + under ~600 tokens so prompt cache can kick in. */
-const SYSTEM = `Saavi home-inventory + spend assistant for voice/chat. Reply in 1 short real English sentence (never the word "none").
+const SYSTEM = `Saavi home-inventory + spend assistant for voice/chat. Reply in 1 short real English sentence (never the word "none", never an em dash).
 
-ASR often mangles brand and store names. When the real manufacturer or retailer is clear from context, store the correct common spelling and reply with that. If it is not a clear match, keep what they said — never invent a brand or merchant.
+ASR often mangles brand and store names. When the real manufacturer or retailer is clear from context, store the correct common spelling and reply with that. If it is not a clear match, keep what they said; never invent a brand or merchant.
 
-Defaults: coffee/espresso → Kitchen / Appliances. Laptops/phones/headphones → room Personal (never Personal Documents — that is for passports/IDs only). Rooms: Kitchen, Living Room, Bedroom, Utility, Vehicles, Personal, Family, Personal Documents.
-Ownership: assign ONLY if Household JSON in this request has that person (match name or id). Never invent people, never copy example names (there is no Ananya unless they are in Household). Exception: if the user explicitly names a person this turn who is NOT in Household (“I enrolled Maya for piano”), keep assignedTo with that exact spoken name and NO personId — the app creates them; never substitute a different household member. Things: if they did not name someone, omit assignedTo and personId. Habits, class packs, attendance, reminders: first-person (“I walked”, “I attended”, “I enrolled”, “remind me”) with no other person named → the household member whose relation is You (include that id + name). Never log another adult’s class or habit as theirs. “My son’s swimming” → that child only.
+Defaults: coffee/espresso → Kitchen / Appliances. Laptops/phones/headphones → room Personal (never Personal Documents; that is for passports/IDs only). Rooms: Kitchen, Living Room, Bedroom, Utility, Vehicles, Personal, Family, Personal Documents.
+Ownership: assign ONLY if Household JSON in this request has that person (match name or id). Never invent people, never copy example names (there is no Ananya unless they are in Household). Exception: if the user explicitly names a person this turn who is NOT in Household (“I enrolled Maya for piano”), keep assignedTo with that exact spoken name and NO personId; the app creates them; never substitute a different household member. Things: if they did not name someone, omit assignedTo and personId. Habits, class packs, attendance, reminders: first-person (“I walked”, “I attended”, “I enrolled”, “remind me”) with no other person named → the household member whose relation is You (include that id + name). Never log another adult’s class or habit as theirs. “My son’s swimming” → that child only.
 On add_item for appliances/electronics: include "manualUrl" when you know a real https manufacturer support/manual page (e.g. Apple → https://support.apple.com). Never invent fake product-PDF URLs. Omit if unsure.
 
 Facts (critical):
@@ -97,12 +97,12 @@ Facts (critical):
 - Habits fields: title, assignedTo, category, streak, doneToday, rate30.
 - Class packs fields: title, assignedTo, total, used, remaining, startsOn, endsOn, scheduleDays, scheduleTime.
 - Subscriptions fields: title, amount, currency, cycle, renewsOn, category, provider.
-- If a field is missing, say it isn’t recorded — NEVER invent dates, prices, stores, warranty lengths, serials, service history, spend totals, streaks, remaining classes, or renewals.
+- If a field is missing, say it isn’t recorded; NEVER invent dates, prices, stores, warranty lengths, serials, service history, spend totals, streaks, remaining classes, or renewals.
 - Spend questions ("how much did I spend", "food this month") → sum/filter Expenses only; if empty, say nothing is logged yet.
 - Recurring / "what do I pay for Netflix" / monthly subscriptions → Subscriptions JSON only.
 - Habit streak / "did I walk" → Habits JSON only.
 - Class packs / "how many skating classes left" / remaining sessions → Classes JSON only.
-- Optional insight: if they ask about unnecessary spend, compare recent Expenses to owned Inventory cautiously — never invent.
+- Optional insight: if they ask about unnecessary spend, compare recent Expenses to owned Inventory cautiously; never invent.
 - "when did I add it" → use addedAt (Saavi add date), not a made-up purchase date.
 - "where did I buy it" → purchasedFrom only.
 - "where is X" → room only.
@@ -110,11 +110,11 @@ Facts (critical):
 - passport / document expiry → expiryDate, else warrantyExpiry. Never invent.
 - "when did I last service/maintain X" → LastDone rows with matching itemId/itemName, or recentEvents on the item; if neither matches, say you don’t have a service log.
 - User says they serviced/maintained/descaled something → log_done { label, inventoryItemId?, doneAt? } (prefer inventory id from Inventory JSON).
-- reminder / "remind me" / "log a reminder" → set_reminder { label, remindAt, inventoryItemId?, remindInterval? }. remindAt YYYY-MM-DD ("next Tuesday" → that date). If they name no day/date, omit remindAt or use today's date from the context message — never invent tomorrow. For "every Tuesday and Friday at 6:30am for 8 weeks" / "until December" set remindInterval { unit:"weekdays", weekdays:[2,5], hour:6, minute:30, value:1, endsAt? } (JS weekdays 0=Sun…6=Sat; endsAt YYYY-MM-DD optional — omit for indefinite). Not log_done. Questions like "what reminders do I have" / "show my reminders" → none only; answer from LastDone JSON. Never set_reminder for a question.
+- reminder / "remind me" / "log a reminder" → set_reminder { label, remindAt, inventoryItemId?, remindInterval? }. remindAt YYYY-MM-DD ("next Tuesday" → that date). If they name no day/date, omit remindAt or use today's date from the context message; never invent tomorrow. For "every Tuesday and Friday at 6:30am for 8 weeks" / "until December" set remindInterval { unit:"weekdays", weekdays:[2,5], hour:6, minute:30, value:1, endsAt? } (JS weekdays 0=Sun…6=Sat; endsAt YYYY-MM-DD optional; omit for indefinite). Not log_done. Questions like "what reminders do I have" / "show my reminders" → none only; answer from LastDone JSON. Never set_reminder for a question.
 - change a reminder due date ("update the due date to next Tuesday", "make it Friday", "change the reminder to tomorrow") → update_last_done { id from LastDone/session focus, patch: { remindAt } }. Never set_reminder again for a follow-up date change.
 
 Actions:
-- durable goods (laptop, machine, headphones, passport) → add_item (name, brand?, room?, category?, price?, purchasedFrom?, warrantyExpiry?, manualUrl?, assignedTo?, personId?). warrantyExpiry YYYY-MM-DD; year-only "until 2028" → 2028-12-31. Omit condition unless they said used/refurbished/etc — never invent Good. "I got a new X" is not a condition.
+- durable goods (laptop, machine, headphones, passport) → add_item (name, brand?, room?, category?, price?, purchasedFrom?, warrantyExpiry?, manualUrl?, assignedTo?, personId?). warrantyExpiry YYYY-MM-DD; year-only "until 2028" → 2028-12-31. Omit condition unless they said used/refurbished/etc; never invent Good. "I got a new X" is not a condition.
 - spent/paid/coffee run/groceries/bill (one-off consumable spend, not a Thing) → add_expense { title, amount, currency?, category?, date?, merchant?, assignedTo?, personId? } categories: food|transport|home|shopping|health|travel|bills|entertainment|other. "at/in/from STORE for X" or "got X from STORE for N dirhams" → always set merchant to STORE (keep spelling if ASR is unclear; normalize only when the real retailer is obvious). Named currency words → ISO codes (dirhams→AED, dollars→USD, euros→EUR, pounds→GBP, rupees→INR). If they name no currency, omit currency (app uses Default currency). Named person ("for Aarav") → that personId. Vague "show/open that/show me" after ANY successful action → open that same record using session focus (kind + id). Never open an unrelated Thing.
 - refine an expense (change amount/merchant/title of yogurt, coffee, groceries already in Expenses JSON) → update_expense { id, patch: { amount?, currency?, merchant?, title?, date?, category? } }. Never update_item for consumable spend. Spoken currency words → ISO code; otherwise leave currency unset.
 - delete an expense ("delete that juice", "remove the coffee spend") → remove_expense { id } from Expenses JSON. Never remove_item for spend. Vague "delete that" uses session focus.
@@ -123,12 +123,12 @@ Actions:
 - create a habit ("create a new habit to meditate every day for 15 minutes", "add a habit called Walk") → add_habit { title, why?, assignedTo?, personId? }. Do NOT habit_check_in. Do not mark today done. Put duration/cadence in why ("15 minutes, every day"). Title is the activity only ("Meditate"), not the whole sentence.
 - rename/refine a habit after create ("change the name to Stretch", "call it Morning walk", "rename it to Read") → update_habit { id from Habits/session focus, patch: { title?, why? } }. Never add_habit again for a rename follow-up.
 - habit check-in ("I walked", "mark gym done", "I meditated today") → habit_check_in { title, date?, why?, createIfMissing?, inventoryItemId?, assignedTo?, personId? } (default createIfMissing true). First-person with no other name → You. Never check in someone else’s habit of the same title. Never use this for "create/add/new habit". Delete a habit → remove_habit { id }.
-- enrolled in a class pack ("I enrolled for swimming", "24 skating classes in 3 months", "Ishaan has skating at 10 AM on Saturdays, 12 classes before November, 6 already done") → add_class_pack { title, total?, completed?, scheduleDays?, scheduleTime?, months?, startsOn?, endsOn?, assignedTo?, personId? }. scheduleDays: array of lowercase days e.g. ["saturday"] or ["monday", "wednesday"]. scheduleTime: formatted time e.g. "10:00 AM". completed: number of classes already completed / done so far (e.g. 6). Create even if they omit the count. ASR "12th classes" → total 12. Not a habit. Not a lookup. First-person enroll → You; “my son” → that child. Never also habit_check_in on enroll. Dates: endsOn/startsOn are YYYY-MM-DD and must be today or later — "before November" → the NEXT upcoming 1 November (never a past year); omit startsOn unless they said when it starts. Change pack size/schedule/completed count → update_class_pack { id, patch: { total?, completed?, scheduleDays?, scheduleTime? } }. Reassign a pack to someone else → update_class_pack { id, patch: { assignedTo } }. Cancel a pack → remove_class_pack { id }.
-- correcting a person's NAME ("that's spelled with double A", "it's Saara not Sara", "S-A-A-R-A") → rename_person { from, to }. from = the CURRENT name of the Household member being corrected, copied from Household JSON (ASR may misspell the name again this turn — match it to the closest member; use session focus when they don't repeat the name). to = the intended spelling: a letter-by-letter spelling wins; otherwise apply the spoken instruction to that member's stored name (e.g. "double A" doubles the a, "two Ts" doubles the t) — never assume this turn's transcript spelling is what is stored. Never treat a name correction as update_class_pack, add_class_pack, or a new person.
+- enrolled in a class pack ("I enrolled for swimming", "24 skating classes in 3 months", "Ishaan has skating at 10 AM on Saturdays, 12 classes before November, 6 already done") → add_class_pack { title, total?, completed?, scheduleDays?, scheduleTime?, months?, startsOn?, endsOn?, assignedTo?, personId? }. scheduleDays: array of lowercase days e.g. ["saturday"] or ["monday", "wednesday"]. scheduleTime: formatted time e.g. "10:00 AM". completed: number of classes already completed / done so far (e.g. 6). Create even if they omit the count. ASR "12th classes" → total 12. Not a habit. Not a lookup. First-person enroll → You; “my son” → that child. Never also habit_check_in on enroll. Dates: endsOn/startsOn are YYYY-MM-DD and must be today or later; "before November" → the NEXT upcoming 1 November (never a past year); omit startsOn unless they said when it starts. Change pack size/schedule/completed count → update_class_pack { id, patch: { total?, completed?, scheduleDays?, scheduleTime? } }. Reassign a pack to someone else → update_class_pack { id, patch: { assignedTo } }. Cancel a pack → remove_class_pack { id }.
+- correcting a person's NAME ("that's spelled with double A", "it's Saara not Sara", "S-A-A-R-A") → rename_person { from, to }. from = the CURRENT name of the Household member being corrected, copied from Household JSON (ASR may misspell the name again this turn; match it to the closest member; use session focus when they don't repeat the name). to = the intended spelling: a letter-by-letter spelling wins; otherwise apply the spoken instruction to that member's stored name (e.g. "double A" doubles the a, "two Ts" doubles the t); never assume this turn's transcript spelling is what is stored. Never treat a name correction as update_class_pack, add_class_pack, or a new person.
 - attended a class ("I attended", "went to skating") → log_class { title?, id?, date?, assignedTo?, personId? } only if Classes JSON has a pack for that person (or one unassigned pack). If Classes JSON is empty, do not log_class. Never invent a pack from attendance. Never log another adult’s pack.
 - refine Thing (store/price/warranty/date/serial/name) → update_item { id, patch } (patch may include purchaseDate, warrantyExpiry, serial, purchasedFrom, price). If user gives price with a currency word → include that ISO code in the price string; bare numbers use Default currency. Sharafdg→Sharaf DG.
 - service/maintain/descale/filter change → log_done { label, inventoryItemId?, doneAt? }
-- reminder ("remind me next Tuesday", "every Tuesday and Friday at 6:30 AM", "log a reminder to renew passport") → set_reminder { label, remindAt, remindInterval?, inventoryItemId?, assignedTo?, personId? }. remindAt YYYY-MM-DD. If no day is spoken, use today's date from context — do not invent tomorrow. Recurring weekdays use remindInterval.unit "weekdays". Do not refuse — Saavi stores this on Last Done. "What reminders do I have" / "show my reminders" → none; list from LastDone. Never create on a question.
+- reminder ("remind me next Tuesday", "every Tuesday and Friday at 6:30 AM", "log a reminder to renew passport") → set_reminder { label, remindAt, remindInterval?, inventoryItemId?, assignedTo?, personId? }. remindAt YYYY-MM-DD. If no day is spoken, use today's date from context; do not invent tomorrow. Recurring weekdays use remindInterval.unit "weekdays". Do not refuse; Saavi stores this on Last Done. "What reminders do I have" / "show my reminders" → none; list from LastDone. Never create on a question.
 - change reminder due date / label ("update the due date to next Tuesday", "change that reminder to Friday", "rename it to Pack lunch") → update_last_done { id, patch: { remindAt?, label?, notes? } } using LastDone id or session focus. Never create a second reminder.
 - rename the focused record ("change the name to X", "call it X", "rename it to X") → update_habit / update_expense / update_subscription / update_class_pack / update_item / update_last_done with session focus id. Never create a new record.
 - delete a Last Done activity / reminder → remove_last_done { id } from LastDone JSON.
@@ -143,7 +143,7 @@ Actions:
 
 JSON only: { "reply": string, "actions": Action[] }`;
 
-/** Single few-shot — enough to teach shape without burning tokens every turn. */
+/** Single few-shot, enough to teach shape without burning tokens every turn. */
 const FEW_SHOT = [
   {
     role: 'user',
@@ -245,7 +245,7 @@ function sanitizeReply(reply, actions) {
   return 'Anything else?';
 }
 
-/** Pull store from "from/at/in STORE for …" — keep spelling as spoken (no rewrite map). */
+/** Pull store from "from/at/in STORE for …", keep spelling as spoken (no rewrite map). */
 export function merchantFromUtterance(text) {
   const t = String(text || '');
   if (!t.trim()) return undefined;
@@ -287,6 +287,15 @@ export function formatExpenseAmount(amount, currency, defaultCurrency = '') {
   return raw;
 }
 
+/** Replace em dashes the model still writes with plain punctuation. */
+export function stripEmDashes(text) {
+  if (typeof text !== 'string') return text;
+  return text
+    .replace(/\s*—\s*/g, ', ')
+    .replace(/,\s*([.!?])/g, '$1')
+    .replace(/^,\s*|,\s*$/g, '');
+}
+
 /** Rebuild add/delete replies from actions so toast matches stored fields. */
 export function alignReplyWithActions(reply, actions) {
   const list = Array.isArray(actions) ? actions : [];
@@ -300,14 +309,14 @@ export function alignReplyWithActions(reply, actions) {
       const shown = /^\d{4}-12-31$/.test(w) ? w.slice(0, 4) : w;
       bits.push(`warranty until ${shown}`);
     }
-    return `${bits.join(' — ')}.`;
+    return `${bits.join(', ')}.`;
   }
   const expense = list.find((a) => a?.type === 'add_expense' && a.title);
   if (expense) {
     const at = expense.merchant ? ` at ${expense.merchant}` : '';
     const amt = formatExpenseAmount(expense.amount, expense.currency);
     return amt
-      ? `Logged ${expense.title}${at} — ${amt}.`
+      ? `Logged ${expense.title}${at} for ${amt}.`
       : `Logged expense: ${expense.title}${at}.`;
   }
   const expenseUpdate = list.find((a) => a?.type === 'update_expense' && a.id);
@@ -320,7 +329,7 @@ export function alignReplyWithActions(reply, actions) {
     const at = expenseUpdate.patch?.merchant
       ? ` at ${expenseUpdate.patch.merchant}`
       : '';
-    return amt ? `Updated ${title}${at} — ${amt}.` : `Updated ${title}${at}.`;
+    return amt ? `Updated ${title}${at} to ${amt}.` : `Updated ${title}${at}.`;
   }
   const expenseRemove = list.find((a) => a?.type === 'remove_expense');
   if (expenseRemove) return 'Deleted that expense.';
@@ -329,12 +338,12 @@ export function alignReplyWithActions(reply, actions) {
   const sub = list.find((a) => a?.type === 'add_subscription' && a.title);
   if (sub) {
     const amt = formatExpenseAmount(sub.amount, sub.currency);
-    return amt ? `Added ${sub.title} — ${amt}.` : `Added subscription: ${sub.title}.`;
+    return amt ? `Added ${sub.title} at ${amt}.` : `Added subscription: ${sub.title}.`;
   }
   const createdHabit = list.find((a) => a?.type === 'add_habit' && a.title);
   if (createdHabit) {
     return createdHabit.why
-      ? `Added ${createdHabit.title} — ${createdHabit.why}.`
+      ? `Added ${createdHabit.title} (${createdHabit.why}).`
       : `Added ${createdHabit.title}.`;
   }
   const habit = list.find((a) => a?.type === 'habit_check_in' && a.title);
@@ -344,14 +353,14 @@ export function alignReplyWithActions(reply, actions) {
     const bits = [`Added ${pack.title}`];
     if (pack.assignedTo) bits.push(`for ${pack.assignedTo}`);
     if (pack.total) bits.push(`${pack.total} sessions`);
-    return `${bits.join(' — ')}.`;
+    return `${bits.join(', ')}.`;
   }
   const logged = list.find((a) => a?.type === 'log_class');
   if (logged) return logged.title ? `Logged ${logged.title}.` : 'Logged that session.';
   const reminder = list.find((a) => a?.type === 'set_reminder' && a.label);
   if (reminder) {
     return reminder.remindAt
-      ? `Reminder set: ${reminder.label} — ${reminder.remindAt}.`
+      ? `Reminder set: ${reminder.label} on ${reminder.remindAt}.`
       : `Reminder set: ${reminder.label}.`;
   }
   const removes = list.filter((a) => a?.type === 'remove_item' && a.id);
@@ -602,7 +611,7 @@ function repairPeopleAction(a, { people, lastUserText }) {
     const next = { ...a };
     delete next.assignedTo;
     delete next.personId;
-    // Keep a name the user actually spoke this turn — the app creates
+    // Keep a name the user actually spoke this turn, the app creates
     // that person instead of silently reassigning to self.
     if (
       assigned &&
@@ -724,7 +733,7 @@ export function repairActions(actions, { focusItemId, focusExpenseId, sessionFoc
   });
 }
 
-/** Trim inventory payload — keep answerable facts; drop empty placeholders. */
+/** Trim inventory payload, keep answerable facts; drop empty placeholders. */
 function slimInventory(summary) {
   return (Array.isArray(summary) ? summary : []).slice(0, 20).map((i) => {
     const row = {
@@ -1199,7 +1208,7 @@ const server = createServer(async (req, res) => {
         const used = Number(aiAllowance?.used || 0);
         const limit = Number(aiAllowance?.limit || 0);
         json(req, res, 429, {
-          error: `Daily Talk limit reached (${used}/${limit}). Try again tomorrow — manual capture stays unlimited.`,
+          error: `Daily Talk limit reached (${used}/${limit}). Try again tomorrow. Manual capture stays unlimited.`,
           aiAllowance,
         });
         return;
@@ -1362,7 +1371,7 @@ const server = createServer(async (req, res) => {
   }
   const focusLine = focusBits.length
     ? focusBits.join(' ')
-    : `No focus id. For open_item, name the Thing — do not guess the newest inventory item.`;
+    : `No focus id. For open_item, name the Thing. Do not guess the newest inventory item.`;
 
   if (sb) {
     const consumed = await rpcConsumeAiTurn(sb, auth.accessToken, today);
@@ -1375,7 +1384,7 @@ const server = createServer(async (req, res) => {
       const used = Number(aiAllowance?.used || 0);
       const limit = Number(aiAllowance?.limit || 0);
       json(req, res, 429, {
-        error: `Daily Talk limit reached (${used}/${limit}). Try again tomorrow — manual capture stays unlimited.`,
+        error: `Daily Talk limit reached (${used}/${limit}). Try again tomorrow. Manual capture stays unlimited.`,
         aiAllowance,
       });
       return;
@@ -1452,7 +1461,7 @@ const server = createServer(async (req, res) => {
       defaultCurrency,
     });
     parsed.actions = validateActions(parsed.actions);
-    parsed.reply = alignReplyWithActions(parsed.reply, parsed.actions);
+    parsed.reply = stripEmDashes(alignReplyWithActions(parsed.reply, parsed.actions));
     if (
       looksLikeClassAttendance(lastUserText) &&
       !parsed.actions.some((a) => a?.type === 'log_class' || a?.type === 'add_class_pack')
@@ -1510,7 +1519,7 @@ if (isDirectRun) {
       `Guards: rpm=${process.env.CHAT_API_RPM || 30} daily=${process.env.CHAT_API_DAILY_MAX || 200} token=${API_TOKEN ? 'on' : 'off'} supabase=${sbBoot ? 'on' : 'off'} rcWebhook=${revenueCatConfigured() ? 'on' : 'off'} cors=${CORS_ALLOWLIST ? CORS_ALLOWLIST.length : '*'}`
     );
     if (!process.env.OPENAI_API_KEY) {
-      console.warn('Warning: OPENAI_API_KEY is missing — requests will fail.');
+      console.warn('Warning: OPENAI_API_KEY is missing. Requests will fail.');
     }
   });
 }

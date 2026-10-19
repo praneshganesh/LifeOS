@@ -90,7 +90,7 @@ export default function CreateClassPackScreen() {
       if (router.canGoBack()) router.back();
       else router.replace('/classes' as Href);
     } catch {
-      showError('Couldn’t save the class — try again.');
+      showError('Couldn’t save the class. Try again.');
     } finally {
       setSaving(false);
     }

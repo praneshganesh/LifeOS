@@ -61,5 +61,5 @@ npx eas-cli build --platform android --profile production --auto-submit
 ### Tips
 
 - Run builds from a clean git state you intend to ship; EAS builds from the current project (and linked git metadata).
-- Env vars like `EXPO_PUBLIC_REVENUECAT_IOS_KEY` must be set in **EAS secrets / environment** for the profile — local `.env` is not baked into cloud builds.
+- Env vars like `EXPO_PUBLIC_REVENUECAT_IOS_KEY` must be set in **EAS secrets / environment** for the profile; local `.env` is not baked into cloud builds.
 - `npm start` / web / localhost cannot exercise real StoreKit or Play Billing; use a device build (TestFlight or Play) for purchase testing.

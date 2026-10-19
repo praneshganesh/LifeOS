@@ -29,7 +29,7 @@ export function PersonChips({
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState('');
   const [saving, setSaving] = useState(false);
-  // The user's own member chip reads "Me" — otherwise it shows their name
+  // The user's own member chip reads "Me", otherwise it shows their name
   // right next to the "unassigned" chip and looks like two different people.
   const self = selfMember(members);
 

@@ -131,6 +131,6 @@ export async function reloadAppAfterWipe(): Promise<void> {
     const Updates = await import('expo-updates');
     await Updates.reloadAsync();
   } catch {
-    /* Expo Go / web — caller shows restart message */
+    /* Expo Go / web, caller shows restart message */
   }
 }

@@ -1,7 +1,7 @@
 import { isIsoDate, localDayKey } from '@/lib/dates';
 
 /** Shared Saavi chat system rules (mirrored on the server). */
-export const CHAT_SYSTEM_BRIEF = `Saavi assistant. Conversational, concise. Never invent purchase dates, prices, stores, warranty, serials, service history, spend totals, or remaining class counts — if a field is missing, say it isn’t recorded.`;
+export const CHAT_SYSTEM_BRIEF = `Saavi assistant. Conversational, concise. Never invent purchase dates, prices, stores, warranty, serials, service history, spend totals, or remaining class counts. If a field is missing, say it isn’t recorded. Never use em dashes; use commas or periods.`;
 
 function meaningful(value?: string | null) {
   if (!value?.trim()) return false;
@@ -130,7 +130,7 @@ export function buildLastDoneSummary(
     .slice(0, limit);
 }
 
-/** Compact expenses for spend Q&A — never invent beyond this list. */
+/** Compact expenses for spend Q&A, never invent beyond this list. */
 export function buildExpenseSummary(items: ExpenseSummaryInput[], limit = 40) {
   return items.slice(0, limit).map((e) => {
     const row: Record<string, unknown> = {
@@ -273,7 +273,7 @@ export function formatMoney(raw?: string | null): string | undefined {
   if (/\b(gbp|pounds?|£)\b/i.test(s)) {
     return `GBP ${pretty}`;
   }
-  // Bare number in UAE context — default AED
+  // Bare number in UAE context, default AED
   if (/^\s*[\d,.]+\s*$/.test(s)) {
     return `AED ${pretty}`;
   }
@@ -281,7 +281,7 @@ export function formatMoney(raw?: string | null): string | undefined {
   return s;
 }
 
-/** Pull merchant from "at/in/from <store> for …" when the model omits it — no store name rewriting. */
+/** Pull merchant from "at/in/from <store> for …" when the model omits it, no store name rewriting. */
 export function merchantFromUtterance(text?: string | null): string | undefined {
   if (!text?.trim()) return undefined;
   const m = text.match(
@@ -295,7 +295,7 @@ export function merchantFromUtterance(text?: string | null): string | undefined 
   return formatPurchasedFrom(candidate);
 }
 
-/** Display polish only — title-case. Store identity is the model's job. */
+/** Display polish only, title-case. Store identity is the model's job. */
 export function formatPurchasedFrom(raw?: string | null): string | undefined {
   if (!raw?.trim()) return undefined;
   return raw

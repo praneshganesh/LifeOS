@@ -21,6 +21,7 @@ import { SwipeableThingRow } from '@/components/SwipeableThingRow';
 import { useHousehold } from '@/lib/HouseholdContext';
 import { useToast } from '@/lib/ToastContext';
 import { useInventory } from '@/lib/InventoryContext';
+import { hasValue } from '@/lib/inventoryNormalize';
 import { useClasses } from '@/lib/ClassesContext';
 import { useHabits } from '@/lib/HabitsContext';
 import { remainingCount, usedCount } from '@/lib/classes';
@@ -97,7 +98,7 @@ export default function FamilyMemberScreen() {
   async function onDeleteThing(assetId: string, thingName: string) {
     const ok = await confirmDelete(thingName);
     if (!ok) return;
-    await removeItem(assetId).catch(() => showError('Couldn’t delete — try again.'));
+    await removeItem(assetId).catch(() => showError('Couldn’t delete. Try again.'));
   }
 
   async function onRemoveMember() {
@@ -107,7 +108,7 @@ export default function FamilyMemberScreen() {
     try {
       await removeMember(member.id);
     } catch {
-      showError('Couldn’t delete — try again.');
+      showError('Couldn’t delete. Try again.');
       return;
     }
     if (router.canGoBack()) router.back();
@@ -126,7 +127,7 @@ export default function FamilyMemberScreen() {
         role,
       });
       if (renamed) {
-        // assignedTo is denormalized onto their stuff — cascade the new name.
+        // assignedTo is denormalized onto their stuff, cascade the new name.
         for (const h of theirHabits) {
           await updateHabit(h.id, { assignedTo: newName, personId: member.id });
         }
@@ -141,7 +142,7 @@ export default function FamilyMemberScreen() {
       if (router.canGoBack()) router.back();
       else router.replace('/family' as Href);
     } catch {
-      showError('Couldn’t save the profile — try again.');
+      showError('Couldn’t save the profile. Try again.');
     } finally {
       setSaving(false);
     }
@@ -234,7 +235,7 @@ export default function FamilyMemberScreen() {
 
       <DetailSection label="Sharing role">
         <Text variant="caption" style={{ color: colors.mute }}>
-          Roles aren’t enforced yet — enforcement comes with live sharing.
+          Roles aren’t enforced yet. That comes with live sharing.
         </Text>
         <DetailChipRow>
           {PERMS.map((p) => (
@@ -245,7 +246,7 @@ export default function FamilyMemberScreen() {
               accent={accent}
               onPress={() =>
                 void updateMember(member.id, { permission: p }).catch(() =>
-                  showError('Couldn’t save — try again.')
+                  showError('Couldn’t save. Try again.')
                 )
               }
             />
@@ -297,9 +298,8 @@ export default function FamilyMemberScreen() {
               key={d.id}
               name={d.name}
               icon={d.icon}
-              subtitle={[d.brand, d.room].filter(Boolean).join(' · ')}
+              subtitle={[d.brand, d.room].filter(hasValue).join(' · ')}
               onPress={() => router.push(`/asset/${d.id}` as Href)}
-              onEdit={() => router.push(`/asset/${d.id}` as Href)}
               onDelete={() => void onDeleteThing(d.id, d.name)}
             />
           ))}

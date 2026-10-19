@@ -1,5 +1,5 @@
 /**
- * Web OCR via Tesseract.js. Native builds use ML Kit instead — Metro picks
+ * Web OCR via Tesseract.js. Native builds use ML Kit instead, Metro picks
  * recognize.native.ts on iOS/Android (Tesseract needs workers/wasm/DOM,
  * none of which exist in Hermes). Nothing is uploaded to an AI service.
  */
@@ -23,7 +23,7 @@ let workerPromise: Promise<Worker> | null = null;
 
 async function getWorker() {
   if (!workerPromise) {
-    // Drop the cached promise on failure — otherwise one bad init (e.g. a
+    // Drop the cached promise on failure, otherwise one bad init (e.g. a
     // network hiccup fetching the wasm/langdata) bricks OCR for the session.
     workerPromise = createWorker('eng').catch((err) => {
       workerPromise = null;
@@ -33,7 +33,7 @@ async function getWorker() {
   return workerPromise;
 }
 
-/** Longest edge we hand to Tesseract — plenty for receipt type, and far
+/** Longest edge we hand to Tesseract, plenty for receipt type, and far
  *  below the wasm decoder's memory ceiling on mobile Safari. */
 const MAX_OCR_EDGE = 2000;
 

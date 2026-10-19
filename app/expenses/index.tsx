@@ -1,12 +1,13 @@
 import { useTheme } from '@/lib/ThemeContext';
 import { useMemo } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useRouter, useLocalSearchParams, type Href } from 'expo-router';
-import { Plus } from 'lucide-react-native';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
+import { AddButton } from '@/components/ui/AddButton';
 import { ListCard, ListRow, StatStrip } from '@/components/ui/ListKit';
 import { Text } from '@/components/ui/Text';
 import { useExpenses } from '@/lib/ExpensesContext';
+import { useDeleteWithConfirm } from '@/lib/useDeleteWithConfirm';
 import { moduleHrefPreserveFrom } from '@/lib/moduleNav';
 import { getRuntimeDefaultCurrency } from '@/lib/currency';
 import {
@@ -25,7 +26,8 @@ export default function ExpensesScreen() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
   const { from } = useLocalSearchParams<{ from?: string }>();
-  const { expenses } = useExpenses();
+  const { expenses, removeExpense } = useExpenses();
+  const deleteWithConfirm = useDeleteWithConfirm();
   const month = currentMonthKey();
   const thisMonth = useMemo(() => expensesInMonth(expenses, month), [expenses, month]);
   const monthTotal = sumExpenses(thisMonth);
@@ -37,14 +39,10 @@ export default function ExpensesScreen() {
       title="Expenses"
       defaultOrigin="things"
       right={
-        <Pressable
+        <AddButton
           onPress={() => router.push('/expenses/create' as Href)}
-          style={styles.addBtn}
-          accessibilityLabel="Add expense"
-        >
-          <Plus size={18} color={colors.forest} strokeWidth={2.2} />
-          <Text style={styles.addLabel}>Add</Text>
-        </Pressable>
+          label="Add expense"
+        />
       }
     >
       <StatStrip
@@ -100,6 +98,7 @@ export default function ExpensesScreen() {
                 onPress={() =>
                   router.push(moduleHrefPreserveFrom(`/expenses/${e.id}`, from))
                 }
+                onDelete={() => void deleteWithConfirm(e.title, () => removeExpense(e.id))}
                 last={i === Math.min(expenses.length, 40) - 1}
               />
             ))}
@@ -112,20 +111,6 @@ export default function ExpensesScreen() {
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
-  addBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: colors.forestSoft,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: radius.md,
-  },
-  addLabel: {
-    fontFamily: fonts.sansSemi,
-    fontSize: 16,
-    color: colors.forest,
-  },
   bars: {
     backgroundColor: colors.surface,
     borderRadius: radius.md,

@@ -4,6 +4,16 @@
  */
 import type { InventoryItem } from '@/lib/InventoryContext';
 
+/** Stored marker for "no value" on inventory fields. Never render it. */
+export const EMPTY_FIELD = '—';
+
+/** True when a stored field holds a real value worth showing. */
+export function hasValue(v: string | null | undefined): v is string {
+  if (!v) return false;
+  const t = v.trim();
+  return Boolean(t) && t !== EMPTY_FIELD && t !== '-' && !/^unknown$/i.test(t);
+}
+
 function dash(v: unknown): string {
   if (typeof v !== 'string' || !v.trim()) return '—';
   return v.trim();

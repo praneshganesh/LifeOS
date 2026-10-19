@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   alignReplyWithActions,
+  stripEmDashes,
   currencyFromUtterance,
   expenseIdFromSummary,
   formatExpenseAmount,
@@ -214,17 +215,17 @@ describe('chat-api entity resolution & utterance helpers', () => {
     const expenseReply = alignReplyWithActions('I logged your spend', [
       { type: 'add_expense', title: 'Coffee', amount: 25, currency: 'AED' },
     ]);
-    assert.equal(expenseReply, 'Logged Coffee — AED 25.');
+    assert.equal(expenseReply, 'Logged Coffee for AED 25.');
 
     const subReply = alignReplyWithActions('Added', [
       { type: 'add_subscription', title: 'Netflix', amount: 45, currency: 'USD' },
     ]);
-    assert.equal(subReply, 'Added Netflix — USD 45.');
+    assert.equal(subReply, 'Added Netflix at USD 45.');
 
     const reminderReply = alignReplyWithActions('OK', [
       { type: 'set_reminder', label: 'Service Car', remindAt: '2026-09-01' },
     ]);
-    assert.equal(reminderReply, 'Reminder set: Service Car — 2026-09-01.');
+    assert.equal(reminderReply, 'Reminder set: Service Car on 2026-09-01.');
   });
 });
 
@@ -478,5 +479,10 @@ describe('comprehensive conversational scenarios (A through M)', () => {
       true
     );
   });
-});
 
+  it('replaces em dashes in model replies with plain punctuation', () => {
+    assert.equal(stripEmDashes('Your fridge — Samsung — is in the kitchen.'), 'Your fridge, Samsung, is in the kitchen.');
+    assert.equal(stripEmDashes('Logged it —'), 'Logged it');
+    assert.equal(stripEmDashes('Done — next one?'), 'Done, next one?');
+  });
+});

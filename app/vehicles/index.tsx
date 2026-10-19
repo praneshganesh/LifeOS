@@ -5,7 +5,9 @@ import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { ListCard, ListRow, StatStrip } from '@/components/ui/ListKit';
 import { Text } from '@/components/ui/Text';
 import { CaptureContextButton } from '@/components/CaptureContextButton';
+import { AddButton, HeaderActions } from '@/components/ui/AddButton';
 import { useInventory } from '@/lib/InventoryContext';
+import { useDeleteWithConfirm } from '@/lib/useDeleteWithConfirm';
 import { useSpaces } from '@/lib/SpacesContext';
 import { useLastDone } from '@/lib/LastDoneContext';
 import {
@@ -23,7 +25,8 @@ import { colors } from '@/constants/theme';
 
 export default function VehiclesScreen() {
   const router = useRouter();
-  const { items } = useInventory();
+  const { items, removeItem } = useInventory();
+  const deleteWithConfirm = useDeleteWithConfirm();
   const { spaces } = useSpaces();
   const { items: lastDone } = useLastDone();
   const vehicleSpaceId = spaceIdByKind(spaces, 'vehicle');
@@ -81,11 +84,17 @@ export default function VehiclesScreen() {
       title="Vehicles"
       defaultOrigin="things"
       right={
-        <CaptureContextButton
-          kind="vehicle"
-          spaceId={vehicleSpaceId}
-          label="Capture for vehicles"
-        />
+        <HeaderActions>
+          <CaptureContextButton
+            kind="vehicle"
+            spaceId={vehicleSpaceId}
+            label="Capture for vehicles"
+          />
+          <AddButton
+            onPress={() => router.push('/things/create?kind=vehicle' as Href)}
+            label="Add vehicle"
+          />
+        </HeaderActions>
       }
     >
       <StatStrip
@@ -124,6 +133,7 @@ export default function VehiclesScreen() {
                         : undefined
                   }
                   onPress={() => router.push(`/asset/${v.id}` as Href)}
+                  onDelete={() => void deleteWithConfirm(v.name, () => removeItem(v.id))}
                   last={i === fleet.length - 1}
                 />
               );

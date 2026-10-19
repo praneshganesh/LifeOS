@@ -16,7 +16,7 @@ import {
   syncDeliveredFromOS,
   type DeliveredNotification,
 } from '@/lib/notificationLog';
-import { colors } from '@/constants/theme';
+import { useTheme } from '@/lib/ThemeContext';
 
 function timeAgo(iso: string): string {
   const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
@@ -40,8 +40,9 @@ const FILTERS = [
 
 export default function NotificationsScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
   const { items } = useInventory();
-  const { items: lastDone } = useLastDone();
+  const { items: lastDone, logDone } = useLastDone();
   const { subscriptions } = useSubscriptions();
   const { packs: classPacks } = useClasses();
   const [filter, setFilter] = useState('all');
@@ -116,9 +117,12 @@ export default function NotificationsScreen() {
                       ? colors.amber
                       : undefined
                 }
-                onPress={() => {
-                  if (a.href) router.push(a.href as Href);
-                }}
+                onPress={a.href ? () => router.push(a.href as Href) : undefined}
+                onComplete={
+                  a.id.startsWith('ld-')
+                    ? () => void logDone({ id: a.id.slice(3) })
+                    : undefined
+                }
                 onDismiss={() => void dismiss(a.id)}
                 last={i === list.length - 1}
               />

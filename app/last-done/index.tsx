@@ -22,6 +22,7 @@ import { ModuleScreen } from '@/components/ui/ModuleScreen';
 import { Text } from '@/components/ui/Text';
 import { DateField } from '@/components/ui/DateField';
 import { useLastDone } from '@/lib/LastDoneContext';
+import { useDeleteWithConfirm } from '@/lib/useDeleteWithConfirm';
 import { useInventory } from '@/lib/InventoryContext';
 import { useToast } from '@/lib/ToastContext';
 import {
@@ -141,7 +142,8 @@ export default function LastDoneModal() {
     typeof modeParam === 'string' && modeParam.trim().toLowerCase() === 'remind';
   const defaultOrigin = parseModuleOrigin(fromParam) ?? (remindMode ? 'today' : 'activities');
 
-  const { items, logDone, setReminder } = useLastDone();
+  const { items, logDone, setReminder, remove } = useLastDone();
+  const deleteWithConfirm = useDeleteWithConfirm();
   const { getById, updateItem } = useInventory();
   const { showError, showToast } = useToast();
   const linkedThing = linkItemId ? getById(linkItemId) : undefined;
@@ -259,7 +261,7 @@ export default function LastDoneModal() {
       }
     } catch (err) {
       console.error('Failed to log last-done', err);
-      showError('Couldn’t save — try again.');
+      showError('Couldn’t save. Try again.');
     } finally {
       setSaving(false);
     }
@@ -282,7 +284,7 @@ export default function LastDoneModal() {
       else router.back();
     } catch (err) {
       console.error('Failed to set reminder', err);
-      showError('Couldn’t set reminder — try again.');
+      showError('Couldn’t set reminder. Try again.');
     } finally {
       setSaving(false);
     }
@@ -416,7 +418,7 @@ export default function LastDoneModal() {
             <TextInput
               value={notesDraft}
               onChangeText={setNotesDraft}
-              placeholder="Optional — e.g. off-plan property purchase"
+              placeholder="Optional, e.g. off-plan property purchase"
               placeholderTextColor={colors.faint}
               style={[styles.input, styles.notesField]}
               multiline
@@ -461,6 +463,7 @@ export default function LastDoneModal() {
                   blurActiveElement();
                   router.push(`/last-done/${item.id}` as Href);
                 }}
+                onDelete={() => void deleteWithConfirm(item.label, () => remove(item.id))}
               />
             ))}
           </>
@@ -839,6 +842,7 @@ export default function LastDoneModal() {
                     blurActiveElement();
                     router.push(`/last-done/${item.id}` as Href);
                   }}
+                  onDelete={() => void deleteWithConfirm(item.label, () => remove(item.id))}
                 />
               ))}
             </View>

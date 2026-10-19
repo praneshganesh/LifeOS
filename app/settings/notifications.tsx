@@ -19,6 +19,9 @@ import {
   syncLastDoneReminders,
 } from '@/lib/lastDoneNotifications';
 import { useLastDone } from '@/lib/LastDoneContext';
+import { useInventory } from '@/lib/InventoryContext';
+import { useSubscriptions } from '@/lib/SubscriptionsContext';
+import { syncExpiryNotifications } from '@/lib/expiryNotifications';
 import { type ThemeColors, fonts, spacing } from '@/constants/theme';
 
 function ToggleRow({
@@ -72,6 +75,8 @@ function permissionSubtitle(
 export default function NotificationPrefsScreen() {
   const { colors } = useTheme();
   const { items: lastDoneItems } = useLastDone();
+  const { items: inventory } = useInventory();
+  const { subscriptions } = useSubscriptions();
   const [prefs, setPrefs] = useState<NotificationPrefs>(DEFAULT_NOTIFICATION_PREFS);
   const [ready, setReady] = useState(false);
   const [osStatus, setOsStatus] = useState<
@@ -116,7 +121,15 @@ export default function NotificationPrefsScreen() {
     ) {
       void syncLastDoneReminders(lastDoneItems);
     }
+    void syncExpiryNotifications({
+      inventory,
+      subscriptions,
+      reminders: lastDoneItems,
+      prefs: next,
+    });
   }
+
+  const expiryOn = prefs.warranties || prefs.documents || prefs.insurance || prefs.subscriptions;
 
   return (
     <ModuleScreen
@@ -126,13 +139,27 @@ export default function NotificationPrefsScreen() {
       bottomExtra={DETAIL_DOCK_PAD}
       contentStyle={{ paddingTop: spacing.lg }}
     >
-      {/* No "Reminders" heading — page title already owns that job. */}
+      {/* No "Reminders" heading, page title already owns that job. */}
       <ListCard>
         <ToggleRow
           title="Activity reminders"
           subtitle={permissionSubtitle(ready, osStatus)}
           value={prefs.push}
           onChange={(v) => void update({ push: v })}
+        />
+        <ToggleRow
+          title="Renewals and expiry dates"
+          subtitle="Warranties, documents, policies and subscriptions"
+          value={prefs.push && expiryOn}
+          onChange={(v) =>
+            void update({
+              warranties: v,
+              documents: v,
+              insurance: v,
+              subscriptions: v,
+              ...(v && !prefs.push ? { push: true } : null),
+            })
+          }
           last
         />
       </ListCard>

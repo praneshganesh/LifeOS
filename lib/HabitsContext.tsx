@@ -109,7 +109,7 @@ export function HabitsProvider({ children }: { children: ReactNode }) {
         input.personId
       );
       if (existing && (!input.personId || existing.personId === input.personId)) {
-        // Idempotent — Talk check-ins must not spawn a second "Walked"
+        // Idempotent, Talk check-ins must not spawn a second "Walked"
         if (
           input.inventoryItemId &&
           existing.inventoryItemId !== input.inventoryItemId

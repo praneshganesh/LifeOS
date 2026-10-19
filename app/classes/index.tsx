@@ -2,11 +2,14 @@ import { useTheme } from '@/lib/ThemeContext';
 import { useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
-import { Plus } from 'lucide-react-native';
+import { Check } from 'lucide-react-native';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
+import { AddButton } from '@/components/ui/AddButton';
 import { StatStrip } from '@/components/ui/ListKit';
+import { SwipeActions } from '@/components/ui/SwipeActions';
 import { Text } from '@/components/ui/Text';
 import { useClasses } from '@/lib/ClassesContext';
+import { useDeleteWithConfirm } from '@/lib/useDeleteWithConfirm';
 import { useHousehold } from '@/lib/HouseholdContext';
 import { displayNameFor } from '@/lib/people';
 import {
@@ -23,7 +26,8 @@ export default function ClassesScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
-  const { packs, logClass } = useClasses();
+  const { packs, logClass, removePack } = useClasses();
+  const deleteWithConfirm = useDeleteWithConfirm();
   const { members } = useHousehold();
   const today = localDayKey();
 
@@ -45,14 +49,7 @@ export default function ClassesScreen() {
       title="Classes"
       defaultOrigin="things"
       right={
-        <Pressable
-          onPress={() => router.push('/classes/create' as Href)}
-          style={styles.addBtn}
-          accessibilityLabel="Add class"
-        >
-          <Plus size={18} color={colors.forest} strokeWidth={2.2} />
-          <Text style={styles.addLabel}>Add</Text>
-        </Pressable>
+        <AddButton onPress={() => router.push('/classes/create' as Href)} label="Add class" />
       }
     >
       <StatStrip
@@ -66,7 +63,7 @@ export default function ClassesScreen() {
       {packs.length === 0 ? (
         <ModuleSection label="Your classes">
           <Text variant="body" style={{ color: colors.mute }}>
-            Add a class like “Skating — 24 sessions in 3 months.” Log a session when
+            Add a class like “Skating, 24 sessions in 3 months.” Log a session when
             they go. Talk: “Aarav went to skating.”
           </Text>
         </ModuleSection>
@@ -79,8 +76,14 @@ export default function ClassesScreen() {
           const ownerName = displayNameFor(members, pack.personId, pack.assignedTo);
           const who = ownerName ? `${ownerName} · ` : '';
           return (
-            <Pressable
+            <SwipeActions
               key={pack.id}
+              onComplete={() => void logClass(pack.id, today)}
+              onDelete={() => void deleteWithConfirm(pack.title, () => removePack(pack.id))}
+              completeLabel={todayDone ? 'Undo' : 'Log'}
+              style={styles.swipeShell}
+            >
+            <Pressable
               onPress={() => router.push(`/classes/${pack.id}` as Href)}
               style={styles.card}
               accessibilityRole="button"
@@ -100,14 +103,19 @@ export default function ClassesScreen() {
                 </View>
                 <Pressable
                   onPress={() => void logClass(pack.id, today)}
-                  style={[styles.logBtn, todayDone && styles.logBtnOn]}
+                  hitSlop={12}
+                  style={({ pressed }) => [
+                    styles.logRing,
+                    todayDone && styles.logRingOn,
+                    pressed && { opacity: 0.6 },
+                  ]}
                   accessibilityLabel={
                     todayDone ? 'Undo today’s session' : 'Log session today'
                   }
                 >
-                  <Text style={[styles.logLabel, todayDone && styles.logLabelOn]}>
-                    {todayDone ? 'Today ✓' : 'Log session'}
-                  </Text>
+                  {todayDone ? (
+                    <Check size={13} color={colors.forestOn} strokeWidth={3} />
+                  ) : null}
                 </Pressable>
               </View>
               <View style={styles.track}>
@@ -119,6 +127,7 @@ export default function ClassesScreen() {
                   : `${remaining} session${remaining === 1 ? '' : 's'} left`}
               </Text>
             </Pressable>
+            </SwipeActions>
           );
         })
       )}
@@ -128,47 +137,32 @@ export default function ClassesScreen() {
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
-  addBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: colors.forestSoft,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: radius.md,
-  },
-  addLabel: {
-    fontFamily: fonts.sansSemi,
-    fontSize: 16,
-    color: colors.forest,
+  swipeShell: {
+    borderRadius: radius.lg,
+    marginBottom: spacing.sm,
   },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
     padding: spacing.md,
-    marginBottom: spacing.sm,
   },
   cardTop: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
-  logBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: radius.md,
-    backgroundColor: colors.forestSoft,
+  logRing: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: colors.lineStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  logBtnOn: {
+  logRingOn: {
     backgroundColor: colors.forest,
-  },
-  logLabel: {
-    fontFamily: fonts.sansSemi,
-    fontSize: 16,
-    color: colors.forest,
-  },
-  logLabelOn: {
-    color: colors.forestOn,
+    borderColor: colors.forest,
   },
   track: {
     height: 6,

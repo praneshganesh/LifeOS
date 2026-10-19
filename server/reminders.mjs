@@ -1,4 +1,4 @@
-/** Reminder utterance repair — keep in sync with lib/dates.ts */
+/** Reminder utterance repair, keep in sync with lib/dates.ts */
 
 const WEEKDAYS = [
   'sunday',
@@ -68,7 +68,7 @@ function calendarDayFromUtterance(text, from = new Date()) {
   return undefined;
 }
 
-/** Asking about existing reminders — never create. */
+/** Asking about existing reminders, never create. */
 export function looksLikeReminderQuery(text) {
   if (!text?.trim()) return false;
   const t = text.trim();
@@ -83,7 +83,7 @@ export function looksLikeReminderQuery(text) {
   );
 }
 
-/** Create / schedule a reminder — not a list/query question. */
+/** Create / schedule a reminder, not a list/query question. */
 export function looksLikeReminder(text) {
   if (!text?.trim()) return false;
   if (looksLikeReminderQuery(text)) return false;

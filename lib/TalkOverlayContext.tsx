@@ -13,13 +13,13 @@ type TalkOverlayContextValue = {
   openTalk: () => void;
   closeTalk: () => void;
   toggleTalk: () => void;
-  /** Last module Talk touched — vague “show me” / “delete that” uses this. */
+  /** Last module Talk touched, vague “show me” / “delete that” uses this. */
   talkFocus: TalkFocus | null;
   setTalkFocus: (focus: TalkFocus | null) => void;
-  /** Last Thing — derived from talkFocus when kind is item */
+  /** Last Thing, derived from talkFocus when kind is item */
   focusItemId: string | null;
   setFocusItemId: (id: string | null) => void;
-  /** Last expense — derived from talkFocus when kind is expense */
+  /** Last expense, derived from talkFocus when kind is expense */
   focusExpenseId: string | null;
   setFocusExpenseId: (id: string | null) => void;
 };

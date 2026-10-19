@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { AppState } from 'react-native';
 import {
   computeEntitlement,
   type Entitlement,
@@ -111,19 +112,23 @@ export function PlanProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refresh = useCallback(async () => {
-    const [p, m, seats] = await Promise.all([
+    const [local, m, seats] = await Promise.all([
       loadPlanPrefs(),
       loadMembership(),
       loadSeatUsage(),
     ]);
 
+    const { loadProfileBilling } = await import('@/lib/billing/profilePlan');
+    const profile = m.role !== 'member' ? await loadProfileBilling() : null;
+    let p = local;
+    if (profile?.trialStartedAt && profile.trialStartedAt !== local.trialStartedAt) {
+      p = { ...local, trialStartedAt: profile.trialStartedAt };
+      await savePlanPrefs(p);
+    }
+
     let prefsNext = p;
     if (m.role !== 'member' && isRevenueCatConfigured()) {
-      const [{ loadProfileBilling }, billing] = await Promise.all([
-        import('@/lib/billing/profilePlan'),
-        fetchCustomerBilling(),
-      ]);
-      const profile = await loadProfileBilling();
+      const billing = await fetchCustomerBilling();
       const pendingProductId = p.pendingProductId || profile?.pendingProductId || undefined;
       if (billing.status === 'active') {
         const snap = billing.snap;
@@ -185,6 +190,13 @@ export function PlanProvider({ children }: { children: ReactNode }) {
     };
   }, [refresh, refreshOffers]);
 
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void refresh();
+    });
+    return () => sub.remove();
+  }, [refresh]);
+
   const entitlement = useMemo(
     () =>
       computeEntitlement(prefs, {
@@ -245,7 +257,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
         };
       }
 
-      // Dev / web fallback — unlock locally when StoreKit isn't available.
+      // Dev / web fallback, unlock locally when StoreKit isn't available.
       if (__DEV__ || !isRevenueCatConfigured()) {
         await applyPlanId(planId, prefs.trialStartedAt);
         return {

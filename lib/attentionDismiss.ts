@@ -12,6 +12,13 @@ const SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
 
 type DismissMap = Record<string, number>;
 
+/** Local midnight at the start of tomorrow. */
+export function startOfTomorrow(now = new Date()): number {
+  const d = new Date(now);
+  d.setHours(24, 0, 0, 0);
+  return d.getTime();
+}
+
 async function loadMap(): Promise<DismissMap> {
   try {
     const raw = await AsyncStorage.getItem(KEY);
@@ -33,6 +40,12 @@ export function useAttentionDismissals() {
   const [dismissed, setDismissed] = useState<DismissMap>({});
   const mapRef = useRef<DismissMap>({});
 
+  const reload = useCallback(async () => {
+    const map = await loadMap();
+    mapRef.current = map;
+    setDismissed(map);
+  }, []);
+
   useEffect(() => {
     let alive = true;
     void loadMap().then((map) => {
@@ -45,14 +58,15 @@ export function useAttentionDismissals() {
     };
   }, []);
 
-  const dismiss = useCallback(async (id: string) => {
-    const next = { ...mapRef.current, [id]: Date.now() + SNOOZE_MS };
+  /** Hide `id` until `until` (epoch ms), a week from now by default. */
+  const dismiss = useCallback(async (id: string, until?: number) => {
+    const next = { ...mapRef.current, [id]: until ?? Date.now() + SNOOZE_MS };
     mapRef.current = next;
     setDismissed(next);
     try {
       await AsyncStorage.setItem(KEY, JSON.stringify(next));
     } catch {
-      // Snooze is cosmetic — worst case the row returns next launch.
+      // Snooze is cosmetic, worst case the row returns next launch.
     }
   }, []);
 
@@ -61,5 +75,5 @@ export function useAttentionDismissals() {
     [dismissed]
   );
 
-  return { dismiss, isDismissed };
+  return { dismiss, isDismissed, reload };
 }

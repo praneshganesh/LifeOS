@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { Check, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
+import { SwipeActions } from '@/components/ui/SwipeActions';
 import {
   defaultActivityYear,
   formatInterval,
@@ -265,16 +266,19 @@ export function LastDoneActivityCard({
   onYearChange,
   hideReminder = false,
   compact = false,
+  onDelete,
 }: {
   item: LastDoneItem;
   onLog?: () => void;
   onOpen?: () => void;
-  /** Detail screen — browse years that have logs. */
+  /** List: swipe left reveals Delete. */
+  onDelete?: () => void;
+  /** Detail screen, browse years that have logs. */
   year?: number;
   onYearChange?: (year: number) => void;
   /** Hide embedded reminder summary when the parent already edits schedule. */
   hideReminder?: boolean;
-  /** List rows — tighter padding, no heatmap. */
+  /** List rows, tighter padding, no heatmap. */
   compact?: boolean;
 }) {
   const { colors } = useTheme();
@@ -305,10 +309,12 @@ export function LastDoneActivityCard({
       : undefined;
 
   return (
+    <SwipeActions onComplete={onLog} onDelete={onDelete} style={styles.swipeShell}>
     <Pressable
       onPress={onOpen}
       style={({ pressed }) => [
         styles.card,
+        styles.cardInSwipe,
         { backgroundColor: colors.surface },
         pressed && onOpen && { opacity: 0.96 },
       ]}
@@ -366,6 +372,7 @@ export function LastDoneActivityCard({
         </View>
       ) : null}
     </Pressable>
+    </SwipeActions>
   );
 }
 
@@ -380,6 +387,13 @@ export function LastDoneCategoryHeader({ category }: { category: LastDoneCategor
 }
 
 const styles = StyleSheet.create({
+  swipeShell: {
+    borderRadius: radius.md,
+    marginBottom: spacing.sm,
+  },
+  cardInSwipe: {
+    marginBottom: 0,
+  },
   card: {
     borderRadius: radius.md,
     paddingVertical: 10,

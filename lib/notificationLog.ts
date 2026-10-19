@@ -98,7 +98,7 @@ export function entryFromOsNotification(
 ): DeliveredNotification {
   const deliveredMs =
     typeof notification.date === 'number' && notification.date > 0
-      ? // expo reports seconds on iOS, ms on Android — normalize.
+      ? // expo reports seconds on iOS, ms on Android, normalize.
         notification.date < 1e12
         ? notification.date * 1000
         : notification.date
@@ -115,7 +115,7 @@ export function entryFromOsNotification(
 
 /**
  * Pull notifications still visible in the OS notification center into the
- * log — catches deliveries that happened while the app was closed.
+ * log, catches deliveries that happened while the app was closed.
  */
 export async function syncDeliveredFromOS(): Promise<void> {
   if (Platform.OS !== 'ios' && Platform.OS !== 'android') return;
@@ -126,6 +126,6 @@ export async function syncDeliveredFromOS(): Promise<void> {
       presented.map((n) => entryFromOsNotification(n as OsNotification))
     );
   } catch {
-    /* permissions missing / web — history just stays as-is */
+    /* permissions missing / web, history just stays as-is */
   }
 }

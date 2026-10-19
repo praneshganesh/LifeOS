@@ -77,7 +77,7 @@ export function isIncompleteStub(item: InventoryItem): boolean {
 
 /**
  * Score Talk stubs against capture name/brand/OCR text.
- * Pure local string rules — no cloud AI.
+ * Pure local string rules, no cloud AI.
  */
 export function findTalkMatches(
   inventory: InventoryItem[],

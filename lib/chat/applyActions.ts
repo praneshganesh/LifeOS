@@ -259,7 +259,7 @@ export function normalizeDateField(raw: string): string | undefined {
 
 /**
  * Condition is unknown unless the user actually stated it.
- * "I got a new MacBook" is purchase recency — not "New" / "Good".
+ * "I got a new MacBook" is purchase recency, not "New" / "Good".
  */
 function resolveCondition(
   raw?: string | null,
@@ -274,9 +274,9 @@ function resolveCondition(
   return titleCase(c);
 }
 
-/** Category/icon defaults when the model omits them — not brand correction.
+/** Category/icon defaults when the model omits them, not brand correction.
  *  Everything lives in one Things pool (s1). Vehicles/docs are categories. */
-function inferMeta(text: string): {
+export function inferMeta(text: string): {
   category: string;
   room: string;
   spaceId: string;
@@ -365,7 +365,7 @@ function addActionToInput(
   const price = formatMoney(action.price) || '—';
   const purchasedFrom = formatPurchasedFrom(action.purchasedFrom);
   const manualUrl = sanitizeManualUrl(action.manualUrl);
-  // "until next december" is deterministic on-device — when the user spoke a
+  // "until next december" is deterministic on-device, when the user spoke a
   // relative phrase, trust our parse over the model's date (models tend to
   // read "next december" as the nearest one).
   const spokenWarranty = warrantyExpiryFromUtterance(lastUserText);
@@ -430,15 +430,15 @@ export type ApplyActionsResult = {
   removedNames: string[];
   updatedIds: string[];
   openItemId: string | null;
-  /** Expense to open this turn (show/open after spend — not a Thing). */
+  /** Expense to open this turn (show/open after spend, not a Thing). */
   openExpenseId: string | null;
-  /** Any module to open this turn — Talk/Ask navigate from this. */
+  /** Any module to open this turn, Talk/Ask navigate from this. */
   openTarget: TalkFocus | null;
   /** Best item to treat as conversation focus after this turn */
   focusItemId: string | null;
-  /** Last expense logged this turn — session focus for “show it”. */
+  /** Last expense logged this turn, session focus for “show it”. */
   loggedExpenseId: string | null;
-  /** Last module mutated this turn — session focus for show/update/delete. */
+  /** Last module mutated this turn, session focus for show/update/delete. */
   talkFocus: TalkFocus | null;
   /** True when focus item was deleted this turn */
   clearedFocus: boolean;
@@ -512,7 +512,7 @@ export async function applyChatActions(
     lastDoneList?: { id: string; label: string }[];
     /** Prior-turn expense so “show it” opens juice, not the old TV. */
     lastFocusExpenseId?: string | null;
-    /** Last module Talk touched — vague show/delete/update uses this. */
+    /** Last module Talk touched, vague show/delete/update uses this. */
     lastTalkFocus?: TalkFocus | null;
     /** Household default ISO currency (from profile / onboarding). */
     defaultCurrency?: string;
@@ -779,7 +779,7 @@ export async function applyChatActions(
       }
 
       if (!existingItem && options?.resolveItem) {
-        console.log('[LifeOS chat] skip update_item — not in inventory', action.id);
+        console.log('[LifeOS chat] skip update_item: not in inventory', action.id);
         continue;
       }
 
@@ -882,11 +882,11 @@ export async function applyChatActions(
           }) || id;
       }
       if (!Object.keys(patch).length) {
-        console.log('[LifeOS chat] skip update_expense — empty patch');
+        console.log('[LifeOS chat] skip update_expense: empty patch');
         continue;
       }
       if (options.expenses.getById && !options.expenses.getById(id)) {
-        console.log('[LifeOS chat] skip update_expense — not found', id);
+        console.log('[LifeOS chat] skip update_expense: not found', id);
         continue;
       }
       await options.expenses.updateExpense(id, patch);
@@ -918,7 +918,7 @@ export async function applyChatActions(
         options.expenses.getById?.(id) ||
         options.expensesList?.find((e) => e.id === id);
       if (!id || (!row && options.expenses.getById)) {
-        console.log('[LifeOS chat] skip remove_expense — not found', action.id);
+        console.log('[LifeOS chat] skip remove_expense: not found', action.id);
         continue;
       }
       await options.expenses.removeExpense(id);
@@ -941,7 +941,7 @@ export async function applyChatActions(
         open({ kind: 'expense', id });
         console.log('[LifeOS chat] open_expense', id);
       } else {
-        console.log('[LifeOS chat] skip open_expense — no id');
+        console.log('[LifeOS chat] skip open_expense: no id');
       }
       continue;
     }
@@ -1072,7 +1072,7 @@ export async function applyChatActions(
         console.log('[LifeOS chat] remapped remove_item → remove_last_done', lastDoneHit.id);
         continue;
       }
-      console.log('[LifeOS chat] skip remove_item — not in inventory', actionId);
+      console.log('[LifeOS chat] skip remove_item: not in inventory', actionId);
       continue;
     }
     if (
@@ -1172,17 +1172,17 @@ export async function applyChatActions(
           console.log('[LifeOS chat] open last talk focus', prior.kind, prior.id);
         } else {
           openItemId = null;
-          console.log('[LifeOS chat] vague show — no talk focus');
+          console.log('[LifeOS chat] vague show: no talk focus');
         }
         continue;
       }
       if (wantsExpense && !namedThing) {
         openItemId = null;
-        console.log('[LifeOS chat] open_expense missing — no expense focus');
+        console.log('[LifeOS chat] open_expense missing: no expense focus');
         continue;
       }
       if (action.type !== 'open_item') {
-        console.log('[LifeOS chat] skip open — no id for', action.type);
+        console.log('[LifeOS chat] skip open: no id for', action.type);
         continue;
       }
       const id = (namedThing || action.id || (prior?.kind === 'item' ? prior.id : '') || '').trim();
@@ -1200,7 +1200,7 @@ export async function applyChatActions(
         (action.inventoryItemId || fallback || '').trim() || undefined;
       const doneAt = action.doneAt ? normalizeDateField(action.doneAt) : today;
       if (!doneAt) {
-        console.log('[LifeOS chat] skip log_done — invalid date', action.doneAt);
+        console.log('[LifeOS chat] skip log_done: invalid date', action.doneAt);
         continue;
       }
       const saved = await options.lastDone.logDone({
@@ -1229,7 +1229,7 @@ export async function applyChatActions(
     }
     if (action.type === 'set_reminder' && action.label?.trim() && options?.lastDone?.setReminder) {
       if (looksLikeReminderQuery(lastUserText)) {
-        console.log('[LifeOS chat] skip set_reminder — query, not create', action.label);
+        console.log('[LifeOS chat] skip set_reminder: query, not create', action.label);
         continue;
       }
       const recurring =
@@ -1251,11 +1251,11 @@ export async function applyChatActions(
         (utteranceNamesRemindDate(lastUserText) ? modelAt : undefined) ||
         today;
       if (!remindAt && !recurring?.remindInterval) {
-        console.log('[LifeOS chat] skip set_reminder — no date', action.label);
+        console.log('[LifeOS chat] skip set_reminder: no date', action.label);
         continue;
       }
       if (!remindAt) {
-        console.log('[LifeOS chat] skip set_reminder — no date', action.label);
+        console.log('[LifeOS chat] skip set_reminder: no date', action.label);
         continue;
       }
       const spokenLabel = reminderLabelFromUtterance(lastUserText);
@@ -1310,7 +1310,7 @@ export async function applyChatActions(
         '';
       const row = options.lastDoneList?.find((d) => d.id === id);
       if (!id || (!row && options.lastDoneList)) {
-        console.log('[LifeOS chat] skip update_last_done — missing id', action);
+        console.log('[LifeOS chat] skip update_last_done: missing id', action);
         continue;
       }
       const spokenAt = remindAtFromUtterance(lastUserText);
@@ -1330,7 +1330,7 @@ export async function applyChatActions(
       if (action.patch?.notes !== undefined) patch.notes = action.patch.notes;
       if (patchRemindAt !== undefined) patch.remindAt = patchRemindAt;
       if (!Object.keys(patch).length) {
-        console.log('[LifeOS chat] skip update_last_done — empty patch');
+        console.log('[LifeOS chat] skip update_last_done: empty patch');
         continue;
       }
       const saved = await options.lastDone.updateActivity(id, patch);
@@ -1344,7 +1344,7 @@ export async function applyChatActions(
     if (action.type === 'add_expense' && action.title?.trim() && options?.expenses) {
       const amount = parseAmount(action.amount);
       if (!Number.isFinite(amount) || amount <= 0) {
-        console.log('[LifeOS chat] skip add_expense — bad amount', action.amount);
+        console.log('[LifeOS chat] skip add_expense: bad amount', action.amount);
         continue;
       }
       const currency = resolveActionCurrency(
@@ -1355,7 +1355,7 @@ export async function applyChatActions(
       );
       const date = action.date ? normalizeDateField(action.date) : today;
       if (!date) {
-        console.log('[LifeOS chat] skip add_expense — invalid date', action.date);
+        console.log('[LifeOS chat] skip add_expense: invalid date', action.date);
         continue;
       }
       const merchant =
@@ -1403,7 +1403,7 @@ export async function applyChatActions(
     ) {
       const amount = parseAmount(action.amount);
       if (!Number.isFinite(amount) || amount <= 0) {
-        console.log('[LifeOS chat] skip add_subscription — bad amount', action.amount);
+        console.log('[LifeOS chat] skip add_subscription: bad amount', action.amount);
         continue;
       }
       const currency = resolveActionCurrency(
@@ -1480,7 +1480,7 @@ export async function applyChatActions(
       if (action.patch?.provider?.trim()) patch.provider = action.patch.provider.trim();
       if (action.patch?.note?.trim()) patch.note = action.patch.note.trim();
       if (!id || !Object.keys(patch).length || (!row && options.subscriptions.getById)) {
-        console.log('[LifeOS chat] skip update_subscription — missing id/patch or not found', id);
+        console.log('[LifeOS chat] skip update_subscription: missing id/patch or not found', id);
         continue;
       }
       await options.subscriptions.updateSubscription(id, patch);
@@ -1504,7 +1504,7 @@ export async function applyChatActions(
         options.subscriptions.getById?.(id) ||
         options.subscriptionsList?.find((s) => s.id === id);
       if (!id || (!row && options.subscriptions.getById)) {
-        console.log('[LifeOS chat] skip remove_subscription — not found', action.id);
+        console.log('[LifeOS chat] skip remove_subscription: not found', action.id);
         continue;
       }
       await options.subscriptions.removeSubscription(id);
@@ -1557,7 +1557,7 @@ export async function applyChatActions(
         '';
       const habit = id ? options.habits.getById(id) : undefined;
       if (!id || !habit) {
-        console.log('[LifeOS chat] skip update_habit — missing id', action);
+        console.log('[LifeOS chat] skip update_habit: missing id', action);
         continue;
       }
       const spokenTitle = titleFromRenameUtterance(lastUserText);
@@ -1566,7 +1566,7 @@ export async function applyChatActions(
       if (nextTitle) patch.title = titleCase(nextTitle);
       if (action.patch?.why?.trim()) patch.why = action.patch.why.trim();
       if (!Object.keys(patch).length) {
-        console.log('[LifeOS chat] skip update_habit — empty patch');
+        console.log('[LifeOS chat] skip update_habit: empty patch');
         continue;
       }
       await options.habits.updateHabit(id, patch);
@@ -1581,7 +1581,7 @@ export async function applyChatActions(
       const title = titleCase(action.title.trim());
       const date = action.date ? normalizeDateField(action.date) : today;
       if (!date) {
-        console.log('[LifeOS chat] skip habit_check_in — invalid date', action.date);
+        console.log('[LifeOS chat] skip habit_check_in: invalid date', action.date);
         continue;
       }
       const linkId = action.inventoryItemId?.trim() || undefined;
@@ -1608,7 +1608,7 @@ export async function applyChatActions(
         });
       }
       if (!habit) {
-        console.log('[LifeOS chat] skip habit_check_in — not found', title);
+        console.log('[LifeOS chat] skip habit_check_in: not found', title);
         continue;
       }
       if (linkId && habit.inventoryItemId !== linkId && options.habits.updateHabit) {
@@ -1675,7 +1675,7 @@ export async function applyChatActions(
             )
           : undefined);
       if (!habit) {
-        console.log('[LifeOS chat] skip remove_habit — not found');
+        console.log('[LifeOS chat] skip remove_habit: not found');
         continue;
       }
       await options.habits.removeHabit(habit.id);
@@ -1716,7 +1716,7 @@ export async function applyChatActions(
           preferSelf: true,
         })
       );
-      // The model doesn't reliably know today's date — "before November" can
+      // The model doesn't reliably know today's date, "before November" can
       // come back as 2023. Spoken deadline wins; reject windows that already
       // ended and starts that are ancient or after the end.
       const yearAgoDate = new Date(`${today}T12:00:00`);
@@ -1789,12 +1789,12 @@ export async function applyChatActions(
           : pickAttendancePack([], { title: named, personId: person?.personId })) ||
         (!named && !person?.personId ? options.classes.newestPack?.() : undefined);
       if (!pack) {
-        console.log('[LifeOS chat] skip log_class — pack not found', action.title);
+        console.log('[LifeOS chat] skip log_class: pack not found', action.title);
         continue;
       }
       const date = action.date ? normalizeDateField(action.date) : today;
       if (!date) {
-        console.log('[LifeOS chat] skip log_class — invalid date', action.date);
+        console.log('[LifeOS chat] skip log_class: invalid date', action.date);
         continue;
       }
       const updated = await options.classes.logClass(pack.id, date);
@@ -1832,7 +1832,7 @@ export async function applyChatActions(
             )
           : undefined);
       if (!pack) {
-        console.log('[LifeOS chat] skip remove_class_pack — not found');
+        console.log('[LifeOS chat] skip remove_class_pack: not found');
         continue;
       }
       await options.classes.removePack(pack.id);
@@ -1851,7 +1851,7 @@ export async function applyChatActions(
         (titled ? options.classes.findPack(titled) : undefined) ||
         (talkFocus?.kind === 'class' ? options.classes.getById(talkFocus.id) : undefined);
       if (!pack) {
-        console.log('[LifeOS chat] skip update_class_pack — not found');
+        console.log('[LifeOS chat] skip update_class_pack: not found');
         continue;
       }
       const patch: Partial<ClassPack> = {};
@@ -1906,7 +1906,7 @@ export async function applyChatActions(
       }
 
       if (!Object.keys(patch).length) {
-        console.log('[LifeOS chat] skip update_class_pack — empty patch');
+        console.log('[LifeOS chat] skip update_class_pack: empty patch');
         continue;
       }
       await options.classes.updatePack(pack.id, patch);
@@ -1923,7 +1923,7 @@ export async function applyChatActions(
       const to = titleCase(action.to.trim());
       const fromRaw = action.from?.trim().toLowerCase() || '';
       // ASR can mangle the name in the correction itself ("Sara" may be stored
-      // as "Sarah"), so resolve the member fuzzily — and fall back to matching
+      // as "Sarah"), so resolve the member fuzzily, and fall back to matching
       // on `to`, which is always a near-variant of the stored name.
       const member =
         (fromRaw &&
@@ -1932,14 +1932,14 @@ export async function applyChatActions(
         fuzzyMatchMember(to, household) ||
         null;
       if (!member) {
-        console.log('[LifeOS chat] skip rename_person — not found', action.from);
+        console.log('[LifeOS chat] skip rename_person: not found', action.from);
         continue;
       }
       await options.people.updateMember(member.id, {
         name: to,
         avatarLetter: avatarLetterFromName(to),
       });
-      // The name is denormalized onto packs/habits — cascade it.
+      // The name is denormalized onto packs/habits, cascade it.
       if (options.classes?.updatePack) {
         for (const row of options.classPacksList ?? []) {
           const pack = options.classes.getById(row.id);
@@ -1969,7 +1969,7 @@ export async function applyChatActions(
         '';
       const row = options.lastDoneList?.find((d) => d.id === id);
       if (!id || (!row && options.lastDoneList)) {
-        console.log('[LifeOS chat] skip remove_last_done — not found', action.id);
+        console.log('[LifeOS chat] skip remove_last_done: not found', action.id);
         continue;
       }
       await options.lastDone.remove(id);
@@ -2488,7 +2488,7 @@ function ensureTalkActions(
   }
   if (looksLikeReminder(lastUserText) && !types.has('set_reminder')) {
     const recurring = parseRecurringWeekdayReminder(lastUserText);
-    // Default to today when the user didn't name a day — silent skip felt broken.
+    // Default to today when the user didn't name a day, silent skip felt broken.
     const remindAt = remindAtFromUtterance(lastUserText) || localDayKey();
     const label = reminderLabelFromUtterance(lastUserText) || 'Reminder';
     if (remindAt || recurring) {
@@ -2503,8 +2503,16 @@ function ensureTalkActions(
   return list.length ? list : actions;
 }
 
+/** Replace em dashes the model still writes with plain punctuation. */
+export function stripEmDashes(text: string): string {
+  return text
+    .replace(/\s*—\s*/g, ', ')
+    .replace(/,\s*([.!?])/g, '$1')
+    .replace(/^,\s*|,\s*$/g, '');
+}
+
 function sanitizeReply(reply: string, actions: ChatAction[]) {
-  const trimmed = reply.trim();
+  const trimmed = stripEmDashes(reply.trim());
   if (trimmed && !/^(none|null|undefined|n\/a)$/i.test(trimmed)) {
     return trimmed;
   }

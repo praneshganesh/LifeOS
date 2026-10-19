@@ -1,5 +1,6 @@
 import type { Icon3DName } from '@/components/ui/Icon3D';
 import type { InventoryItem } from '@/lib/InventoryContext';
+import { hasValue } from '@/lib/inventoryNormalize';
 import {
   daysUntil,
   formatRelativeDone,
@@ -20,6 +21,7 @@ import {
   nextScheduledClassOccurrence,
   packStatus,
   remainingCount,
+  classLabel,
 } from '@/lib/classes';
 import { localDayKey } from '@/lib/dates';
 
@@ -38,7 +40,7 @@ export type AttentionItem = {
 
 /**
  * Reminder rows reuse the Last Done keyword grouping. Anything that doesn't
- * match a real group is just labelled "Reminder" — never a wrong guess.
+ * match a real group is just labelled "Reminder", never a wrong guess.
  */
 const REMINDER_BADGE: Record<LastDoneCategoryId, { label: string; icon: Icon3DName }> = {
   home: { label: 'Home', icon: 'house' },
@@ -48,6 +50,13 @@ const REMINDER_BADGE: Record<LastDoneCategoryId, { label: string; icon: Icon3DNa
   family: { label: 'Family', icon: 'family' },
   other: { label: 'Reminder', icon: 'bell' },
 };
+
+/** "today", "tomorrow", or "in 5 days". */
+function inDays(n: number): string {
+  if (n === 0) return 'today';
+  if (n === 1) return 'tomorrow';
+  return `in ${n} days`;
+}
 
 function parseDay(raw?: string): Date | null {
   if (!raw?.trim() || raw === '—') return null;
@@ -86,13 +95,13 @@ function docExpiryStatus(item: InventoryItem): {
     return {
       urgency: 'urgent',
       daysLeft,
-      label: `${label} expires in ${daysLeft} days`,
+      label: `${label} expires ${inDays(daysLeft)}`,
     };
   if (daysLeft <= 180)
     return {
       urgency: 'soon',
       daysLeft,
-      label: `${label} expires in ${daysLeft} days`,
+      label: `${label} expires ${inDays(daysLeft)}`,
     };
   if (daysLeft <= 365)
     return {
@@ -128,7 +137,7 @@ export function buildAttentionItems(
           id: `doc-${item.id}`,
           title: doc.label,
           subtitle:
-            [item.brand, item.room].filter(Boolean).join(' · ') || 'Documents',
+            [item.brand, item.room].filter(hasValue).join(' · ') || 'Documents',
           urgency: doc.urgency,
           category: 'Document',
           icon: item.icon,
@@ -144,11 +153,11 @@ export function buildAttentionItems(
       const title =
         w.daysLeft < 0
           ? `${item.name} warranty expired`
-          : `${item.name} warranty ends in ${w.daysLeft} days`;
+          : `${item.name} warranty ends ${inDays(w.daysLeft)}`;
       out.push({
         id: `war-${item.id}`,
         title,
-        subtitle: [item.brand, item.room].filter(Boolean).join(' · '),
+        subtitle: [item.brand, item.room].filter(hasValue).join(' · '),
         urgency: w.urgency,
         category: 'Warranty',
         icon: item.icon,
@@ -171,7 +180,7 @@ export function buildAttentionItems(
           : 'Overdue'
         : daysLeft === 0
           ? 'Due today'
-          : `Due in ${daysLeft} days`;
+          : `Due ${inDays(daysLeft)}`;
     const badge = REMINDER_BADGE[categorizeLastDone(activity.label).id];
     out.push({
       id: `ld-${activity.id}`,
@@ -195,7 +204,7 @@ export function buildAttentionItems(
         ? 'Renewal overdue'
         : daysLeft === 0
           ? 'Renews today'
-          : `Renews in ${daysLeft} days`;
+          : `Renews ${inDays(daysLeft)}`;
     out.push({
       id: `sub-${sub.id}`,
       title: sub.title,
@@ -223,9 +232,7 @@ export function buildAttentionItems(
         const isToday = occ.daysAhead === 0;
         const alreadyDoneToday = isToday && loggedOn(pack, todayStr);
         if (!alreadyDoneToday && occ.daysAhead <= 1) {
-          const title = isToday
-            ? `${who}${pack.title} class today${pack.scheduleTime ? ` at ${pack.scheduleTime}` : ''}`
-            : `${who}${pack.title} class tomorrow${pack.scheduleTime ? ` at ${pack.scheduleTime}` : ''}`;
+          const title = `${who}${classLabel(pack.title)} ${isToday ? 'today' : 'tomorrow'}`;
           const subtitle = `${remaining != null ? `${remaining} session${remaining === 1 ? '' : 's'} left · ` : ''}Every ${occ.dayName}${pack.scheduleTime ? ` · ${pack.scheduleTime}` : ''}`;
           out.push({
             id: `cls-sched-${pack.id}-${occ.date}`,
@@ -261,8 +268,8 @@ export function buildAttentionItems(
     if (status === 'ending-soon') {
       out.push({
         id: `cls-${pack.id}`,
-        title: `${pack.title} — ${remaining == null ? 'ending soon' : `${remaining} session${remaining === 1 ? '' : 's'} left`}`,
-        subtitle: who + `window ends in ${daysLeft} days`,
+        title: `${pack.title}: ${remaining == null ? 'ending soon' : `${remaining} session${remaining === 1 ? '' : 's'} left`}`,
+        subtitle: who + `window ends ${inDays(daysLeft)}`,
         urgency: daysLeft <= 7 ? 'urgent' : 'soon',
         category: 'Classes',
         icon: 'today',
@@ -280,7 +287,7 @@ export function buildAttentionItems(
   );
 }
 
-/** Home strip — skip quiet “ok” rows so true due-soon wins. */
+/** Home strip, skip quiet “ok” rows so true due-soon wins. */
 export function dueSoonForHome(
   inventory: InventoryItem[],
   lastDone: LastDoneItem[] = [],
@@ -295,7 +302,7 @@ export function dueSoonForHome(
   );
 }
 
-/** Open queue — same set as Tasks & reminders (urgent + soon). */
+/** Open queue, same set as Tasks & reminders (urgent + soon). */
 export function openAttentionQueue(
   inventory: InventoryItem[],
   lastDone: LastDoneItem[] = [],

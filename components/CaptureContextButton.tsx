@@ -37,13 +37,14 @@ export function CaptureContextButton({
       }}
       style={({ pressed }) => [
         styles.btn,
-        { backgroundColor: colors.accent },
-        pressed && { opacity: 0.88 },
+        { backgroundColor: colors.surface, borderColor: colors.line },
+        pressed && { opacity: 0.88, transform: [{ scale: 0.96 }] },
       ]}
+      accessibilityRole="button"
       accessibilityLabel={label}
       hitSlop={6}
     >
-      <Camera size={18} color={colors.accentOn} strokeWidth={2.2} />
+      <Camera size={18} color={colors.ink} strokeWidth={2} />
     </Pressable>
   );
 }
@@ -65,6 +66,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
   },

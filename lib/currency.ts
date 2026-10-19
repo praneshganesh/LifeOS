@@ -1,4 +1,4 @@
-/** Household default currency — set in onboarding / Settings. Not hardcoded to AED. */
+/** Household default currency, set in onboarding / Settings. Not hardcoded to AED. */
 
 export type CurrencyOption = {
   code: string;
@@ -7,7 +7,7 @@ export type CurrencyOption = {
   hint: string;
 };
 
-/** Common household currencies — enough for onboarding without a search box. */
+/** Common household currencies, enough for onboarding without a search box. */
 export const CURRENCY_OPTIONS: CurrencyOption[] = [
   { code: 'USD', label: 'USD', hint: 'US dollar' },
   { code: 'EUR', label: 'EUR', hint: 'Euro' },
@@ -140,7 +140,7 @@ export function sanitizeIntegerInput(raw: string): string {
 
 /**
  * Infer currency from spoken/OCR text when the user named one.
- * Returns undefined when nothing was said — caller should use household default.
+ * Returns undefined when nothing was said, caller should use household default.
  */
 export function currencyFromSpokenText(
   raw: string | number | undefined | null

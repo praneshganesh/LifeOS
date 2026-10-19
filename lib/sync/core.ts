@@ -1,7 +1,7 @@
 /**
  * Pure row-sync logic (docs/SYNC_ARCHITECTURE.md): outbox coalescing,
  * local item ↔ Supabase row mapping, and last-write-wins merging.
- * No AsyncStorage / network imports — unit-testable in plain Node.
+ * No AsyncStorage / network imports, unit-testable in plain Node.
  */
 import type { InventoryItem } from '@/lib/InventoryContext';
 import type { LastDoneItem } from '@/lib/lastDone';
@@ -54,7 +54,7 @@ export type OutboxOp = {
 };
 
 /**
- * One pending op per (table, rowId) — a newer mutation replaces the older
+ * One pending op per (table, rowId), a newer mutation replaces the older
  * one (local LWW). A delete always replaces a pending upsert.
  */
 export function coalesceOutbox(queue: OutboxOp[], next: OutboxOp): OutboxOp[] {
@@ -333,7 +333,7 @@ export function tombstoneRow(
 
 export type RemoteChange<T> = {
   localId: string;
-  /** Server updated_at — the LWW clock. */
+  /** Server updated_at, the LWW clock. */
   updatedAt: string;
   deleted: boolean;
   item: T | null;

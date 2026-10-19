@@ -1,7 +1,7 @@
 import { Tabs } from 'expo-router';
 
 /**
- * No bottom tab bar — Capture / Ask / Talk live in the floating dock (bottom-left).
+ * No bottom tab bar, Capture / Ask / Talk live in the floating dock (bottom-left).
  */
 export default function TabLayout() {
   return (

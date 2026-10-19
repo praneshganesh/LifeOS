@@ -3,8 +3,10 @@ import { useToast } from '@/lib/ToastContext';
 import { useCallback, useMemo, useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter, type Href } from 'expo-router';
+import { AddButton, HeaderActions } from '@/components/ui/AddButton';
+import { CaptureContextButton } from '@/components/CaptureContextButton';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, Plus } from 'lucide-react-native';
+import { ChevronLeft } from 'lucide-react-native';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import {
@@ -17,10 +19,10 @@ import { useSpaces } from '@/lib/SpacesContext';
 import { useInventory } from '@/lib/InventoryContext';
 import { inventoryToAsset } from '@/lib/mergeAssets';
 import { confirmDelete } from '@/lib/confirmDelete';
-import { captureHref } from '@/lib/captureContext';
 import { blurActiveElement } from '@/lib/a11y';
 import { type ThemeColors, fonts, radius, spacing } from '@/constants/theme';
 import { useRememberCaptureContext } from '@/components/CaptureContextButton';
+import { hasValue } from '@/lib/inventoryNormalize';
 
 export default function RoomDetailScreen() {
   const { colors } = useTheme();
@@ -61,7 +63,7 @@ export default function RoomDetailScreen() {
     if (!getById(assetId)) return;
     const ok = await confirmDelete(name);
     if (!ok) return;
-    await removeItem(assetId).catch(() => showError('Couldn’t delete — try again.'));
+    await removeItem(assetId).catch(() => showError('Couldn’t delete. Try again.'));
   }
 
   function handleBack() {
@@ -119,26 +121,23 @@ export default function RoomDetailScreen() {
             <ChevronLeft size={20} color={colors.ink} strokeWidth={2.4} />
             <Text style={styles.backLabel}>{space?.name || 'Space'}</Text>
           </Pressable>
-          <Pressable
-            onPress={() => {
-              blurActiveElement();
-              router.push(
-                captureHref({
-                  kind: 'room',
-                  spaceId: room.spaceId,
-                  room: room.name,
-                })
-              );
-            }}
-            style={({ pressed }) => [
-              styles.addBtn,
-              { backgroundColor: accent },
-              pressed && { opacity: 0.9 },
-            ]}
-            accessibilityLabel={`Capture for ${room.name}`}
-          >
-            <Plus size={18} color={colors.pure} strokeWidth={2.2} />
-          </Pressable>
+          <HeaderActions>
+            <CaptureContextButton
+              kind="room"
+              spaceId={room.spaceId}
+              room={room.name}
+              label={`Capture for ${room.name}`}
+            />
+            <AddButton
+              onPress={() =>
+                router.push({
+                  pathname: '/things/create',
+                  params: { spaceId: room.spaceId, room: room.name },
+                } as Href)
+              }
+              label={`Add to ${room.name}`}
+            />
+          </HeaderActions>
         </View>
 
         <DetailHero
@@ -156,13 +155,8 @@ export default function RoomDetailScreen() {
                 key={asset.id}
                 name={asset.name}
                 icon={asset.icon}
-                subtitle={asset.brand}
+                subtitle={hasValue(asset.brand) ? asset.brand : undefined}
                 onPress={() => router.push(`/asset/${asset.id}`)}
-                onEdit={
-                  getById(asset.id)
-                    ? () => router.push(`/asset/${asset.id}`)
-                    : undefined
-                }
                 onDelete={
                   getById(asset.id)
                     ? () => void onDeleteThing(asset.id, asset.name)
@@ -214,13 +208,6 @@ function makeStyles(colors: ThemeColors) {
     fontSize: 15,
     color: colors.ink,
     letterSpacing: -0.2,
-  },
-  addBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   missing: {
     flex: 1,

@@ -28,7 +28,7 @@ import { crossSearch, type SearchHit } from '@/lib/crossSearch';
 import { type ThemeColors, fonts, radius, spacing } from '@/constants/theme';
 
 /**
- * On-device cross-search — Things, docs, spaces, spend, habits, people.
+ * On-device cross-search, Things, docs, spaces, spend, habits, people.
  * No LLM.
  */
 export default function SearchScreen() {
@@ -50,7 +50,7 @@ export default function SearchScreen() {
     if (!getById(assetId)) return;
     const ok = await confirmDelete(name);
     if (!ok) return;
-    await removeItem(assetId).catch(() => showError('Couldn’t delete — try again.'));
+    await removeItem(assetId).catch(() => showError('Couldn’t delete. Try again.'));
   }
 
   const spaceNameById = useMemo(
@@ -158,11 +158,6 @@ export default function SearchScreen() {
                     icon={hit.icon}
                     subtitle={hit.subtitle}
                     onPress={() => router.push(hit.href as Href)}
-                    onEdit={
-                      getById(hit.id)
-                        ? () => router.push(`/asset/${hit.id}` as Href)
-                        : undefined
-                    }
                     onDelete={
                       getById(hit.id)
                         ? () => void onDeleteThing(hit.id, hit.title)

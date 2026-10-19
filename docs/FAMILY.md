@@ -1,4 +1,4 @@
-# Family — parked for after the Pro launch
+# Family: parked for after the Pro launch
 
 Saavi launches with **Pro only**. Family (a second paid login that shares one household) is not sold, not on the paywall, and not invited. This file is the record of that cut: what left the product, why, what is still broken, and how to build Family when it comes back.
 
@@ -73,7 +73,7 @@ Do this in order. Do not put the SKU back on the paywall until 1–4 work on two
 9. **Links.** Universal link `https://saavi.app/invite/<code>`, single use, hashed, 7-day TTL, owner-only create.
 10. **Billing.** A separate Family entitlement and product (`saavi_family_monthly` / `saavi_family_yearly`). The webhook may raise `trial` or `pro` to `family`. Members do not purchase. Pro stays one login. Talk for Family is one shared daily pool on `household` scope, sized when we know real Pro usage (100 is the solo guard, not the shared number).
 
-## RevenueCat — hide Family so the phone cannot buy it
+## RevenueCat: hide Family so the phone cannot buy it
 
 The app already ignores Family packages. Do this in RevenueCat as well, or a restore on an old build can still see the product.
 

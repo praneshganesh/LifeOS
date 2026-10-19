@@ -1,4 +1,4 @@
-# Saavi (LifeOS) — Architecture, Authentication, Payments & Production Roadmap
+# Saavi (LifeOS): Architecture, Authentication, Payments & Production Roadmap
 
 Master architectural blueprint, data flow definitions, and pending implementation task list for Saavi's TestFlight beta and public App Store / Play Store production launch.
 
@@ -188,18 +188,18 @@ To protect OpenAI API costs from direct script tampering without adding Redis:
   - End-to-end recovery code test (Installation A $\rightarrow$ Backup $\rightarrow$ Installation B $\rightarrow$ Restore).
 
 ### Phase 2: App Store & Play Store Production Launch (Next Milestone)
-- [ ] **Task 2.1 — RevenueCat Integration (`react-native-purchases`)**:
+- [ ] **Task 2.1: RevenueCat Integration (`react-native-purchases`)**:
   - Install and initialize RevenueCat with `user.id`.
   - Configure StoreKit products in App Store Connect & Google Play Console (`saavi_pro_monthly`, `saavi_pro_yearly`).
   - Wire 7-day free trial presentation and "Restore Purchases" in `app/settings/plan.tsx`.
-- [ ] **Task 2.2 — Chat API JWT Verification & 5/day Trial Guard**:
+- [ ] **Task 2.2: Chat API JWT Verification & 5/day Trial Guard**:
   - Update `server/chat.mjs` to verify Supabase JWT header.
   - Enforce 25 AI requests/day for trial users via Supabase counter table/RPC (no Redis).
-- [ ] **Task 2.3 — Private Supabase Media Storage**:
+- [ ] **Task 2.3: Private Supabase Media Storage**:
   - Create private Supabase storage bucket `media` with RLS.
   - Implement background upload in `lib/cloud/mediaSync.ts` to convert local cache to durable storage paths.
   - Ensure unsynced local media is never evicted.
-- [ ] **Task 2.4 — Store Compliance & Assets**:
+- [ ] **Task 2.4: Store Compliance & Assets**:
   - Link Privacy Policy and Apple standard EULA in `app/settings/about.tsx` and `app/settings/plan.tsx`.
   - App Store & Play Store screenshots and privacy labels declaration.
 

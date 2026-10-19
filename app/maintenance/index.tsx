@@ -5,6 +5,7 @@ import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { ListCard, ListRow, StatStrip } from '@/components/ui/ListKit';
 import { Text } from '@/components/ui/Text';
 import { CaptureContextButton } from '@/components/CaptureContextButton';
+import { AddButton, HeaderActions } from '@/components/ui/AddButton';
 import { useLastDone } from '@/lib/LastDoneContext';
 import { useInventory } from '@/lib/InventoryContext';
 import { formatRelativeDone, getLastDoneAt } from '@/lib/lastDone';
@@ -34,7 +35,15 @@ export default function MaintenanceScreen() {
     <ModuleScreen
       title="Maintenance"
       defaultOrigin="things"
-      right={<CaptureContextButton kind="maintenance" label="Capture maintenance" />}
+      right={
+        <HeaderActions>
+          <CaptureContextButton kind="maintenance" label="Capture maintenance" />
+          <AddButton
+            onPress={() => router.push('/last-done?mode=remind' as Href)}
+            label="Add maintenance reminder"
+          />
+        </HeaderActions>
+      }
     >
       <StatStrip
         items={[

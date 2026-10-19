@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useMemo, useRef, type ReactNode } from 'react';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -48,12 +49,14 @@ import { confirmDelete } from '@/lib/confirmDelete';
 import { shareDocument } from '@/lib/shareDocument';
 import { blurActiveElement } from '@/lib/a11y';
 import { type ThemeColors, fonts, radius, spacing, shadows } from '@/constants/theme';
+import { hasValue } from '@/lib/inventoryNormalize';
 
 const CHROME_TOP = 18;
 
 export default function AssetDetailScreen() {
   const { colors, resolved } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const chromeGlass = resolved === 'dark' ? 'rgba(24,24,27,0.45)' : 'rgba(255,255,255,0.55)';
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -113,7 +116,7 @@ export default function AssetDetailScreen() {
     try {
       await removeItem(captured.id);
     } catch {
-      showError('Couldn’t delete — try again.');
+      showError('Couldn’t delete. Try again.');
       return;
     }
     leave();
@@ -178,7 +181,7 @@ export default function AssetDetailScreen() {
   const accent = isDoc ? colors.sky : thingsTone.accent;
   const vividFallback = isDoc ? '#5E7A8C' : MODULE_TONE_FALLBACK.things;
 
-  // Subtitle is brand · person only — category / document kind lives in the
+  // Subtitle is brand · person only, category / document kind lives in the
   // hero eyebrow (or photo chrome), so it isn’t repeated on this line.
   const categoryPart = isDoc
     ? labelDocKind(captured?.documentKind) || 'Document'
@@ -201,7 +204,7 @@ export default function AssetDetailScreen() {
         !/^identity$/i.test(asset.brand)
           ? asset.brand
           : null,
-        // Photo hero has no eyebrow — keep category there so it’s still visible.
+        // Photo hero has no eyebrow, keep category there so it’s still visible.
         hasPhoto && categoryPart ? categoryPart : null,
         captured?.assignedTo || asset.assignedTo || null,
       ].filter(Boolean) as string[]
@@ -234,19 +237,19 @@ export default function AssetDetailScreen() {
               : captured?.documentKind === 'passport'
                 ? 'Passport #'
                 : 'Document #',
-          value: captured?.documentNumber || (asset.serial !== '—' ? asset.serial : '—'),
+          value: captured?.documentNumber || (hasValue(asset.serial) ? asset.serial : 'Not set'),
         },
         {
           label: 'Expires',
-          value: expiresDisplay ?? '—',
+          value: expiresDisplay ?? 'Not set',
           tint: expiresDisplay ? (docExpired ? colors.coral : colors.forest) : undefined,
         },
       ]
     : [
-        { label: 'Price', value: asset.price && asset.price !== '—' ? asset.price : '—' },
+        { label: 'Price', value: hasValue(asset.price) ? asset.price : 'Not set' },
         {
           label: 'Warranty',
-          value: warrantyDisplay ?? '—',
+          value: warrantyDisplay ?? 'Not set',
           tint: warrantyDisplay
             ? warrantyExpired
               ? colors.coral
@@ -255,11 +258,11 @@ export default function AssetDetailScreen() {
         },
         {
           label: 'Purchased',
-          value: formatDisplayDate(asset.purchaseDate) ?? '—',
+          value: formatDisplayDate(asset.purchaseDate) ?? 'Not set',
         },
       ];
 
-  // Empty facts are hidden, never rendered as "—" placeholders.
+  // Empty facts are hidden, never rendered as placeholders.
   const detailRows = (
     isDoc
       ? [
@@ -293,19 +296,28 @@ export default function AssetDetailScreen() {
             onPress={goBack}
             style={({ pressed }) => [
               styles.chromeBtn,
-              {
-                backgroundColor: colors.surface,
-                borderColor: colors.line,
-              },
+              { borderColor: colors.line },
               pressed && { opacity: 0.75 },
             ]}
             accessibilityLabel="Back"
             hitSlop={8}
           >
+            <BlurView
+              tint={resolved === 'dark' ? 'systemThinMaterialDark' : 'systemThinMaterialLight'}
+              intensity={60}
+              style={[StyleSheet.absoluteFill, { backgroundColor: chromeGlass }]}
+            />
             <ChevronLeft size={22} color={colors.ink} strokeWidth={2.2} />
           </Pressable>
           {isUserItem ? (
-            <DetailTrashButton onPress={() => void onDelete()} />
+            <View style={[styles.chromeBtn, { borderColor: colors.line }]}>
+              <BlurView
+                tint={resolved === 'dark' ? 'systemThinMaterialDark' : 'systemThinMaterialLight'}
+                intensity={60}
+                style={[StyleSheet.absoluteFill, { backgroundColor: chromeGlass }]}
+              />
+              <DetailTrashButton onPress={() => void onDelete()} />
+            </View>
           ) : null}
         </View>
       ) : null}
@@ -610,8 +622,7 @@ function makeStyles(colors: ThemeColors) {
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.surface,
-    ...shadows.soft,
+    overflow: 'hidden',
   },
   topNav: {
     flexDirection: 'row',

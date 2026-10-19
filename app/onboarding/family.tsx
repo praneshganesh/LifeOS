@@ -1,376 +1,302 @@
-import { useMemo, useState } from 'react';
-import {
-  Keyboard,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-  View,
-} from 'react-native';
+import { useMemo, useRef, useState } from 'react';
+import { Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { X } from 'lucide-react-native';
+import Animated, { FadeIn, FadeOut, LinearTransition, ZoomIn } from 'react-native-reanimated';
+import { ArrowUp, Baby, Heart, PawPrint, UserRound, X, type LucideIcon } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
+import {
+  OnboardingPrimaryButton,
+  OnboardingScreen,
+  enter,
+  useOnboardingName,
+} from '@/components/OnboardingKit';
 import { useHousehold } from '@/lib/HouseholdContext';
-import { loadLocalProfile, saveLocalProfile } from '@/lib/profile';
+import { moduleTone, type ModuleToneKey } from '@/lib/moduleTone';
 import type { HouseholdRole } from '@/lib/household';
 import { type ThemeColors, fonts, radius, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
 
-type DraftPerson = {
-  key: string;
-  name: string;
-  role: HouseholdRole;
-  relation: string;
-};
-
-const EXTRA_PRESETS: Array<{
+type Kind = {
   label: string;
   role: HouseholdRole;
   relation: string;
-}> = [
-  { label: 'Partner', role: 'adult', relation: 'Partner' },
-  { label: 'Child', role: 'child', relation: 'Child' },
-  { label: 'Parent', role: 'parent', relation: 'Parent' },
-  { label: 'Pet', role: 'pet', relation: 'Pet' },
+  Icon: LucideIcon;
+  tone: ModuleToneKey;
+};
+
+const KINDS: Kind[] = [
+  { label: 'Partner', role: 'adult', relation: 'Partner', Icon: Heart, tone: 'habits' },
+  { label: 'Child', role: 'child', relation: 'Child', Icon: Baby, tone: 'classes' },
+  { label: 'Parent', role: 'parent', relation: 'Parent', Icon: UserRound, tone: 'subscriptions' },
+  { label: 'Pet', role: 'pet', relation: 'Pet', Icon: PawPrint, tone: 'expenses' },
 ];
 
+function kindFor(relation: string | undefined): Kind | undefined {
+  return KINDS.find((k) => k.relation === relation);
+}
+
+/** Hex color at low opacity, for soft tinted circles. */
+function wash(hex: string, alpha: number) {
+  const h = hex.replace('#', '');
+  if (h.length < 6) return hex;
+  const a = Math.round(alpha * 255).toString(16).padStart(2, '0');
+  return `#${h.slice(0, 6)}${a}`;
+}
+
 export default function OnboardingFamily() {
-  const { colors } = useTheme();
+  const { colors, resolved } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { members, addMember } = useHousehold();
-  const [yourName, setYourName] = useState('');
-  const [extras, setExtras] = useState<DraftPerson[]>([]);
-  const [draftName, setDraftName] = useState('');
-  const [draftPreset, setDraftPreset] = useState(EXTRA_PRESETS[0]!);
-  const [saving, setSaving] = useState(false);
+  const hueOf = (k: Kind) => moduleTone(k.tone, colors, resolved === 'light').accent;
+  const name = useOnboardingName();
+  const { members, addMember, removeMember } = useHousehold();
+  const [kind, setKind] = useState<Kind | null>(null);
+  const [draft, setDraft] = useState('');
+  const inputRef = useRef<TextInput>(null);
 
-  const alreadyHavePeople = members.length > 0;
+  const others = members.filter((m) => m.relation !== 'You');
 
-  function addExtra() {
-    const trimmed = draftName.trim();
-    if (!trimmed) return;
-    setExtras((prev) => [
-      ...prev,
-      {
-        key: `d-${Date.now()}-${prev.length}`,
-        name: trimmed,
-        role: draftPreset.role,
-        relation: draftPreset.relation,
-      },
-    ]);
-    setDraftName('');
+  async function add() {
+    const trimmed = draft.trim();
+    if (!trimmed || !kind) return;
+    setDraft('');
+    await addMember({ name: trimmed, role: kind.role, relation: kind.relation });
+    inputRef.current?.focus();
   }
 
-  function removeExtra(key: string) {
-    setExtras((prev) => prev.filter((p) => p.key !== key));
+  async function next() {
+    if (draft.trim() && kind) await add();
+    router.push('/onboarding/intent');
   }
-
-  async function continueNext(includePeople: boolean) {
-    if (saving) return;
-    setSaving(true);
-    try {
-      if (includePeople) {
-        const selfName = yourName.trim();
-        if (selfName) {
-          await addMember({
-            name: selfName,
-            role: 'adult',
-            relation: 'You',
-            permission: 'owner',
-          });
-          const existing = await loadLocalProfile();
-          await saveLocalProfile({ ...existing, displayName: selfName });
-        }
-        for (const p of extras) {
-          await addMember({
-            name: p.name,
-            role: p.role,
-            relation: p.relation,
-          });
-        }
-      }
-      router.push('/onboarding/currency');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const canContinue =
-    Boolean(yourName.trim()) || alreadyHavePeople || extras.length > 0;
 
   return (
-    <KeyboardAvoidingView
-      style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <ScrollView
-        contentContainerStyle={[
-          styles.body,
-          { paddingBottom: Math.max(insets.bottom, 16) + 8 },
-        ]}
-        keyboardShouldPersistTaps="handled"
-        onScrollBeginDrag={Keyboard.dismiss}
-      >
-        <Text style={styles.step}>Step 2 of 5</Text>
-        <Text style={styles.title}>Who’s in your household?</Text>
-        <Text style={styles.lead}>
-          Tag people on habits, classes, and Things. This is not sharing a
-          login — Family plan invites come later if you subscribe.
-        </Text>
-
-        <Text style={styles.label}>Your name</Text>
-        <TextInput
-          value={yourName}
-          onChangeText={setYourName}
-          placeholder="e.g. Pranesh"
-          placeholderTextColor={colors.faint}
-          style={styles.input}
-          autoFocus={!alreadyHavePeople}
-          autoCorrect={false}
-          spellCheck={false}
-          autoComplete="off"
-          textContentType="none"
-          autoCapitalize="words"
-          returnKeyType="done"
+    <OnboardingScreen
+      step={2}
+      title={name ? `Who’s at home with you, ${name}?` : 'Who’s at home with you?'}
+      lead="Add the people and pets you look after, so you can tag them on habits, classes, and Things. Only you can see this."
+      footer={
+        <OnboardingPrimaryButton
+          label={others.length || draft.trim() ? 'Continue' : 'It’s just me'}
+          onPress={() => void next()}
         />
-
-        <Text style={[styles.label, { marginTop: spacing.xl }]}>
-          Add others (optional)
-        </Text>
-        <View style={styles.presets}>
-          {EXTRA_PRESETS.map((p) => {
-            const on = draftPreset.label === p.label;
-            return (
-              <Pressable
-                key={p.label}
-                onPress={() => setDraftPreset(p)}
-                style={[styles.preset, on && styles.presetOn]}
+      }
+    >
+      <Animated.View entering={enter(2)} style={styles.kinds}>
+        {KINDS.map((k) => {
+          const on = kind?.label === k.label;
+          const hue = hueOf(k);
+          return (
+            <Pressable
+              key={k.label}
+              onPress={() => {
+                setKind(k);
+                setTimeout(() => inputRef.current?.focus(), 50);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={`Add a ${k.label.toLowerCase()}`}
+              accessibilityState={{ selected: on }}
+              style={({ pressed }) => [styles.kind, pressed && { transform: [{ scale: 0.95 }] }]}
+            >
+              <View
+                style={[
+                  styles.kindCircle,
+                  { backgroundColor: wash(hue, 0.28), borderColor: on ? hue : 'transparent' },
+                ]}
               >
-                <Text style={[styles.presetText, on && styles.presetTextOn]}>
-                  {p.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-        <View style={styles.addRow}>
+                <k.Icon size={24} color={hue} strokeWidth={2} />
+              </View>
+              <Text style={[styles.kindLabel, { color: on ? colors.ink : colors.mute }]}>
+                {k.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </Animated.View>
+
+      {kind ? (
+        <Animated.View entering={FadeIn.duration(220)} style={styles.addRow}>
           <TextInput
-            value={draftName}
-            onChangeText={setDraftName}
-            placeholder={`${draftPreset.label}’s name`}
+            ref={inputRef}
+            value={draft}
+            onChangeText={setDraft}
+            placeholder={`${kind.label}’s name`}
             placeholderTextColor={colors.faint}
-            style={[styles.input, styles.addInput]}
+            style={styles.input}
             autoCorrect={false}
             autoCapitalize="words"
             returnKeyType="done"
-            onSubmitEditing={addExtra}
+            onSubmitEditing={() => void add()}
+            blurOnSubmit={false}
+            accessibilityLabel={`${kind.label}’s name`}
           />
           <Pressable
-            onPress={addExtra}
-            disabled={!draftName.trim()}
-            style={[
+            onPress={() => void add()}
+            disabled={!draft.trim()}
+            accessibilityRole="button"
+            accessibilityLabel={`Add ${kind.label.toLowerCase()}`}
+            style={({ pressed }) => [
               styles.addBtn,
-              { backgroundColor: colors.ink },
-              !draftName.trim() && { opacity: 0.4 },
+              { backgroundColor: colors.accent },
+              !draft.trim() && { opacity: 0.35 },
+              pressed && { opacity: 0.8 },
             ]}
           >
-            <Text style={[styles.addBtnText, { color: colors.onInk }]}>Add</Text>
+            <ArrowUp size={20} color={colors.accentOn} strokeWidth={2.4} />
           </Pressable>
-        </View>
+        </Animated.View>
+      ) : (
+        <Animated.Text entering={enter(3)} style={styles.hint}>
+          Tap one to add someone.
+        </Animated.Text>
+      )}
 
-        {extras.length > 0 ? (
-          <View style={styles.list}>
-            {extras.map((p) => (
-              <View
-                key={p.key}
-                style={[
-                  styles.listRow,
-                  { backgroundColor: colors.surface, borderColor: colors.lineStrong },
-                ]}
+      {others.length > 0 ? (
+        <Animated.View layout={LinearTransition} style={styles.people}>
+          {others.map((m) => {
+            const k = kindFor(m.relation);
+            const hue = k ? hueOf(k) : colors.accent;
+            return (
+              <Animated.View
+                key={m.id}
+                entering={ZoomIn.springify().damping(16)}
+                exiting={FadeOut.duration(150)}
+                layout={LinearTransition}
+                style={styles.person}
               >
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.listName, { color: colors.ink }]}>{p.name}</Text>
-                  <Text style={[styles.listMeta, { color: colors.mute }]}>
-                    {p.relation}
+                <View style={[styles.avatar, { backgroundColor: wash(hue, 0.3) }]}>
+                  <Text style={[styles.avatarText, { color: hue }]}>
+                    {m.name.trim().charAt(0).toUpperCase()}
                   </Text>
                 </View>
-                <Pressable onPress={() => removeExtra(p.key)} hitSlop={8}>
-                  <X size={18} color={colors.mute} strokeWidth={2} />
+                <View style={{ flexShrink: 1 }}>
+                  <Text style={styles.personName} numberOfLines={1}>
+                    {m.name}
+                  </Text>
+                  {m.relation ? <Text style={styles.personMeta}>{m.relation}</Text> : null}
+                </View>
+                <Pressable
+                  onPress={() => void removeMember(m.id)}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove ${m.name}`}
+                  style={styles.remove}
+                >
+                  <X size={14} color={colors.mute} strokeWidth={2.4} />
                 </Pressable>
-              </View>
-            ))}
-          </View>
-        ) : null}
-      </ScrollView>
-
-      <View
-        style={[
-          styles.footer,
-          { paddingBottom: Math.max(insets.bottom, 16) + 8 },
-        ]}
-      >
-        <Pressable
-          onPress={() => void continueNext(true)}
-          disabled={!canContinue && !alreadyHavePeople}
-          style={({ pressed }) => [
-            styles.cta,
-            pressed && { opacity: 0.92 },
-            !canContinue && !alreadyHavePeople && { opacity: 0.45 },
-          ]}
-        >
-          <Text style={styles.ctaText}>
-            {saving
-              ? 'Saving…'
-              : extras.length
-                ? 'Save & continue'
-                : yourName.trim()
-                  ? 'Continue'
-                  : 'Continue'}
-          </Text>
-        </Pressable>
-        <Pressable onPress={() => void continueNext(false)} hitSlop={8}>
-          <Text style={styles.skip}>Skip for now</Text>
-        </Pressable>
-      </View>
-    </KeyboardAvoidingView>
+              </Animated.View>
+            );
+          })}
+        </Animated.View>
+      ) : null}
+    </OnboardingScreen>
   );
 }
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    root: { flex: 1, backgroundColor: colors.bg },
-    body: {
-      paddingHorizontal: spacing.xl,
-      paddingTop: spacing.md,
+    kinds: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginBottom: spacing.lg,
     },
-    step: {
+    kind: {
+      alignItems: 'center',
+      gap: 8,
+      width: 72,
+    },
+    kindCircle: {
+      width: 64,
+      height: 64,
+      borderRadius: 32,
+      borderWidth: 2,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    kindLabel: {
       fontFamily: fonts.sansMedium,
       fontSize: 14,
-      color: colors.mute,
-      marginBottom: spacing.sm,
     },
-    title: {
-      fontFamily: fonts.sansSemi,
-      fontSize: 28,
-      color: colors.ink,
-      marginBottom: spacing.sm,
-    },
-    lead: {
+    hint: {
       fontFamily: fonts.sans,
-      fontSize: 16,
-      lineHeight: 24,
-      color: colors.mute,
-      marginBottom: spacing.xl,
+      fontSize: 15,
+      color: colors.faint,
+      textAlign: 'center',
     },
-    label: {
-      fontFamily: fonts.sansMedium,
-      fontSize: 13,
-      color: colors.mute,
-      textTransform: 'uppercase',
-      letterSpacing: 0.4,
-      marginBottom: 6,
+    addRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: colors.surface,
+      borderRadius: 28,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.line,
+      paddingLeft: spacing.lg,
+      paddingRight: 6,
+      height: 56,
     },
     input: {
+      flex: 1,
       fontFamily: fonts.sansMedium,
       fontSize: 17,
       color: colors.ink,
-      backgroundColor: colors.surface,
-      borderRadius: radius.md,
-      borderWidth: 1.5,
-      borderColor: colors.lineStrong,
-      paddingHorizontal: spacing.md,
-      paddingVertical: 14,
+      height: '100%',
+      ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : null),
     },
-    presets: {
+    addBtn: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    people: {
       flexDirection: 'row',
       flexWrap: 'wrap',
       gap: 8,
-      marginBottom: 10,
+      marginTop: spacing.lg,
     },
-    preset: {
-      borderRadius: radius.md,
-      borderWidth: 1.5,
-      borderColor: colors.lineStrong,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
+    person: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
       backgroundColor: colors.surface,
+      borderRadius: radius.lg,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.line,
+      paddingLeft: 6,
+      paddingRight: 10,
+      paddingVertical: 6,
+      maxWidth: '100%',
     },
-    presetOn: {
-      backgroundColor: colors.ink,
-      borderColor: colors.ink,
+    avatar: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
-    presetText: {
-      fontFamily: fonts.sansMedium,
-      fontSize: 14,
+    avatarText: {
+      fontFamily: fonts.sansSemi,
+      fontSize: 16,
+    },
+    personName: {
+      fontFamily: fonts.sansSemi,
+      fontSize: 15,
       color: colors.ink,
     },
-    presetTextOn: { color: colors.onInk },
-    addRow: {
-      flexDirection: 'row',
-      gap: 8,
-      alignItems: 'center',
-    },
-    addInput: { flex: 1 },
-    addBtn: {
-      height: 48,
-      paddingHorizontal: 16,
-      borderRadius: radius.md,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    addBtnText: {
-      fontFamily: fonts.sansSemi,
-      fontSize: 15,
-    },
-    list: { marginTop: spacing.md, gap: 8 },
-    listRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-      borderRadius: radius.md,
-      borderWidth: 1.5,
-      paddingHorizontal: spacing.md,
-      paddingVertical: 12,
-    },
-    listName: {
-      fontFamily: fonts.sansSemi,
-      fontSize: 16,
-    },
-    listMeta: {
+    personMeta: {
       fontFamily: fonts.sans,
-      fontSize: 13,
-      marginTop: 2,
+      fontSize: 12,
+      color: colors.mute,
     },
-    footer: {
-      paddingHorizontal: spacing.xl,
-      paddingTop: spacing.sm,
-      gap: spacing.md,
-      alignItems: 'center',
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: colors.line,
-    },
-    cta: {
-      alignSelf: 'stretch',
-      height: 52,
-      borderRadius: radius.md,
-      backgroundColor: colors.forest,
+    remove: {
+      width: 22,
+      height: 22,
+      borderRadius: 11,
       alignItems: 'center',
       justifyContent: 'center',
-    },
-    ctaText: {
-      fontFamily: fonts.sansMedium,
-      fontSize: 16,
-      color: colors.forestOn,
-    },
-    skip: {
-      fontFamily: fonts.sansMedium,
-      fontSize: 15,
-      color: colors.mute,
+      backgroundColor: colors.surfaceSoft,
+      marginLeft: 2,
     },
   });
 }

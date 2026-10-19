@@ -1,4 +1,4 @@
-/** Local calendar day YYYY-MM-DD (not UTC — avoids off-by-one near midnight). */
+/** Local calendar day YYYY-MM-DD (not UTC, avoids off-by-one near midnight). */
 export function localDayKey(d = new Date()): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -36,7 +36,7 @@ export function normalizeWarrantyExpiry(raw?: string | null): string | undefined
 
 /**
  * Pull "warranty until 2028" / "until next December" from the user's sentence.
- * Deterministic on-device parse — trusted over the model for relative phrases.
+ * Deterministic on-device parse, trusted over the model for relative phrases.
  */
 export function warrantyExpiryFromUtterance(
   text?: string,
@@ -75,7 +75,7 @@ export function warrantyExpiryFromUtterance(
   return undefined;
 }
 
-/** Year-only warranties are stored as YYYY-12-31 — show the year in speech. */
+/** Year-only warranties are stored as YYYY-12-31, show the year in speech. */
 export function displayWarrantyExpiry(iso?: string | null): string | undefined {
   const s = iso?.trim();
   if (!s || s === '—' || s === '-') return undefined;
@@ -122,7 +122,7 @@ const WEEKDAYS = [
   'saturday',
 ] as const;
 
-/** Next occurrence of a weekday (never today — "next Tuesday" on Tuesday → +7). */
+/** Next occurrence of a weekday (never today, "next Tuesday" on Tuesday → +7). */
 export function nextWeekdayKey(weekday: string, from = new Date()): string | undefined {
   const want = WEEKDAYS.indexOf(weekday.trim().toLowerCase() as (typeof WEEKDAYS)[number]);
   if (want < 0) return undefined;
@@ -448,7 +448,7 @@ export function parseReminderEndsAtFromUtterance(
   return undefined;
 }
 
-/** Asking about existing reminders — never create. */
+/** Asking about existing reminders, never create. */
 export function looksLikeReminderQuery(text?: string): boolean {
   if (!text?.trim()) return false;
   const t = text.trim();
@@ -463,7 +463,7 @@ export function looksLikeReminderQuery(text?: string): boolean {
   );
 }
 
-/** Create / schedule a reminder — not a list/query question. */
+/** Create / schedule a reminder, not a list/query question. */
 export function looksLikeReminder(text?: string): boolean {
   if (!text?.trim()) return false;
   if (looksLikeReminderQuery(text)) return false;

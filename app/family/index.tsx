@@ -1,23 +1,29 @@
 import { useMemo } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
-import { Plus } from 'lucide-react-native';
+import { ChevronRight } from 'lucide-react-native';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { ListCard, StatStrip } from '@/components/ui/ListKit';
 import { Text } from '@/components/ui/Text';
 import { CaptureContextButton } from '@/components/CaptureContextButton';
+import { AddButton, HeaderActions } from '@/components/ui/AddButton';
 import { useHousehold } from '@/lib/HouseholdContext';
 import { useInventory } from '@/lib/InventoryContext';
 import { useSpaces } from '@/lib/SpacesContext';
 import { spaceIdByKind } from '@/lib/moduleFilters';
+import { selfMember } from '@/lib/people';
+import { useDeleteWithConfirm } from '@/lib/useDeleteWithConfirm';
+import { SwipeActions } from '@/components/ui/SwipeActions';
 import { fonts, radius, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
 
 export default function FamilyScreen() {
   const { colors } = useTheme();
   const router = useRouter();
-  const { members } = useHousehold();
+  const { members, removeMember } = useHousehold();
   const { items } = useInventory();
+  const deleteWithConfirm = useDeleteWithConfirm();
+  const self = selfMember(members);
   const { spaces } = useSpaces();
   const familySpaceId = spaceIdByKind(spaces, 'family');
 
@@ -64,11 +70,17 @@ export default function FamilyScreen() {
       title="Household"
       defaultOrigin="things"
       right={
-        <CaptureContextButton
-          kind="family"
-          spaceId={familySpaceId}
-          label="Capture for family"
-        />
+        <HeaderActions>
+          <CaptureContextButton
+            kind="family"
+            spaceId={familySpaceId}
+            label="Capture for family"
+          />
+          <AddButton
+            onPress={() => router.push('/family/create' as Href)}
+            label="Add person or pet"
+          />
+        </HeaderActions>
       }
     >
       <StatStrip
@@ -79,28 +91,25 @@ export default function FamilyScreen() {
         ]}
       />
 
-      <Pressable
-        onPress={() => router.push('/family/create' as Href)}
-        style={[
-          styles.addBtn,
-          { backgroundColor: colors.surface, borderColor: colors.line },
-        ]}
-      >
-        <Plus size={18} color={colors.ink} strokeWidth={2.2} />
-        <Text style={[styles.addLabel, { color: colors.ink }]}>Add person or pet</Text>
-      </Pressable>
-
       <ModuleSection label="Members" count={members.length}>
         {members.length ? (
           <ListCard>
             {members.map((m, i) => {
               const { docs, devices } = countsFor(m);
               return (
-                <Pressable
+                <SwipeActions
                   key={m.id}
+                  onDelete={
+                    m.id === self?.id
+                      ? undefined
+                      : () => void deleteWithConfirm(m.name, () => removeMember(m.id))
+                  }
+                >
+                <Pressable
                   onPress={() => router.push(`/family/${m.id}` as Href)}
                   style={[
                     styles.member,
+                    { backgroundColor: colors.surface },
                     i < members.length - 1 && {
                       borderBottomWidth: StyleSheet.hairlineWidth,
                       borderBottomColor: colors.line,
@@ -119,7 +128,9 @@ export default function FamilyScreen() {
                     </Text>
                   </View>
                   <Text style={[styles.role, { color: colors.mute }]}>{m.role}</Text>
+                  <ChevronRight size={16} color={colors.faint} strokeWidth={1.8} />
                 </Pressable>
+                </SwipeActions>
               );
             })}
           </ListCard>
@@ -135,21 +146,6 @@ export default function FamilyScreen() {
 }
 
 const styles = StyleSheet.create({
-  addBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    alignSelf: 'flex-start',
-    paddingHorizontal: spacing.md,
-    paddingVertical: 10,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    marginBottom: spacing.lg,
-  },
-  addLabel: {
-    fontFamily: fonts.sansSemi,
-    fontSize: 16,
-  },
   member: {
     flexDirection: 'row',
     alignItems: 'center',

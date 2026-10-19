@@ -4,7 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/lib/ThemeContext';
 
 /**
- * Studio wash: soft vertical fade — closer to Apple's grouped background than a loud gradient.
+ * Studio wash: soft vertical fade, closer to Apple's grouped background than a loud gradient.
  */
 export function Screen({
   children,

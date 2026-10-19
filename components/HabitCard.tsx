@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { Check } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
+import { SwipeActions } from '@/components/ui/SwipeActions';
 import {
   paintHabitCategory,
   currentStreak,
@@ -29,7 +30,7 @@ import { displayNameFor, selfMember } from '@/lib/people';
 
 const MONTH_LABEL_W = 36;
 const GAP = 2;
-/** Sparse ticks — never clip two-digit numbers into a 1-cell box. */
+/** Sparse ticks, never clip two-digit numbers into a 1-cell box. */
 const DAY_TICKS = [1, 5, 10, 15, 20, 25, 31] as const;
 const DAY_TICK_BOX = 18;
 
@@ -135,7 +136,7 @@ function HabitYearCalendar({
   const ready = trackBudget > 0;
   const labelFs = Math.max(10, Math.min(13, cell + 3));
   const rowH = Math.max(cell, labelFs + 4);
-  // Row header already shows the month — caption is legend only.
+  // Row header already shows the month, caption is legend only.
   const caption = habit.logs.length
     ? 'Filled = done'
     : 'Tap a day to mark done';
@@ -270,10 +271,13 @@ export function HabitCard({
   /** Detail: small Month/Year control under the heatmap. */
   showRangeToggle = false,
   onRangeChange,
+  onDelete,
 }: {
   habit: Habit;
   onCheckIn?: () => void;
   onOpen?: () => void;
+  /** List: swipe left reveals Delete. */
+  onDelete?: () => void;
   /** Toggle a specific YYYY-MM-DD (detail). */
   onToggleDay?: (dateKey: string) => void;
   interactive?: boolean;
@@ -293,7 +297,7 @@ export function HabitCard({
   const doneToday = loggedOn(habit);
   const streak = currentStreak(habit);
   // Habits can belong to any household member (a kid's reading habit, etc.).
-  // Only show the owner when it's someone other than the user — your own
+  // Only show the owner when it's someone other than the user, your own
   // name on your own habit is noise.
   const self = selfMember(members);
   const owner = displayNameFor(members, habit.personId, habit.assignedTo);
@@ -366,16 +370,24 @@ export function HabitCard({
 
   if (onOpen && !interactive) {
     return (
-      <Pressable
-        onPress={onOpen}
-        style={({ pressed }) => [
-          styles.card,
-          { backgroundColor: colors.surface, borderColor: colors.line },
-          pressed && { opacity: 0.96 },
-        ]}
+      <SwipeActions
+        onComplete={onCheckIn}
+        onDelete={onDelete}
+        completeLabel={doneToday ? 'Undo' : 'Done'}
+        style={styles.swipeShell}
       >
-        {body}
-      </Pressable>
+        <Pressable
+          onPress={onOpen}
+          style={({ pressed }) => [
+            styles.card,
+            styles.cardInSwipe,
+            { backgroundColor: colors.surface, borderColor: colors.line },
+            pressed && { opacity: 0.96 },
+          ]}
+        >
+          {body}
+        </Pressable>
+      </SwipeActions>
     );
   }
 
@@ -397,6 +409,13 @@ export function HabitCategoryHeader({ category }: { category: HabitCategory }) {
 }
 
 const styles = StyleSheet.create({
+  swipeShell: {
+    borderRadius: radius.md,
+    marginBottom: spacing.md,
+  },
+  cardInSwipe: {
+    marginBottom: 0,
+  },
   card: {
     borderRadius: radius.md,
     paddingVertical: 10,

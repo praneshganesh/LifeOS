@@ -64,7 +64,7 @@ export const PLANS: PlanDef[] = [
       'Everything in Trial, after you pay',
       'Your devices, one login',
       `${PRO_TALK_DAILY} Talk turns / day`,
-      'Person tags — a child’s class on your account',
+      'Person tags, like a child’s class on your account',
     ],
     limits: { ...UNLIMITED },
   },

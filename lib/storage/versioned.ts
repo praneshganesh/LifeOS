@@ -87,7 +87,7 @@ export async function loadVersioned<T>(
         await AsyncStorage.setItem(`${key}.corrupt`, raw);
         backedUp = true;
       } catch {
-        // best effort — original key is left untouched either way
+        // best effort, original key is left untouched either way
       }
     }
     loadFailures.push({

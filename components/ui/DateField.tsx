@@ -275,7 +275,7 @@ function NativeDatePicker({
   );
 }
 
-/** Custom grid — web only. Native uses the system picker above. */
+/** Custom grid, web only. Native uses the system picker above. */
 function WebDatePicker({
   value,
   onChange,
@@ -501,7 +501,7 @@ export function DatePillRow({
   );
 }
 
-/** App-styled date field — native system picker on iOS/Android, custom grid on web. */
+/** App-styled date field, native system picker on iOS/Android, custom grid on web. */
 export function DateField(props: Props) {
   if (IS_NATIVE) {
     return (

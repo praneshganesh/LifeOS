@@ -1,12 +1,20 @@
 import { Platform } from 'react-native';
 import type { LastDoneItem } from '@/lib/lastDone';
 import {
-  daysUntil,
   formatInterval,
   listWeekdayOccurrences,
   reminderSeriesEnded,
   seriesAnchorDate,
 } from '@/lib/lastDone';
+import {
+  DEFAULT_NOTIFICATION_PREFS,
+  loadNotificationPrefs,
+  type NotificationPrefs,
+} from '@/lib/notificationPrefs';
+import { planDatedReminderFires } from '@/lib/reminderAlerts';
+
+/** iOS keeps only 64 pending local notifications per app; leave room for others. */
+const MAX_SERIES_OCCURRENCES = 14;
 
 const ID_PREFIX = 'lifeos-ld-';
 
@@ -77,31 +85,6 @@ export async function ensureNotificationPermissions(): Promise<boolean> {
   }
 }
 
-/** Fire at hour:minute local on remind day; if past, nudge in ~60s. */
-function triggerDate(
-  remindAt: string,
-  hour = 9,
-  minute = 0,
-  now = new Date()
-): Date | null {
-  const m = remindAt.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (!m) return null;
-  const target = new Date(
-    Number(m[1]),
-    Number(m[2]) - 1,
-    Number(m[3]),
-    hour,
-    minute,
-    0,
-    0
-  );
-  if (Number.isNaN(target.getTime())) return null;
-  if (target.getTime() <= now.getTime()) {
-    return new Date(now.getTime() + 60_000);
-  }
-  return target;
-}
-
 export async function cancelLastDoneReminder(itemId: string): Promise<void> {
   if (!isNative()) return;
   try {
@@ -127,15 +110,15 @@ export async function scheduleLastDoneReminder(
     return;
   }
 
+  let prefs: NotificationPrefs = DEFAULT_NOTIFICATION_PREFS;
   try {
-    const { loadNotificationPrefs } = await import('@/lib/notificationPrefs');
-    const prefs = await loadNotificationPrefs();
+    prefs = await loadNotificationPrefs();
     if (!prefs.push) {
       await cancelLastDoneReminder(item.id);
       return;
     }
   } catch {
-    /* continue with schedule if prefs fail */
+    /* continue with defaults if prefs fail */
   }
 
   const granted = await ensureNotificationPermissions();
@@ -177,7 +160,7 @@ export async function scheduleLastDoneReminder(
           minute,
           seriesAnchorDate(item.remindInterval.startsAt),
           item.remindInterval.endsAt,
-          48
+          MAX_SERIES_OCCURRENCES
         );
         for (const when of dates) {
           await Notifications.scheduleNotificationAsync({
@@ -232,45 +215,30 @@ export async function scheduleLastDoneReminder(
 
     if (!item.remindAt) return;
 
-    const hour = item.remindInterval?.hour ?? 9;
-    const minute = item.remindInterval?.minute ?? 0;
-    const when = triggerDate(item.remindAt, hour, minute);
-    if (!when) {
-      await cancelLastDoneReminder(item.id);
-      return;
-    }
-
-    const days = daysUntil(item.remindAt);
-    const body =
-      days < 0
-        ? 'This is overdue — mark it done when you can.'
-        : days === 0
-          ? 'Due today.'
-          : item.remindInterval
-            ? `Due in ${days} days · every ${formatInterval(item.remindInterval)}`
-            : `Due in ${days} days.`;
-
-    await Notifications.scheduleNotificationAsync({
-      identifier: reminderId(item.id),
-      content: {
-        title: item.label,
-        body,
-        data: {
-          type: 'last_done',
-          itemId: item.id,
-          href: `/last-done/${item.id}`,
+    const fires = planDatedReminderFires(item, prefs);
+    for (const fire of fires) {
+      await Notifications.scheduleNotificationAsync({
+        identifier: `${reminderId(item.id)}-a-${fire.at.getTime()}`,
+        content: {
+          title: fire.title,
+          body: fire.body,
+          data: {
+            type: 'last_done',
+            itemId: item.id,
+            href: `/last-done/${item.id}`,
+          },
+          sound: true,
+          ...channel,
         },
-        sound: true,
-        ...channel,
-      },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.DATE,
-        date: when,
-        ...channel,
-      },
-    });
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: fire.at,
+          ...channel,
+        },
+      });
+    }
   } catch {
-    /* ignore — simulator / denied */
+    /* ignore, simulator / denied */
   }
 }
 
@@ -281,7 +249,6 @@ export async function syncLastDoneReminders(
   if (!isNative()) return;
   try {
     await ensureNotificationHandler();
-    const { loadNotificationPrefs } = await import('@/lib/notificationPrefs');
     const prefs = await loadNotificationPrefs();
     const Notifications = await notifications();
     const scheduled = await Notifications.getAllScheduledNotificationsAsync();

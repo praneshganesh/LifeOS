@@ -114,7 +114,7 @@ async function readLocalStores(
 
 /**
  * Prefs: overwrite local (blob is their source of truth across devices).
- * Legacy domain keys: only fill an EMPTY local store, once per device —
+ * Legacy domain keys: only fill an EMPTY local store, once per device.
  * row sync then imports them with ON CONFLICT DO NOTHING.
  */
 async function writeLocalStores(stores: Record<string, unknown>): Promise<void> {

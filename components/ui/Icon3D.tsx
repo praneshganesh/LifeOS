@@ -56,7 +56,7 @@ import {
 import { useTheme } from '@/lib/ThemeContext';
 
 /**
- * Semantic LifeOS icons — relevant glyphs only.
+ * Semantic LifeOS icons, relevant glyphs only.
  * Every icon sits in the same soft square badge.
  */
 export const ICON_MAP: Record<string, LucideIcon> = {

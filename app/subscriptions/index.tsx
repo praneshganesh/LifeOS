@@ -1,12 +1,13 @@
 import { useTheme } from '@/lib/ThemeContext';
 import { useMemo } from 'react';
-import { Pressable, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
-import { Plus } from 'lucide-react-native';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
+import { AddButton } from '@/components/ui/AddButton';
 import { ListCard, ListRow, StatStrip } from '@/components/ui/ListKit';
 import { Text } from '@/components/ui/Text';
 import { useSubscriptions } from '@/lib/SubscriptionsContext';
+import { useDeleteWithConfirm } from '@/lib/useDeleteWithConfirm';
 import { getRuntimeDefaultCurrency } from '@/lib/currency';
 import {
   daysUntilRenewal,
@@ -31,7 +32,8 @@ export default function SubscriptionsScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
-  const { subscriptions } = useSubscriptions();
+  const { subscriptions, removeSubscription } = useSubscriptions();
+  const deleteWithConfirm = useDeleteWithConfirm();
   const monthly = sumMonthly(subscriptions);
   const yearly = sumYearly(subscriptions);
   const currency = subscriptions[0]?.currency || getRuntimeDefaultCurrency();
@@ -46,14 +48,10 @@ export default function SubscriptionsScreen() {
       title="Subscriptions"
       defaultOrigin="things"
       right={
-        <Pressable
+        <AddButton
           onPress={() => router.push('/subscriptions/create' as Href)}
-          style={styles.addBtn}
-          accessibilityLabel="Add subscription"
-        >
-          <Plus size={18} color={colors.forest} strokeWidth={2.2} />
-          <Text style={styles.addLabel}>Add</Text>
-        </Pressable>
+          label="Add subscription"
+        />
       }
     >
       <StatStrip
@@ -93,6 +91,7 @@ export default function SubscriptionsScreen() {
                         : undefined
                   }
                   onPress={() => router.push(`/subscriptions/${s.id}` as Href)}
+                  onDelete={() => void deleteWithConfirm(s.title, () => removeSubscription(s.id))}
                   last={i === upcoming.length - 1}
                 />
               );
@@ -106,19 +105,5 @@ export default function SubscriptionsScreen() {
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
-  addBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: colors.forestSoft,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: radius.md,
-  },
-  addLabel: {
-    fontFamily: fonts.sansSemi,
-    fontSize: 16,
-    color: colors.forest,
-  },
 });
 }

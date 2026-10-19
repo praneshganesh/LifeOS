@@ -38,7 +38,7 @@ describe('class notification scheduling', () => {
     const eveTrigger = triggers.find((t) => t.identifier.includes('eve-2026-08-29'));
     assert.ok(eveTrigger);
     assert.equal(eveTrigger.title, 'Ishaan · Skating class tomorrow');
-    assert.equal(eveTrigger.body, 'Ishaan has Skating class is tomorrow at 10:00 AM.');
+    assert.equal(eveTrigger.body, 'Ishaan has Skating class tomorrow at 10:00 AM.');
     assert.equal(eveTrigger.date.getFullYear(), 2026);
     assert.equal(eveTrigger.date.getMonth(), 7); // Aug
     assert.equal(eveTrigger.date.getDate(), 28);
@@ -48,7 +48,7 @@ describe('class notification scheduling', () => {
     const dayTrigger = triggers.find((t) => t.identifier.includes('day-2026-08-29'));
     assert.ok(dayTrigger);
     assert.equal(dayTrigger.title, 'Ishaan · Skating class today');
-    assert.equal(dayTrigger.body, 'Ishaan has Skating class is today at 10:00 AM.');
+    assert.equal(dayTrigger.body, 'Ishaan has Skating class today at 10:00 AM.');
     assert.equal(dayTrigger.date.getFullYear(), 2026);
     assert.equal(dayTrigger.date.getMonth(), 7); // Aug
     assert.equal(dayTrigger.date.getDate(), 29);
@@ -76,7 +76,7 @@ describe('class notification scheduling', () => {
     const eveTrigger = triggers.find((t) => t.identifier.includes('eve-2026-08-29'));
     assert.ok(eveTrigger);
     assert.equal(eveTrigger.title, 'Ishaan · Skating class tomorrow');
-    assert.equal(eveTrigger.body, 'Ishaan has Skating class is tomorrow at 10:00 AM.');
+    assert.equal(eveTrigger.body, 'Ishaan has Skating class tomorrow at 10:00 AM.');
     assert.equal(eveTrigger.date.getFullYear(), 2026);
     assert.equal(eveTrigger.date.getMonth(), 7); // Aug
     assert.equal(eveTrigger.date.getDate(), 28);
@@ -86,7 +86,7 @@ describe('class notification scheduling', () => {
     const dayTrigger = triggers.find((t) => t.identifier.includes('day-2026-08-29'));
     assert.ok(dayTrigger);
     assert.equal(dayTrigger.title, 'Ishaan · Skating class today');
-    assert.equal(dayTrigger.body, 'Ishaan has Skating class is today at 10:00 AM.');
+    assert.equal(dayTrigger.body, 'Ishaan has Skating class today at 10:00 AM.');
     assert.equal(dayTrigger.date.getFullYear(), 2026);
     assert.equal(dayTrigger.date.getMonth(), 7); // Aug
     assert.equal(dayTrigger.date.getDate(), 29);

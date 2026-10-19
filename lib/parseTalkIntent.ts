@@ -93,7 +93,7 @@ function classify(text: string): Omit<TalkAddDraft, 'name' | 'brand' | 'insight'
 
 /**
  * Parse “add …” / “I bought …” utterances into an inventory draft.
- * Pure rules — $0 operating cost, no cloud AI.
+ * Pure rules, $0 operating cost, no cloud AI.
  */
 export function parseAddIntent(utterance: string): TalkAddDraft | null {
   const cleaned = utterance.trim().replace(/[?.!]+$/g, '');

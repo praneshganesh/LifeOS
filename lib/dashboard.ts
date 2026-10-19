@@ -17,7 +17,7 @@ export type DashRow = {
   icon: Icon3DName;
 };
 
-/** @deprecated Prefer DashRow on Today — kept for older test helpers. */
+/** @deprecated Prefer DashRow on Today, kept for older test helpers. */
 export type ChecklistRow = {
   id: string;
   title: string;
@@ -31,9 +31,9 @@ export type DashboardModel = {
   overdue: number;
   dueToday: number;
   habitsOpen: number;
-  /** Habits already checked in today — so a productive day shows, not vanishes. */
+  /** Habits already checked in today, so a productive day shows, not vanishes. */
   habitsDone: number;
-  /** Past-due attention items — own section, not under Today. */
+  /** Past-due attention items, own section, not under Today. */
   overdueRows: DashRow[];
   /** Open habits + attention due today only. */
   today: DashRow[];
@@ -68,7 +68,7 @@ export function buildDashboard(input: {
   subscriptions: Subscription[];
   classPacks: ClassPack[];
   habits: Habit[];
-  /** The user's own name — suppressed as an owner hint (it's implied). */
+  /** The user's own name, suppressed as an owner hint (it's implied). */
   selfName?: string;
   now?: Date;
 }): DashboardModel {
@@ -148,12 +148,20 @@ export function buildDashboard(input: {
       icon: 'tools' as Icon3DName,
     }));
 
-  // Habits first (daily rhythm), then attention due today — not overdue.
-  const overdueRows = dedupeRows(overdueAtt).slice(0, 12);
-  const today = dedupeRows([...openHabitDash, ...dueTodayAtt]).slice(0, 12);
+  // A reminder logged today shows once, under Done today, even if it repeats.
+  const doneLastDoneIds = new Set(activityDoneDash.map((r) => r.lastDoneId));
+  const notDoneToday = (row: DashRow) =>
+    !row.lastDoneId || !doneLastDoneIds.has(row.lastDoneId);
+
+  // Habits first (daily rhythm), then attention due today, not overdue.
+  const overdueRows = dedupeRows(overdueAtt).filter(notDoneToday).slice(0, 12);
+  const today = dedupeRows([...openHabitDash, ...dueTodayAtt])
+    .filter(notDoneToday)
+    .slice(0, 12);
   const next = dedupeRows(nextAtt)
     .filter(
       (row) =>
+        notDoneToday(row) &&
         !today.some((t) => t.id === row.id) &&
         !overdueRows.some((o) => o.id === row.id)
     )

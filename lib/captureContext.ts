@@ -2,7 +2,7 @@ import type { Href } from 'expo-router';
 import type { Icon3DName } from '@/components/ui/Icon3D';
 import { DEFAULT_SPACES } from '@/lib/spacesDefaults';
 
-/** Optional live spaces list — set by SpacesProvider when ready. */
+/** Optional live spaces list, set by SpacesProvider when ready. */
 let liveSpaces: Array<{ id: string; name: string; kind: string }> | null = null;
 
 export function setCaptureSpacesLookup(
@@ -15,7 +15,7 @@ function spacesLookup() {
   return liveSpaces ?? DEFAULT_SPACES;
 }
 
-/** Where Capture was opened from — biases defaults, hints, and save target. */
+/** Where Capture was opened from, biases defaults, hints, and save target. */
 export type CaptureContextKind =
   | 'general'
   | 'home'

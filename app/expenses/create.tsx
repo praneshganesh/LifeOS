@@ -113,7 +113,7 @@ export function ExpenseForm({
         router.replace(`/expenses/${expense.id}` as Href);
       }
     } catch {
-      showError('Couldn’t save the expense — try again.');
+      showError('Couldn’t save the expense. Try again.');
     } finally {
       setSaving(false);
     }
@@ -126,7 +126,7 @@ export function ExpenseForm({
     try {
       await removeExpense(existing.id);
     } catch {
-      showError('Couldn’t delete — try again.');
+      showError('Couldn’t delete. Try again.');
       return;
     }
     if (router.canGoBack()) router.back();

@@ -95,7 +95,7 @@ export async function attachNotificationDeepLinks(
     const sub = Notifications.addNotificationResponseReceivedListener(
       (response) => {
         void markHandled(responseKey(response));
-        // Tapped from the notification center — make sure it's in history too.
+        // Tapped from the notification center, make sure it's in history too.
         void recordDeliveredNotifications([
           entryFromOsNotification(response.notification),
         ]);

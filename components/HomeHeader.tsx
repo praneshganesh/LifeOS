@@ -15,7 +15,7 @@ import {
   unreadNotificationCount,
 } from '@/lib/notificationLog';
 
-/** Shared top bar for home surfaces — Today, Ask, and Life. */
+/** Shared top bar for home surfaces, Today, Ask, and Life. */
 export function HomeHeader({
   surface,
   avatarLetter,
@@ -23,7 +23,7 @@ export function HomeHeader({
 }: {
   surface: HomeSurface;
   avatarLetter: string;
-  /** Optional Add action — same size as profile avatar, sits left of search. */
+  /** Optional Add action, same size as profile avatar, sits left of search. */
   onAdd?: () => void;
 }) {
   const { colors } = useTheme();
@@ -81,11 +81,12 @@ export function HomeHeader({
       >
         <Bell size={20} color={colors.ink} strokeWidth={1.8} />
         {unread > 0 ? (
-          <View style={[styles.badge, { backgroundColor: colors.coral }]}>
-            <Text style={[styles.badgeText, { color: colors.pure }]}>
-              {unread > 9 ? '9+' : String(unread)}
-            </Text>
-          </View>
+          <View
+            style={[
+              styles.badge,
+              { backgroundColor: colors.coral, borderColor: colors.bg },
+            ]}
+          />
         ) : null}
       </Pressable>
       <Pressable
@@ -149,19 +150,12 @@ const styles = StyleSheet.create({
   },
   badge: {
     position: 'absolute',
-    top: 2,
-    right: 2,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 3,
-  },
-  badgeText: {
-    fontFamily: fonts.sansSemi,
-    fontSize: 10,
-    lineHeight: 12,
+    top: 6,
+    right: 7,
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
+    borderWidth: 1.5,
   },
   avatar: {
     width: 36,

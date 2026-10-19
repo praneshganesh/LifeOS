@@ -11,6 +11,7 @@ import {
 import { usePathname, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
+import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   Easing,
@@ -77,7 +78,7 @@ import { useTheme } from '@/lib/ThemeContext';
 
 type Phase = 'idle' | 'listening' | 'thinking' | 'reply';
 
-/** Pause after last speech before we send to AI — slow reminders need room to breathe. */
+/** Pause after last speech before we send to AI, slow reminders need room to breathe. */
 const SPEECH_COMMIT_MS = 1800;
 
 const isExpoGo = Constants.appOwnership === 'expo';
@@ -201,7 +202,7 @@ function AnimatedListeningOrb({
 }
 
 /**
- * Talk orb — stays open & keeps listening until the user closes it.
+ * Talk orb, stays open & keeps listening until the user closes it.
  */
 export function TalkOrb() {
   const { colors } = useTheme();
@@ -433,7 +434,7 @@ export function TalkOrb() {
     }
   }, []);
 
-  /** Wait for a real pause before sending to AI — slow reminders often pause mid-sentence. */
+  /** Wait for a real pause before sending to AI, slow reminders often pause mid-sentence. */
   const scheduleCommit = useCallback(() => {
     clearCommitTimer();
     commitTimerRef.current = setTimeout(() => {
@@ -484,7 +485,7 @@ export function TalkOrb() {
         return;
       }
       stopSpeech();
-      // Web (and some native paths) never fire Speech onDone/onError — always
+      // Web (and some native paths) never fire Speech onDone/onError, always
       // schedule a fallback so Talk keeps listening without another mic tap.
       const wordCount = spoken.trim().split(/\s+/).filter(Boolean).length;
       const estimateMs = Math.min(
@@ -515,14 +516,14 @@ export function TalkOrb() {
       stopRecognition();
       setPhase('idle');
       setError(message);
-      // Permission denied / no engine: retrying every second is noise — the
+      // Permission denied / no engine: retrying every second is noise, the
       // user has to change something in Settings first.
       if (opts?.terminal) {
         sessionActiveRef.current = false;
         clearResumeTimer();
         return;
       }
-      // Keep session open — retry listening shortly
+      // Keep session open, retry listening shortly
       if (sessionActiveRef.current && openRef.current) {
         clearResumeTimer();
         resumeTimerRef.current = setTimeout(() => {
@@ -539,7 +540,7 @@ export function TalkOrb() {
     async (utterance: string) => {
       const text = utterance.trim();
       if (!text) {
-        failListen('Didn’t catch that — still listening…');
+        failListen('Didn’t catch that. Still listening…');
         return;
       }
       if (handledRef.current || phaseRef.current === 'thinking') return;
@@ -846,7 +847,7 @@ export function TalkOrb() {
         setError(
           limited || err instanceof ChatAgentError
             ? (err as Error).message
-            : 'Something went wrong — still listening…'
+            : 'Something went wrong. Still listening…'
         );
         if (err instanceof ChatAgentError) setApiDown(true);
         clearResumeTimer();
@@ -911,13 +912,13 @@ export function TalkOrb() {
       const permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
       if (!permission.granted) {
         failListen(
-          'Microphone blocked — allow access in Settings, then reopen Talk.',
+          'Microphone is blocked. Allow access in Settings, then reopen Talk.',
           { terminal: true }
         );
         return;
       }
       setPhase('listening');
-      // Bias ASR from the user's own data only — not a fixed brand/store list
+      // Bias ASR from the user's own data only, not a fixed brand/store list
       const fromInventory = inventoryRef.current
         .flatMap((i) => [i.brand, i.name, i.room, i.purchasedFrom])
         .filter((s): s is string => Boolean(s && s !== 'Unknown' && s !== '—'));
@@ -940,12 +941,12 @@ export function TalkOrb() {
         contextualStrings: [...new Set([...fromInventory, ...fromExpenses])].slice(0, 40),
       });
     } catch {
-      failListen('Couldn’t start listening — retrying…');
+      failListen('Couldn’t start listening. Retrying…');
     }
   }, [clearCommitTimer, failListen, stopSpeech]);
   startListenRef.current = startListen;
 
-  /** Restart the mic for the same turn — keeps transcript so slow speech can continue. */
+  /** Restart the mic for the same turn, keeps transcript so slow speech can continue. */
   const continueListen = useCallback(async () => {
     if (!sessionActiveRef.current || !openRef.current) return;
     if (handledRef.current || phaseRef.current === 'thinking') return;
@@ -985,7 +986,7 @@ export function TalkOrb() {
     const transcript = event.results?.[0]?.transcript?.trim();
     if (!transcript) return;
     mergeSpeechChunk(transcript, Boolean(event.isFinal));
-    // Never send on the first final — wait for a real pause so slow speech
+    // Never send on the first final, wait for a real pause so slow speech
     // isn't chopped mid-reminder.
     scheduleCommit();
   });
@@ -999,13 +1000,13 @@ export function TalkOrb() {
     }
     if (event.error === 'not-allowed') {
       failListen(
-        'Microphone blocked — allow access in Settings, then reopen Talk.',
+        'Microphone is blocked. Allow access in Settings, then reopen Talk.',
         { terminal: true }
       );
       return;
     }
     failListen(
-      event.error === 'no-speech' ? 'Still listening…' : 'Listening glitch — retrying…'
+      event.error === 'no-speech' ? 'Still listening…' : 'Listening glitch. Retrying…'
     );
   });
 
@@ -1013,7 +1014,7 @@ export function TalkOrb() {
     if (!openRef.current || handledRef.current) return;
     if (phaseRef.current !== 'listening') return;
     if (transcriptRef.current) {
-      // Engine ended the session — still wait briefly so a restart can append
+      // Engine ended the session, still wait briefly so a restart can append
       // more speech if the user was only pausing.
       scheduleCommit();
       clearResumeTimer();
@@ -1026,12 +1027,12 @@ export function TalkOrb() {
         ) {
           return;
         }
-        // Continue the same turn — don't wipe what we already heard.
+        // Continue the same turn, don't wipe what we already heard.
         void continueListenRef.current();
       }, 350);
       return;
     }
-    // Silence — keep the session alive and listen again
+    // Silence, keep the session alive and listen again
     if (sessionActiveRef.current) {
       clearResumeTimer();
       resumeTimerRef.current = setTimeout(() => {
@@ -1060,7 +1061,7 @@ export function TalkOrb() {
       setReply('');
       setError('');
       historyRef.current = [];
-      // Keep focusItemId across Talk sessions — needed for “open the item”
+      // Keep focusItemId across Talk sessions, needed for “open the item”
     }
     return () => {
       clearCommitTimer();
@@ -1091,14 +1092,14 @@ export function TalkOrb() {
         clearCommitTimer();
         void processUtterance(transcriptRef.current);
       }
-      // else keep listening — no need to stop the session
+      // else keep listening, no need to stop the session
       return;
     }
     // Allow recovery if a prior turn got stuck in thinking
     if (phase === 'thinking') {
       handledRef.current = false;
       stopSpeech();
-      setError('Cancelled — tap to try again.');
+      setError('Cancelled. Tap to try again.');
       setPhase('idle');
       return;
     }
@@ -1121,7 +1122,7 @@ export function TalkOrb() {
           colors={['#0A0A0C', '#111114', '#0A0A0C']}
           style={StyleSheet.absoluteFill}
         />
-        {/* Soft bottom ambient — Claude-like listening glow */}
+        {/* Soft bottom ambient, Claude-like listening glow */}
         {orbLive ? (
           <LinearGradient
             colors={['transparent', 'rgba(120,160,255,0.14)', 'rgba(180,200,255,0.08)']}
@@ -1163,14 +1164,14 @@ export function TalkOrb() {
             pointerEvents="none"
           >
             <Text style={[styles.apiBannerText, { color: '#F6E7C5' }]}>
-              Chat service offline — Capture and basic Talk still work.
+              Chat service is offline. Capture and basic Talk still work.
             </Text>
           </View>
         ) : null}
 
         <View style={styles.orbStage} pointerEvents="box-none">
           <View style={styles.orbCenter}>
-            {/* Live transcript sits above the orb — quiet, not quoted */}
+            {/* Live transcript sits above the orb, quiet, not quoted */}
             <View style={styles.transcriptSlot}>
               {heard && (phase === 'listening' || phase === 'thinking') ? (
                 <Text style={styles.heard} numberOfLines={5}>
@@ -1239,15 +1240,15 @@ export function TalkOrb() {
 }
 
 /**
- * Bottom dock: Capture · Ask · Talk — reachable from anywhere.
- * Hidden on Ask — the chat composer has its own capture/talk buttons.
+ * Bottom dock: Capture · Ask · Talk, reachable from anywhere.
+ * Hidden on Ask, the chat composer has its own capture/talk buttons.
  */
 export function FloatingNav() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const pathname = usePathname();
   const { open, openTalk } = useTalkOverlay();
-  const { colors } = useTheme();
+  const { colors, resolved } = useTheme();
   const [keyboardOpen, setKeyboardOpen] = useState(false);
 
   useEffect(() => {
@@ -1275,7 +1276,7 @@ export function FloatingNav() {
     pathname.includes('/settings') ||
     pathname.includes('/profile') ||
     pathname.includes('/invite') ||
-    // Detail screens — dock fights sticky actions and form chrome.
+    // Detail screens, dock fights sticky actions and form chrome.
     /\/(last-done|asset|habits|expenses|subscriptions|classes|family|space|room|purchases|documents|vehicles|warranties|insurance|maintenance|notifications|reports)\/[^/]+/.test(
       pathname
     ) ||
@@ -1292,11 +1293,25 @@ export function FloatingNav() {
       ]}
       pointerEvents="box-none"
     >
-      <View
+      <BlurView
+        tint={
+          resolved === 'dark'
+            ? 'systemUltraThinMaterialDark'
+            : 'systemUltraThinMaterialLight'
+        }
+        intensity={70}
         style={[
           styles.dockChrome,
           {
-            backgroundColor: colors.bgElevated,
+            // Android renders BlurView as a plain view, so it needs its own translucency.
+            backgroundColor:
+              Platform.OS === 'android'
+                ? resolved === 'dark'
+                  ? 'rgba(24,24,27,0.92)'
+                  : 'rgba(255,255,255,0.92)'
+                : resolved === 'dark'
+                  ? 'rgba(24,24,27,0.45)'
+                  : 'rgba(255,255,255,0.55)',
             borderColor: colors.line,
           },
         ]}
@@ -1327,7 +1342,7 @@ export function FloatingNav() {
           }}
           Icon={Mic}
         />
-      </View>
+      </BlurView>
     </View>
   );
 }
@@ -1351,8 +1366,8 @@ function DockBtn({
       style={({ pressed }) => [
         styles.dockBtn,
         {
-          backgroundColor: filled ? colors.accent : colors.surface,
-          borderColor: filled ? colors.accent : colors.line,
+          backgroundColor: filled ? colors.accent : 'transparent',
+          borderColor: filled ? colors.accent : 'transparent',
         },
         pressed && { opacity: 0.88, transform: [{ scale: 0.96 }] },
       ]}
@@ -1383,6 +1398,7 @@ const styles = StyleSheet.create({
     padding: 5,
     borderRadius: 28,
     borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
   },
   dockBtn: {
     width: 42,

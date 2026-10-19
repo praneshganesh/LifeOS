@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useRouter, type Href } from 'expo-router';
+import { AddButton, HeaderActions } from '@/components/ui/AddButton';
+import { CaptureContextButton } from '@/components/CaptureContextButton';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { Plus } from 'lucide-react-native';
 import { ModuleScreen } from '@/components/ui/ModuleScreen';
 import { FilterChips } from '@/components/ui/ListKit';
 import { Text } from '@/components/ui/Text';
@@ -13,15 +14,15 @@ import { isDocumentItem, isVehicleItem } from '@/lib/moduleFilters';
 import { moduleHref } from '@/lib/moduleNav';
 import { confirmDelete } from '@/lib/confirmDelete';
 import { blurActiveElement } from '@/lib/a11y';
-import { captureHref } from '@/lib/captureContext';
 import { fonts, radius, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
 import { useToast } from '@/lib/ToastContext';
+import { hasValue } from '@/lib/inventoryNormalize';
 
 type TypeFilter = 'all' | 'vehicles' | 'documents';
 type WhoFilter = 'all' | `person:${string}`;
 
-/** Flat Things library — Type and Who are independent filters. */
+/** Flat Things library, Type and Who are independent filters. */
 export default function ThingsScreen() {
   const { colors } = useTheme();
   const router = useRouter();
@@ -76,12 +77,12 @@ export default function ThingsScreen() {
     if (!getById(id)) return;
     const ok = await confirmDelete(name);
     if (!ok) return;
-    await removeItem(id).catch(() => showError('Couldn’t delete — try again.'));
+    await removeItem(id).catch(() => showError('Couldn’t delete. Try again.'));
   }
 
-  function openCapture() {
+  function openCreate() {
     blurActiveElement();
-    router.push(captureHref({ kind: 'general' }));
+    router.push('/things/create' as Href);
   }
 
   return (
@@ -89,13 +90,10 @@ export default function ThingsScreen() {
       title="Things"
       defaultOrigin="things"
       right={
-        <Pressable
-          onPress={openCapture}
-          style={[styles.addBtn, { backgroundColor: colors.accent }]}
-          accessibilityLabel="Add thing"
-        >
-          <Plus size={18} color={colors.accentOn} strokeWidth={2.2} />
-        </Pressable>
+        <HeaderActions>
+          <CaptureContextButton kind="general" label="Add with camera" />
+          <AddButton onPress={openCreate} label="Add thing" />
+        </HeaderActions>
       }
     >
       <Stack.Screen options={{ headerShown: false }} />
@@ -123,7 +121,7 @@ export default function ThingsScreen() {
 
       {visibleThings.length === 0 ? (
         <Pressable
-          onPress={openCapture}
+          onPress={openCreate}
           style={({ pressed }) => [
             styles.empty,
             {
@@ -135,15 +133,15 @@ export default function ThingsScreen() {
         >
           <Text variant="headline">No things yet</Text>
           <Text variant="caption" style={{ marginTop: 4 }}>
-            Tap + to capture
+            Tap + to type one in, or the camera to snap it
           </Text>
         </Pressable>
       ) : (
         <Animated.View entering={FadeInDown.springify().damping(18)}>
           {visibleThings.map((item) => {
             const subtitle = [
-              item.brand && item.brand !== 'Unknown' ? item.brand : null,
-              item.category && item.category !== '—' ? item.category : null,
+              hasValue(item.brand) ? item.brand : null,
+              hasValue(item.category) ? item.category : null,
               item.assignedTo || null,
             ]
               .filter(Boolean)
@@ -157,9 +155,6 @@ export default function ThingsScreen() {
                 onPress={() =>
                   router.push(moduleHref(`/asset/${item.id}`, 'things'))
                 }
-                onEdit={() =>
-                  router.push(moduleHref(`/asset/${item.id}`, 'things'))
-                }
                 onDelete={() => void onDeleteThing(item.id, item.name)}
               />
             );
@@ -171,13 +166,6 @@ export default function ThingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  addBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   filterBlock: {
     marginBottom: spacing.sm,
   },

@@ -12,7 +12,7 @@ import { Text } from '@/components/ui/Text';
 import { fonts, radius, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
 
-/** Inset grouped card — Calendar-style, no outer stroke. */
+/** Inset grouped card, Calendar-style, no outer stroke. */
 export function FormGroup({
   children,
   style,
@@ -120,7 +120,7 @@ export function FormInputRow({
   );
 }
 
-/** Soft tappable pill — date/time values (Calendar-style). */
+/** Soft tappable pill, date/time values (Calendar-style). */
 export function FormPill({
   label,
   onPress,

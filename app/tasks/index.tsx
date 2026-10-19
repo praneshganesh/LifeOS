@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { Plus } from 'lucide-react-native';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
+import { AddButton } from '@/components/ui/AddButton';
 import { FilterChips, ListCard, ListRow, StatStrip } from '@/components/ui/ListKit';
 import { Text } from '@/components/ui/Text';
 import { useInventory } from '@/lib/InventoryContext';
@@ -22,7 +23,7 @@ const FILTERS = [
 ];
 
 /**
- * M7 — action queue derived from the same attention data as Notifications.
+ * M7, action queue derived from the same attention data as Notifications.
  * Add opens the reminder composer (not a separate task store).
  */
 export default function TasksScreen() {
@@ -31,7 +32,7 @@ export default function TasksScreen() {
   const router = useRouter();
   const { from } = useLocalSearchParams<{ from?: string }>();
   const { items } = useInventory();
-  const { items: lastDone } = useLastDone();
+  const { items: lastDone, logDone } = useLastDone();
   const { subscriptions } = useSubscriptions();
   const { packs: classPacks } = useClasses();
   const [filter, setFilter] = useState('open');
@@ -64,14 +65,7 @@ export default function TasksScreen() {
       title="Tasks & reminders"
       defaultOrigin="today"
       right={
-        <Pressable
-          onPress={openAddReminder}
-          style={styles.addBtn}
-          accessibilityLabel="Add reminder"
-        >
-          <Plus size={18} color={colors.forest} strokeWidth={2.2} />
-          <Text style={styles.addLabel}>Add</Text>
-        </Pressable>
+        <AddButton onPress={openAddReminder} label="Add reminder" />
       }
     >
       <StatStrip
@@ -112,9 +106,12 @@ export default function TasksScreen() {
                       ? colors.amber
                       : undefined
                 }
-                onPress={() => {
-                  if (a.href) router.push(a.href as Href);
-                }}
+                onPress={a.href ? () => router.push(a.href as Href) : undefined}
+                onComplete={
+                  a.id.startsWith('ld-')
+                    ? () => void logDone({ id: a.id.slice(3) })
+                    : undefined
+                }
                 onDismiss={() => void dismiss(a.id)}
                 last={i === list.length - 1}
               />
@@ -128,22 +125,6 @@ export default function TasksScreen() {
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    addBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      backgroundColor: colors.forestSoft,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: radius.md,
-      minHeight: 36,
-      justifyContent: 'center',
-    },
-    addLabel: {
-      fontFamily: fonts.sansSemi,
-      fontSize: 15,
-      color: colors.forest,
-    },
     emptyAdd: {
       alignSelf: 'flex-start',
       flexDirection: 'row',

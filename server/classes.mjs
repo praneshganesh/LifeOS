@@ -1,4 +1,4 @@
-/** Class-pack utterance repair — keep in sync with lib/classes.ts */
+/** Class-pack utterance repair, keep in sync with lib/classes.ts */
 
 const CLASS_ACTIVITY =
   'swimming|skating|piano|tennis|football|soccer|dance|yoga|karate|guitar|violin|chess|coding|art|boxing|ballet|cricket|golf';

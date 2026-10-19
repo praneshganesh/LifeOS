@@ -45,7 +45,7 @@ export async function createInvite(opts?: {
     }
   }
 
-  // Local fallback (dev / offline) — acceptable until cloud household is live.
+  // Local fallback (dev / offline), acceptable until cloud household is live.
   const code = randomCode();
   const invite: LocalInvite = {
     code,
@@ -62,7 +62,7 @@ export async function createInvite(opts?: {
     list.push(invite);
     await AsyncStorage.setItem(LOCAL_INVITES_KEY, JSON.stringify(list));
   } catch {
-    // ignore persistence failure — code still shareable this session
+    // ignore persistence failure, code still shareable this session
   }
   return { code, url: inviteUrl(code), source: 'local' };
 }

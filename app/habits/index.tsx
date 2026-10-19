@@ -1,9 +1,9 @@
 import { useTheme } from '@/lib/ThemeContext';
 import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
-import { Plus } from 'lucide-react-native';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
+import { AddButton } from '@/components/ui/AddButton';
 import { FilterChips, StatStrip } from '@/components/ui/ListKit';
 import { Text } from '@/components/ui/Text';
 import {
@@ -12,6 +12,7 @@ import {
   type HabitHeatmapRange,
 } from '@/components/HabitCard';
 import { useHabits } from '@/lib/HabitsContext';
+import { useDeleteWithConfirm } from '@/lib/useDeleteWithConfirm';
 import { useLastDone } from '@/lib/LastDoneContext';
 import {
   currentStreak,
@@ -31,7 +32,8 @@ export default function HabitsScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
-  const { habits, checkIn, getById } = useHabits();
+  const { habits, checkIn, getById, removeHabit } = useHabits();
+  const deleteWithConfirm = useDeleteWithConfirm();
   const { logDone } = useLastDone();
   const [heatmapRange, setHeatmapRange] = useState<HabitHeatmapRange>('month');
   const groups = useMemo(() => groupHabitsByCategory(habits), [habits]);
@@ -59,14 +61,7 @@ export default function HabitsScreen() {
       title="Habits"
       defaultOrigin="things"
       right={
-        <Pressable
-          onPress={() => router.push('/habits/create' as Href)}
-          style={styles.addBtn}
-          accessibilityLabel="Add habit"
-        >
-          <Plus size={18} color={colors.accent} strokeWidth={2.2} />
-          <Text style={styles.addLabel}>Add</Text>
-        </Pressable>
+        <AddButton onPress={() => router.push('/habits/create' as Href)} label="Add habit" />
       }
     >
       <StatStrip
@@ -79,7 +74,7 @@ export default function HabitsScreen() {
               ? String(linkedCount)
               : bestStreak
                 ? `${bestStreak}d`
-                : '—',
+                : '0d',
           },
         ]}
       />
@@ -109,6 +104,7 @@ export default function HabitsScreen() {
                 range={heatmapRange}
                 onOpen={() => router.push(`/habits/${h.id}` as Href)}
                 onCheckIn={() => void onCheckIn(h.id)}
+                onDelete={() => void deleteWithConfirm(h.title, () => removeHabit(h.id))}
               />
             ))}
           </View>
@@ -120,19 +116,5 @@ export default function HabitsScreen() {
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    addBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      backgroundColor: colors.accentSoft,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: radius.md,
-    },
-    addLabel: {
-      fontFamily: fonts.sansSemi,
-      fontSize: 16,
-      color: colors.accent,
-    },
   });
 }

@@ -133,7 +133,7 @@ export function SubscriptionForm({
         router.replace(`/subscriptions/${sub.id}` as Href);
       }
     } catch {
-      showError('Couldn’t save the subscription — try again.');
+      showError('Couldn’t save the subscription. Try again.');
     } finally {
       setSaving(false);
     }
@@ -146,7 +146,7 @@ export function SubscriptionForm({
     try {
       await removeSubscription(existing.id);
     } catch {
-      showError('Couldn’t delete — try again.');
+      showError('Couldn’t delete. Try again.');
       return;
     }
     if (router.canGoBack()) router.back();

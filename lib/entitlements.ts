@@ -11,7 +11,7 @@ export type EntitlementStatus =
   | 'pro'
   | 'family'
   | 'lapsed'
-  | 'member'; // joined someone else's Family — no own billing
+  | 'member'; // joined someone else's Family, no own billing
 
 export type Entitlement = {
   status: EntitlementStatus;

@@ -69,7 +69,55 @@ describe('dashboard', () => {
 
     const classAttention = dash.next.find((a) => a.id.startsWith('cls-sched-'));
     assert.ok(classAttention);
-    assert.equal(classAttention.title, 'Ishaan · Skating class tomorrow at 10:00 AM');
+    assert.equal(classAttention.title, 'Ishaan · Skating class tomorrow');
+    assert.match(classAttention.subtitle, /10:00 AM/);
+  });
+
+  it('does not double the word class when the title already has it', () => {
+    const friday = new Date(2026, 7, 28, 12, 0, 0);
+    const pack = createClassPack({
+      title: 'Skating class',
+      total: 12,
+      scheduleDays: ['saturday'],
+      scheduleTime: '10:00 AM',
+      startsOn: '2026-08-01',
+      endsOn: '2026-11-01',
+    });
+    const dash = buildDashboard({
+      inventory: [],
+      lastDone: [],
+      subscriptions: [],
+      classPacks: [pack],
+      habits: [],
+      now: friday,
+    });
+    const row = dash.next.find((a) => a.id.startsWith('cls-sched-'));
+    assert.equal(row?.title, 'Skating class tomorrow');
+  });
+
+  it('keeps a reminder done today out of Coming up', () => {
+    const today = dayKey();
+    const tomorrow = dayKey(new Date(Date.now() + 24 * 60 * 60 * 1000));
+    const dash = buildDashboard({
+      inventory: [],
+      lastDone: [
+        {
+          id: 'pe',
+          label: 'PE uniform',
+          createdAt: '2026-09-01T08:00:00.000Z',
+          logs: [{ id: 'log-1', doneAt: today }],
+          remindAt: tomorrow,
+          remindInterval: { unit: 'weekdays', value: 1, weekdays: [0, 1, 2, 3, 4, 5, 6] },
+        },
+      ],
+      subscriptions: [],
+      classPacks: [],
+      habits: [],
+      now: new Date(`${today}T12:00:00`),
+    });
+    assert.ok(dash.doneToday.some((r) => r.lastDoneId === 'pe'));
+    assert.ok(!dash.next.some((r) => r.lastDoneId === 'pe'));
+    assert.ok(!dash.today.some((r) => r.lastDoneId === 'pe'));
   });
 });
 

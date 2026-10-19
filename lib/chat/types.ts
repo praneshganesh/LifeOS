@@ -29,9 +29,9 @@ export type InventorySummaryItem = {
 export type ChatSessionFocus = {
   /** Item most recently added/updated/opened in this conversation */
   focusItemId?: string | null;
-  /** Expense most recently logged/updated — “show it” after spend */
+  /** Expense most recently logged/updated, “show it” after spend */
   focusExpenseId?: string | null;
-  /** Last module Talk touched — vague show/delete/update uses this. */
+  /** Last module Talk touched, vague show/delete/update uses this. */
   focus?: { kind: string; id: string } | null;
 };
 
@@ -47,11 +47,11 @@ export type ChatAddAction = {
   purchasedFrom?: string;
   /** Official manual or support page URL (https only) */
   manualUrl?: string;
-  /** Warranty end — YYYY-MM-DD, or a year like "2028" */
+  /** Warranty end, YYYY-MM-DD, or a year like "2028" */
   warrantyExpiry?: string;
   /** Only if the user stated condition (new/used/…). Omit to leave unknown. */
   condition?: string;
-  /** Who this belongs to — a real household member name. */
+  /** Who this belongs to, a real household member name. */
   assignedTo?: string;
   personId?: string;
 };
@@ -92,11 +92,11 @@ export type ChatLogDoneAction = {
   label: string;
   /** Inventory item this service was for */
   inventoryItemId?: string;
-  /** When it was done — YYYY-MM-DD preferred */
+  /** When it was done, YYYY-MM-DD preferred */
   doneAt?: string;
 };
 
-/** One-off future reminder (Last Done remindAt) — not a completed activity. */
+/** One-off future reminder (Last Done remindAt), not a completed activity. */
 export type ChatSetReminderAction = {
   type: 'set_reminder';
   label: string;
@@ -104,7 +104,7 @@ export type ChatSetReminderAction = {
   remindAt: string;
   /** Extra detail split from the spoken label */
   note?: string;
-  /** Recurring schedule — weekdays / days / months */
+  /** Recurring schedule, weekdays / days / months */
   remindInterval?: {
     value: number;
     unit: 'days' | 'months' | 'weekdays';

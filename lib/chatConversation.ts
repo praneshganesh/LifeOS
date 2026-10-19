@@ -76,7 +76,7 @@ function roomFromText(text: string): string | null {
 function addAck(draft: TalkAddDraft) {
   const article = /^[aeiou]/i.test(draft.name) ? 'an' : 'a';
   const lines = [
-    `Nice — I’ll keep track of ${article} ${draft.name}.`,
+    `Nice, I’ll keep track of ${article} ${draft.name}.`,
     `I’ve put it in ${draft.room} under ${draft.category}.`,
   ];
   if (draft.brand === 'Unknown') {
@@ -92,7 +92,7 @@ function idlePending(): ChatPending {
 }
 
 /**
- * Rule-based conversational turn for Chat — no cloud AI.
+ * Rule-based conversational turn for Chat, no cloud AI.
  * Keeps a light multi-turn thread after adds (brand / room).
  */
 export function converse(params: {
@@ -105,7 +105,7 @@ export function converse(params: {
   const text = params.utterance.trim();
   if (!text) {
     return {
-      reply: 'I’m here — tell me what you got, or ask about something you own.',
+      reply: 'I’m here. Tell me what you got, or ask about something you own.',
       pending: params.pending,
       action: { type: 'none' },
     };
@@ -119,7 +119,7 @@ export function converse(params: {
       return {
         reply:
           p.step === 'brand'
-            ? `No problem — ${p.name} stays as-is in ${p.room}. Ask me anytime, or Capture a receipt when you have one.`
+            ? `No problem. ${p.name} stays as-is in ${p.room}. Ask me anytime, or Capture a receipt when you have one.`
             : `All set. ${p.name} is in ${p.room}. What else is on your mind?`,
         pending: idlePending(),
         action: { type: 'none' },
@@ -137,7 +137,7 @@ export function converse(params: {
       const room = roomFromText(text);
       if (room && !looksLikeBrand(text)) {
         return {
-          reply: `Moved ${p.name} to ${room}. Brand still unknown — got one, or skip?`,
+          reply: `Moved ${p.name} to ${room}. Brand still unknown. Got one, or skip?`,
           pending: { ...p, room, step: 'brand' },
           action: { type: 'patch', id: p.itemId, patch: { room } },
         };
@@ -149,7 +149,7 @@ export function converse(params: {
             ? p.name
             : `${brand} ${p.name.replace(new RegExp(`^${brand}\\s+`, 'i'), '')}`.trim();
         return {
-          reply: `Got it — ${brand}. I’ve updated ${name} in ${p.room}. Want a different room, or shall we leave it?`,
+          reply: `Got it, ${brand}. I’ve updated ${name} in ${p.room}. Want a different room, or shall we leave it?`,
           pending: { ...p, name, step: 'room' },
           action: {
             type: 'patch',
@@ -164,7 +164,7 @@ export function converse(params: {
         return startAdd(draft, params.inventoryNames);
       }
       return {
-        reply: `Still on ${p.name} — send a brand name, or say “skip” and we can move on.`,
+        reply: `Still on ${p.name}. Send a brand name, or say “skip” and we can move on.`,
         pending: p,
         action: { type: 'none' },
       };
@@ -181,7 +181,7 @@ export function converse(params: {
       const room = roomFromText(text);
       if (room) {
         return {
-          reply: `Updated — ${p.name} is now in ${room}. You’re all set. What else can I help with?`,
+          reply: `Updated. ${p.name} is now in ${room}. You’re all set. What else can I help with?`,
           pending: idlePending(),
           action: { type: 'patch', id: p.itemId, patch: { room } },
         };

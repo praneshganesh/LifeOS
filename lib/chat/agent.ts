@@ -247,7 +247,7 @@ export async function runChatAgent(params: {
   if (!res.ok) {
     throw new ChatAgentError(
       data.error ||
-        'Chat service returned an error. Try again in a moment — or use Capture offline.'
+        'Chat service returned an error. Try again in a moment, or use Capture offline.'
     );
   }
 

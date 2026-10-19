@@ -5,7 +5,7 @@ export type HouseholdRole = 'adult' | 'child' | 'parent' | 'pet';
 /** Local ACL stub until sync/backend (FP2). */
 export type SharingPermission = 'owner' | 'editor' | 'viewer';
 
-/** On-device household person / pet — no demo seed. */
+/** On-device household person / pet, no demo seed. */
 export type HouseholdMember = {
   id: string;
   name: string;
@@ -14,10 +14,10 @@ export type HouseholdMember = {
   avatarLetter: string;
   medicalNotes?: string;
   icon: Icon3DName;
-  /** Sharing role stub — not enforced until multi-device sync */
+  /** Sharing role stub, not enforced until multi-device sync */
   permission: SharingPermission;
   createdAt: string;
-  /** Last local mutation — LWW clock for row sync. */
+  /** Last local mutation, LWW clock for row sync. */
   updatedAt?: string;
 };
 

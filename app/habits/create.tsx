@@ -71,7 +71,7 @@ export default function CreateHabitScreen() {
       showToast('Habit added');
       router.replace(`/habits/${habit.id}` as Href);
     } catch {
-      showError('Couldn’t save the habit — try again.');
+      showError('Couldn’t save the habit. Try again.');
     } finally {
       setSaving(false);
     }

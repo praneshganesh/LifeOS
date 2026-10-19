@@ -22,7 +22,7 @@ import { promptSaveWithApple } from '@/lib/auth/appleNudge';
 type Cadence = 'monthly' | 'yearly';
 
 /**
- * Hard gate when trial ends — Pro via Apple (RevenueCat → StoreKit).
+ * Hard gate when trial ends, Pro via Apple (RevenueCat → StoreKit).
  */
 export default function PaywallScreen() {
   const { colors } = useTheme();
@@ -288,7 +288,7 @@ function PlanCard({
   onPress: () => void;
   colors: { ink: string; mute: string; accent: string; surface: string; line: string; onInk: string };
 }) {
-  const price = loading ? '…' : offer?.priceString?.trim() || '—';
+  const price = loading ? '…' : offer?.priceString?.trim() || 'Unavailable';
 
   return (
     <Pressable

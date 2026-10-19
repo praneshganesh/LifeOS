@@ -1,6 +1,6 @@
 import type { Href } from 'expo-router';
 
-/** Where the user opened a module list from — drives back label + fallback. */
+/** Where the user opened a module list from, drives back label + fallback. */
 export type ModuleOrigin =
   | 'today'
   | 'things'

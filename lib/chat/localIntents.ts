@@ -542,7 +542,7 @@ function replyForAgendaQuery(plan: AgendaPlan, ctx: LocalIntentContext) {
         ? `${nextClass.title} · ${nextClass.when}`
         : null;
     if (classLine && !upcoming.length && !openHabits.length) {
-      return `Next class — ${classLine}.`;
+      return `Next class: ${classLine}.`;
     }
     if (!upcoming.length && !classLine) {
       return scope === 'reminders'
@@ -566,7 +566,7 @@ function fuzzyIncludes(hay: string, needle: string) {
   return h.includes(n) || n.split(/\s+/).every((w) => w.length < 2 || h.includes(w));
 }
 
-/** "the Mauritius reminder" — not "my reminders" or "today's reminders". */
+/** "the Mauritius reminder", not "my reminders" or "today's reminders". */
 export function namedReminderSubject(utterance: string): string | null {
   const t = normalizeUtterance(utterance);
   if (!/\breminders?\b/.test(t)) return null;
@@ -601,7 +601,7 @@ export function resolveNamedReminderIntent(
     const hit = hits[0]!;
     const when = reminderWhenLabel(hit.remindAt);
     return {
-      reply: when ? `${hit.label} — ${when}.` : `${hit.label}.`,
+      reply: when ? `${hit.label}: ${when}.` : `${hit.label}.`,
       actions: hit.id ? [{ type: 'open_last_done', id: hit.id }] : [{ type: 'none' }],
     };
   }
@@ -614,7 +614,7 @@ export function resolveNamedReminderIntent(
   };
 }
 
-/** Named item due / expiry — “when does Emirates ID expire?” */
+/** Named item due / expiry, “when does Emirates ID expire?” */
 export function resolveNamedDueIntent(
   utterance: string,
   ctx: LocalIntentContext
@@ -709,7 +709,7 @@ export function resolveHabitStatusIntent(
         .slice(0, 5)
         .map((h) => `${h.title}: ${h.streak}-day streak`);
       return {
-        reply: `Habits — ${lines.join('; ')}.`,
+        reply: `Habits: ${lines.join('; ')}.`,
         actions: [{ type: 'none' }],
       };
     }
@@ -718,7 +718,7 @@ export function resolveHabitStatusIntent(
 
   if (streakQ || /\bstreak\b/.test(t)) {
     return {
-      reply: `${hit.title} — ${hit.streak}-day streak${hit.doneToday ? ', done today' : ', not checked in today'}.`,
+      reply: `${hit.title}: ${hit.streak}-day streak${hit.doneToday ? ', done today' : ', not checked in today'}.`,
       actions: [{ type: 'none' }],
     };
   }
@@ -726,8 +726,8 @@ export function resolveHabitStatusIntent(
   if (didQ || /\btoday\b/.test(t)) {
     return {
       reply: hit.doneToday
-        ? `Yes — ${hit.title} is done today (${hit.streak}-day streak).`
-        : `Not yet — ${hit.title} is still open today.`,
+        ? `Yes, ${hit.title} is done today (${hit.streak}-day streak).`
+        : `Not yet. ${hit.title} is still open today.`,
       actions: [{ type: 'none' }],
     };
   }

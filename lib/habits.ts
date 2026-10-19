@@ -90,12 +90,12 @@ export type Habit = {
   logs: HabitLog[];
   personId?: string;
   assignedTo?: string;
-  /** Optional link to a Thing — check-in can also log Last Done on that item. */
+  /** Optional link to a Thing, check-in can also log Last Done on that item. */
   inventoryItemId?: string;
   /** When true (default if linked), check-in appends a Last Done log for the linked Thing. */
   syncLastDone?: boolean;
   createdAt: string;
-  /** Last local mutation — LWW clock for row sync */
+  /** Last local mutation, LWW clock for row sync */
   updatedAt?: string;
 };
 
@@ -110,7 +110,7 @@ export type NewHabitInput = {
   id?: string;
 };
 
-/** Soft keyword grouping — users never pick a category. */
+/** Soft keyword grouping, users never pick a category. */
 export function categorizeHabit(title: string, why?: string): HabitCategory {
   const l = `${title} ${why || ''}`.toLowerCase();
   if (

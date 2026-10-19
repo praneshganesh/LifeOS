@@ -9,8 +9,15 @@ import {
   type HomeSurface,
 } from '@/lib/homeSurface';
 
+const SEGMENTS: { key: HomeSurface; label: string }[] = [
+  { key: 'today', label: 'Today' },
+  { key: 'things', label: 'Life' },
+];
+
+/** iOS-style segmented control for the two home surfaces. */
 export function HomeSurfaceSwitch({ value }: { value: HomeSurface }) {
   const router = useRouter();
+  const { colors, resolved } = useTheme();
 
   function go(next: HomeSurface) {
     if (next === value) return;
@@ -26,76 +33,71 @@ export function HomeSurfaceSwitch({ value }: { value: HomeSurface }) {
   }
 
   return (
-    <View style={styles.row} accessibilityRole="tablist">
-      <Tab
-        label="Today"
-        active={value === 'today'}
-        onPress={() => go('today')}
-      />
-      <Tab
-        label="Life"
-        active={value === 'things'}
-        onPress={() => go('things')}
-      />
+    <View
+      style={[styles.track, { backgroundColor: colors.surfaceSoft }]}
+      accessibilityRole="tablist"
+    >
+      {SEGMENTS.map((seg) => {
+        const active = seg.key === value;
+        return (
+          <Pressable
+            key={seg.key}
+            onPress={() => go(seg.key)}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: active }}
+            style={({ pressed }) => [
+              styles.segment,
+              active && [
+                styles.segmentOn,
+                {
+                  backgroundColor:
+                    resolved === 'dark' ? colors.surfaceTint : colors.surface,
+                },
+              ],
+              pressed && !active && { opacity: 0.6 },
+            ]}
+          >
+            <Text
+              style={[
+                styles.label,
+                { color: active ? colors.ink : colors.mute },
+              ]}
+            >
+              {seg.label}
+            </Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
 
-function Tab({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  const { colors } = useTheme();
-  return (
-    <Pressable
-      onPress={onPress}
-      hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-      accessibilityRole="tab"
-      accessibilityState={{ selected: active }}
-      style={({ pressed }) => [styles.tab, { opacity: pressed ? 0.7 : 1 }]}
-    >
-      <Text
-        style={[
-          styles.label,
-          { color: active ? colors.ink : colors.faint },
-        ]}
-      >
-        {label}
-      </Text>
-      <View
-        style={[
-          styles.marker,
-          { backgroundColor: active ? colors.accent : 'transparent' },
-        ]}
-      />
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
-  row: {
+  track: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 18,
+    alignSelf: 'flex-start',
+    borderRadius: 9,
+    padding: 2,
   },
-  tab: {
+  segment: {
+    minWidth: 76,
+    height: 30,
+    paddingHorizontal: 14,
+    borderRadius: 7,
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  segmentOn: {
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
   },
   label: {
     fontFamily: fonts.sansSemi,
-    fontSize: 22,
-    lineHeight: 28,
-    letterSpacing: -0.45,
-  },
-  marker: {
-    width: 18,
-    height: 2.5,
-    borderRadius: 2,
-    marginTop: 4,
+    fontSize: 15,
+    lineHeight: 20,
+    letterSpacing: -0.2,
   },
 });

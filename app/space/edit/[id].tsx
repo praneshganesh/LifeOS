@@ -84,7 +84,7 @@ export function SpaceEditor({ spaceId }: { spaceId: string }) {
       });
       showToast('Space saved');
     } catch {
-      showError('Couldn’t save the space — try again.');
+      showError('Couldn’t save the space. Try again.');
     } finally {
       setSaving(false);
     }
@@ -106,7 +106,7 @@ export function SpaceEditor({ spaceId }: { spaceId: string }) {
               try {
                 await removeSpace(target.id);
               } catch {
-                showError('Couldn’t delete — try again.');
+                showError('Couldn’t delete. Try again.');
                 return;
               }
               router.replace('/(tabs)/spaces');
@@ -124,7 +124,7 @@ export function SpaceEditor({ spaceId }: { spaceId: string }) {
       await addRoom({ spaceId: id, name: trimmed, icon: 'package' });
       setNewRoom('');
     } catch {
-      showError('Couldn’t add the room — try again.');
+      showError('Couldn’t add the room. Try again.');
     }
   }
 
@@ -134,7 +134,7 @@ export function SpaceEditor({ spaceId }: { spaceId: string }) {
     if (!next || next === oldName || !id) return;
     try {
       await updateRoom(roomId, { name: next });
-      // Things reference rooms by name — carry them over to the new name.
+      // Things reference rooms by name, carry them over to the new name.
       const affected = inventoryItems.filter(
         (i) => i.spaceId === id && i.room === oldName
       );
@@ -143,7 +143,7 @@ export function SpaceEditor({ spaceId }: { spaceId: string }) {
       }
       showToast('Room renamed');
     } catch {
-      showError('Couldn’t rename the room — try again.');
+      showError('Couldn’t rename the room. Try again.');
     }
   }
 
@@ -244,7 +244,7 @@ export function SpaceEditor({ spaceId }: { spaceId: string }) {
                       style: 'destructive',
                       onPress: () =>
                         void removeRoom(room.id).catch(() =>
-                          showError('Couldn’t remove — try again.')
+                          showError('Couldn’t remove. Try again.')
                         ),
                     },
                   ]);
