@@ -1,6 +1,6 @@
 import { localDayKey } from '@/lib/dates';
 import type { Icon3DName } from '@/components/ui/Icon3D';
-import { getRuntimeDefaultCurrency } from '@/lib/currency';
+import { getRuntimeDefaultCurrency, normalizeMoneyAmount } from '@/lib/currency';
 
 export type ExpenseCategory =
   | 'food'
@@ -80,13 +80,9 @@ export function labelForCategory(category: ExpenseCategory): string {
   return EXPENSE_CATEGORIES.find((c) => c.id === category)?.label ?? 'Other';
 }
 
-/** Parse "AED 45.50", "45.5", "1,299" → number or NaN */
+/** Parse "AED 45.50", "45.5", "1,299" → number or NaN (never negative; capped). */
 export function parseAmount(raw: string | number | undefined | null): number {
-  if (typeof raw === 'number') return Number.isFinite(raw) ? raw : NaN;
-  if (!raw) return NaN;
-  const cleaned = String(raw).replace(/[^\d.,-]/g, '').replace(/,/g, '');
-  const n = parseFloat(cleaned);
-  return Number.isFinite(n) ? n : NaN;
+  return normalizeMoneyAmount(raw);
 }
 
 export function formatAmount(
@@ -119,10 +115,11 @@ export function currentMonthKey(d = new Date()): string {
 export function createExpense(input: NewExpenseInput): Expense {
   const today = localDayKey();
   const title = input.title.trim() || input.merchant?.trim() || 'Expense';
+  const amount = normalizeMoneyAmount(input.amount);
   return {
     id: input.id ?? `exp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     title,
-    amount: input.amount,
+    amount: Number.isFinite(amount) ? amount : 0,
     currency: (input.currency || getRuntimeDefaultCurrency()).toUpperCase(),
     category: input.category || 'other',
     date: input.date || today,

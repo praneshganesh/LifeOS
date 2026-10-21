@@ -38,7 +38,7 @@ export default function CreateHabitScreen() {
   const [why, setWhy] = useState('');
   const [linkId, setLinkId] = useState<string | null>(null);
   const [personId, setPersonId] = useState<string | null>(null);
-  const [doneToday, setDoneToday] = useState(true);
+  const [doneToday, setDoneToday] = useState(false);
   const [saving, setSaving] = useState(false);
   const person = members.find((m) => m.id === personId);
   const accent = colors.forest;

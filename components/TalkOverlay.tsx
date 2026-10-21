@@ -1401,9 +1401,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   dockBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',

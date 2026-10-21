@@ -245,9 +245,14 @@ export async function runChatAgent(params: {
   };
 
   if (!res.ok) {
+    const raw = (data.error || '').trim();
+    const unauthorized =
+      res.status === 401 || /^unauthorized$/i.test(raw);
     throw new ChatAgentError(
-      data.error ||
-        'Chat service returned an error. Try again in a moment, or use Capture offline.'
+      unauthorized
+        ? 'Ask can’t reach Saavi right now. Check your connection, or sign in again and try once more.'
+        : raw ||
+            'Chat service returned an error. Try again in a moment, or use Capture offline.'
     );
   }
 

@@ -186,6 +186,7 @@ export default function FamilyMemberScreen() {
           editableTitle
           titleValue={name}
           onTitleChange={setName}
+          titleMaxLength={40}
           titlePlaceholder="Name"
           subtitle={
             relation.trim()

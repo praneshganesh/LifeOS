@@ -10,7 +10,8 @@ Saavi is a household app that keeps home life in one place: what you own, who it
 What’s overdue, due today, and coming up — reminders, habits, and classes. Mark items done or snooze them. Swipe right to complete, swipe left to snooze where supported.
 
 ### Life
-Hub for everything else in the home: Things, Household, Expenses, Subscriptions, Habits, Classes, Documents, Warranties, Insurance, Vehicles, Purchases, Maintenance, and related lists.
+Primary tiles: Things, Expenses, Subscriptions, Classes, Habits, and Tasks.
+Under **More**: Household, Documents, Vehicles, Warranties, Insurance, Purchases, Maintenance, and Reminders.
 
 ### Ask
 Type to Saavi. Ask questions or give instructions (for example, add a reminder or log an expense). One message and reply uses one Talk turn when AI is involved.

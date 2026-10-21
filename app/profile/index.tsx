@@ -115,6 +115,7 @@ export default function ProfileScreen() {
           editableTitle
           titleValue={name}
           onTitleChange={setName}
+          titleMaxLength={40}
           onTitleCommit={() => void save()}
           titlePlaceholder="Your name"
           compact

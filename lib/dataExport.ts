@@ -54,13 +54,17 @@ export async function buildLifeOsBackup(version = '1.0.0'): Promise<LifeOsBackup
 
 export async function shareLifeOsBackup(
   version = '1.0.0'
-): Promise<'shared' | 'cancelled' | 'unavailable'> {
+): Promise<'shared' | 'copied' | 'cancelled' | 'unavailable'> {
   const backup = await buildLifeOsBackup(version);
   const json = JSON.stringify(backup, null, 2);
   const filename = `lifeos-backup-${backup.exportedAt.slice(0, 10)}.json`;
 
   if (Platform.OS === 'web') {
     try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(json);
+        return 'copied';
+      }
       await Share.share({ title: filename, message: json });
       return 'shared';
     } catch {

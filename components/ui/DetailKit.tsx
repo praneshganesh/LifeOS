@@ -49,6 +49,7 @@ export function DetailHero({
   editableTitle,
   titleValue,
   onTitleChange,
+  titleMaxLength,
   onTitleCommit,
   titlePlaceholder,
   onPress,
@@ -67,6 +68,8 @@ export function DetailHero({
   editableTitle?: boolean;
   titleValue?: string;
   onTitleChange?: (v: string) => void;
+  /** Soft cap for editable titles (profile / thing names). */
+  titleMaxLength?: number;
   onTitleCommit?: () => void;
   titlePlaceholder?: string;
   /** Whole hero tap, e.g. open Plan & billing from Profile. */
@@ -90,6 +93,7 @@ export function DetailHero({
       returnKeyType="done"
       multiline={!trailing}
       numberOfLines={trailing ? 1 : undefined}
+      maxLength={titleMaxLength}
       style={[
         styles.heroTitle,
         compact && styles.heroTitleCompact,
@@ -406,7 +410,7 @@ export function DetailTrashButton({
         },
       ]}
       accessibilityRole="button"
-      accessibilityLabel="Remove"
+      accessibilityLabel="Delete"
       hitSlop={12}
     >
       <Trash2 size={20} color={colors.mute} strokeWidth={2} />

@@ -1193,12 +1193,11 @@ const server = createServer(async (req, res) => {
     }
     const mime = String(body.mimeType || 'image/jpeg').trim() || 'image/jpeg';
     const rawLocalDate = typeof body.localDate === 'string' ? body.localDate.trim() : '';
-    const today = isIsoDate(rawLocalDate)
-      ? rawLocalDate
-      : new Date().toISOString().slice(0, 10);
+    // Billing day is always UTC on the server (client localDate is forgeable).
+    const billingDay = new Date().toISOString().slice(0, 10);
 
     if (sb) {
-      const consumed = await rpcConsumeAiTurn(sb, auth.accessToken, today);
+      const consumed = await rpcConsumeAiTurn(sb, auth.accessToken, billingDay);
       if (!consumed.ok) {
         json(req, res, 502, {
           error: consumed.error || 'Could not check Talk allowance',
@@ -1346,7 +1345,9 @@ const server = createServer(async (req, res) => {
 
   const rawLocalDate = typeof body.localDate === 'string' ? body.localDate.trim() : '';
   const validLocalDate = isIsoDate(rawLocalDate) ? rawLocalDate : null;
+  // Prompt dates may use the user's local day; Talk billing never trusts it.
   const today = validLocalDate || new Date().toISOString().slice(0, 10);
+  const billingDay = new Date().toISOString().slice(0, 10);
   const timezoneStr =
     typeof body.timezone === 'string' && body.timezone.trim()
       ? ` User timezone: ${body.timezone.trim().slice(0, 50)}.`
@@ -1376,7 +1377,7 @@ const server = createServer(async (req, res) => {
     : `No focus id. For open_item, name the Thing. Do not guess the newest inventory item.`;
 
   if (sb) {
-    const consumed = await rpcConsumeAiTurn(sb, auth.accessToken, today);
+    const consumed = await rpcConsumeAiTurn(sb, auth.accessToken, billingDay);
     if (!consumed.ok) {
       json(req, res, 502, { error: consumed.error || 'Could not check Talk allowance' });
       return;

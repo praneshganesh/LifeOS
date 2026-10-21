@@ -515,7 +515,7 @@ export default function AssetDetailScreen() {
               </Pressable>
             ) : null}
 
-            {isDoc ? (
+            {isDoc && captured?.ocrOnDevice ? (
               <View style={styles.privacyBanner}>
                 <Text style={styles.privacyText}>
                   Document text was read on your device. Nothing was sent to AI.

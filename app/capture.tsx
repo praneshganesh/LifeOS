@@ -664,6 +664,7 @@ export default function CaptureModal() {
 
       let savedId: string | null = null;
       let expenseId: string | null = null;
+      const didReadText = Boolean(ocrText?.trim());
 
       if (saveThing) {
         if (linkedStubId) {
@@ -691,7 +692,9 @@ export default function CaptureModal() {
                 event: asDocument
                   ? preset.preferDocument
                     ? preset.saveEvent
-                    : 'Document captured · text read on device'
+                    : didReadText
+                      ? 'Document captured · text read on device'
+                      : 'Document captured'
                   : preset.saveEvent,
               },
             ],
@@ -702,10 +705,12 @@ export default function CaptureModal() {
             nationality: nationality || undefined,
             dateOfBirth: dob || undefined,
             expiryDate: expiry || undefined,
-            ocrOnDevice: true,
+            ocrOnDevice: didReadText,
             source: 'capture',
             insight: asDocument
-              ? 'Text was read on your device. Nothing was sent to AI.'
+              ? didReadText
+                ? 'Text was read on your device. Nothing was sent to AI.'
+                : `Captured for ${preset.label}.`
               : `Captured for ${preset.label}.`,
           });
           savedId = item.id;
@@ -995,6 +1000,7 @@ export default function CaptureModal() {
                     value={name}
                     onChange={setName}
                     placeholder="e.g. Passport · Jane Doe"
+                    maxLength={80}
                   />
                   <Field
                     label={
@@ -1030,6 +1036,7 @@ export default function CaptureModal() {
                     onChangeText={setName}
                     placeholder="What is it?"
                     placeholderTextColor={colors.faint}
+                    maxLength={80}
                     style={styles.nameInput}
                   />
                   <TextInput
@@ -1350,6 +1357,7 @@ function Field({
   autoCorrect,
   autoCapitalize,
   suggestions,
+  maxLength,
 }: {
   label: string;
   value: string;
@@ -1358,6 +1366,7 @@ function Field({
   autoCorrect?: boolean;
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
   suggestions?: string[];
+  maxLength?: number;
 }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -1371,6 +1380,7 @@ function Field({
         placeholderTextColor={colors.faint}
         autoCorrect={autoCorrect}
         autoCapitalize={autoCapitalize}
+        maxLength={maxLength}
         style={styles.input}
       />
       {suggestions?.length ? (

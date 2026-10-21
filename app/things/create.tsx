@@ -182,6 +182,7 @@ export default function CreateThingScreen() {
             placeholder={copy.namePlaceholder}
             autoFocus
             returnKeyType="next"
+            maxLength={80}
           />
         </DetailSection>
 

@@ -142,7 +142,7 @@ export function AssetEditor({ assetId }: { assetId: string }) {
 
   return (
     <View>
-          <Field label="Name" value={name} onChangeText={setName} />
+          <Field label="Name" value={name} onChangeText={setName} maxLength={80} />
           <Field
             label="Brand"
             value={brand}
@@ -297,6 +297,7 @@ function Field({
   autoCorrect,
   autoCapitalize,
   suggestions,
+  maxLength,
 }: {
   label: string;
   value: string;
@@ -306,6 +307,7 @@ function Field({
   autoCorrect?: boolean;
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
   suggestions?: string[];
+  maxLength?: number;
 }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -319,6 +321,7 @@ function Field({
         placeholderTextColor={colors.faint}
         autoCorrect={autoCorrect}
         autoCapitalize={autoCapitalize}
+        maxLength={maxLength}
         style={[styles.input, multiline && styles.inputMulti]}
         multiline={multiline}
       />

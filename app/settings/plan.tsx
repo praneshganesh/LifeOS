@@ -32,6 +32,7 @@ import { promptSaveWithApple } from '@/lib/auth/appleNudge';
 import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { fonts, radius, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
+import { showUserAlert } from '@/lib/webConfirm';
 
 type Cadence = 'monthly' | 'yearly';
 
@@ -136,7 +137,7 @@ export default function PlanSettingsScreen() {
   async function selectPlan() {
     if (busy) return;
     if (!billingReady) {
-      Alert.alert(
+      showUserAlert(
         'Apple billing',
         __DEV__
           ? 'RevenueCat isn’t available here. Unlocks locally in development only.'
@@ -149,7 +150,7 @@ export default function PlanSettingsScreen() {
       return;
     }
     if (!offers.length) {
-      Alert.alert(
+      showUserAlert(
         'Plans unavailable',
         'Store products aren’t loaded yet. Try again in a moment.'
       );
@@ -180,10 +181,10 @@ export default function PlanSettingsScreen() {
         return;
       }
       if (!result.cancelled) {
-        Alert.alert('Purchase failed', result.error);
+        showUserAlert('Purchase failed', result.error);
       }
     } catch (e) {
-      Alert.alert(
+      showUserAlert(
         'Purchase',
         e instanceof Error ? e.message : 'Could not complete purchase.'
       );
@@ -195,7 +196,7 @@ export default function PlanSettingsScreen() {
   async function onRestore() {
     if (busy) return;
     if (!billingReady) {
-      Alert.alert(
+      showUserAlert(
         'Restore',
         'Restore works on TestFlight or App Store builds once billing is connected.'
       );
@@ -214,7 +215,7 @@ export default function PlanSettingsScreen() {
         });
         return;
       }
-      Alert.alert('Restore', result.error || 'Nothing to restore.');
+      showUserAlert('Restore', result.error || 'Nothing to restore.');
     } finally {
       setBusy(null);
     }

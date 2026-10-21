@@ -35,6 +35,7 @@ const NAME_FIELD = {
   autoComplete: 'off' as const,
   textContentType: 'none' as const,
   autoCapitalize: 'words' as const,
+  maxLength: 40,
 };
 
 export default function NewFamilyMemberScreen() {

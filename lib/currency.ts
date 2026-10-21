@@ -116,21 +116,42 @@ export function isKnownCurrency(code: string): boolean {
   return KNOWN.has(normalizeCurrencyCode(code));
 }
 
+/** Hard cap for prices / expenses / subscriptions (household-scale money). */
+export const MAX_MONEY_AMOUNT = 99_999_999.99;
+const MAX_MONEY_WHOLE_DIGITS = 8;
+
 /**
  * Keep amount fields typed as money: digits + optional one decimal, max 2
  * fraction digits. Strips letters/symbols (including currency codes pasted in).
+ * Caps magnitude so absurd values cannot be typed in.
  */
 export function sanitizeAmountInput(raw: string): string {
   let s = String(raw).replace(/[^\d.]/g, '');
   const dot = s.indexOf('.');
   if (dot !== -1) {
     s = s.slice(0, dot + 1) + s.slice(dot + 1).replace(/\./g, '');
-    const [whole, frac = ''] = s.split('.');
+    const [wholeRaw, frac = ''] = s.split('.');
+    const whole = wholeRaw.slice(0, MAX_MONEY_WHOLE_DIGITS);
     s = `${whole}.${frac.slice(0, 2)}`;
+  } else {
+    s = s.slice(0, MAX_MONEY_WHOLE_DIGITS);
   }
   // Avoid a lonely "." while typing
   if (s === '.') return '0.';
   return s;
+}
+
+/**
+ * Reject negatives / NaN; clamp absurd magnitudes. Returns NaN when invalid.
+ */
+export function normalizeMoneyAmount(raw: string | number | undefined | null): number {
+  const n =
+    typeof raw === 'number'
+      ? raw
+      : Number.parseFloat(String(raw ?? '').replace(/[^\d.,-]/g, '').replace(/,/g, ''));
+  if (!Number.isFinite(n) || n < 0) return NaN;
+  if (n > MAX_MONEY_AMOUNT) return MAX_MONEY_AMOUNT;
+  return Math.round(n * 100) / 100;
 }
 
 /** Digits-only for pack totals, counts, etc. */

@@ -498,7 +498,8 @@ export const APPEARANCE_REV = 3;
 
 export const DEFAULT_APPEARANCE: AppearancePrefs = {
   family: 'ink',
-  mode: 'dark',
+  /** Follow the phone; Appearance settings can still force light/dark. */
+  mode: 'system',
 };
 
 export function migrateAppearancePrefs(parsed: Record<string, unknown>): AppearancePrefs {

@@ -28,6 +28,7 @@ import {
 } from '@/lib/cloud/sync';
 import { fonts, radius, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
+import { showUserAlert } from '@/lib/webConfirm';
 
 export default function DataSettingsScreen() {
   const { colors } = useTheme();
@@ -84,7 +85,14 @@ export default function DataSettingsScreen() {
     try {
       const result = await shareLifeOsBackup(version);
       if (result === 'unavailable') {
-        Alert.alert('Export failed', 'Sharing isn’t available on this device.');
+        showUserAlert('Export failed', 'Sharing isn’t available on this device.');
+      } else if (result === 'shared' || result === 'copied') {
+        showUserAlert(
+          'Backup ready',
+          result === 'copied'
+            ? 'Backup JSON was copied to the clipboard.'
+            : 'Backup was shared from this device.'
+        );
       }
     } finally {
       setBusy(false);
@@ -92,7 +100,7 @@ export default function DataSettingsScreen() {
   }
 
   function alertNotConfigured() {
-    Alert.alert(
+    showUserAlert(
       'Cloud backup isn’t set up',
       'This build has no cloud backup configured. Use “Export backup JSON” to keep a copy of your data.'
     );
@@ -110,10 +118,10 @@ export default function DataSettingsScreen() {
       setMeta(next);
       setRecovery(await loadRecoveryCode());
       if (next.lastError) {
-        Alert.alert('Cloud backup', next.lastError);
+        showUserAlert('Cloud backup', next.lastError);
       }
     } catch (err) {
-      Alert.alert(
+      showUserAlert(
         'Backup failed',
         err instanceof Error ? err.message : 'Couldn’t reach the backup service.'
       );
@@ -136,12 +144,12 @@ export default function DataSettingsScreen() {
       } catch {
         /* Expo Go / web */
       }
-      Alert.alert(
+      showUserAlert(
         'Restored',
         'Force-quit and reopen Saavi so every screen reloads from the cloud copy.'
       );
     } catch (err) {
-      Alert.alert(
+      showUserAlert(
         'Restore failed',
         err instanceof Error ? err.message : 'Could not restore that backup.'
       );

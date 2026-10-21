@@ -225,7 +225,11 @@ export default function SpacesScreen() {
         avatarLetter={profileLetter}
         onAdd={openAdd}
       />
-      <View style={[styles.body, { paddingBottom: dockClearance }]}>
+      <ScrollView
+        style={styles.body}
+        contentContainerStyle={{ paddingBottom: dockClearance }}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.grid}>
           {rows.map((row, rowIndex) => (
             <View
@@ -273,7 +277,48 @@ export default function SpacesScreen() {
             </View>
           ))}
         </View>
-      </View>
+
+        <Text style={[styles.moreLabel, { color: colors.mute }]}>More</Text>
+        <View
+          style={[
+            styles.moreCard,
+            { backgroundColor: colors.surface, borderColor: colors.line },
+          ]}
+        >
+          {(
+            [
+              { title: 'Household', href: '/family', icon: 'family' as Icon3DName },
+              { title: 'Documents', href: '/documents', icon: 'folder' as Icon3DName },
+              { title: 'Vehicles', href: '/vehicles', icon: 'car' as Icon3DName },
+              { title: 'Warranties', href: '/warranties', icon: 'shield' as Icon3DName },
+              { title: 'Insurance', href: '/insurance', icon: 'shield' as Icon3DName },
+              { title: 'Purchases', href: '/purchases', icon: 'package' as Icon3DName },
+              { title: 'Maintenance', href: '/maintenance', icon: 'tools' as Icon3DName },
+              { title: 'Reminders', href: '/last-done', icon: 'bell' as Icon3DName },
+            ] as const
+          ).map((link, index, list) => (
+            <Pressable
+              key={link.href}
+              onPress={() => router.push(moduleHref(link.href, 'things'))}
+              style={({ pressed }) => [
+                styles.moreRow,
+                index < list.length - 1 && [
+                  styles.moreRowBorder,
+                  { borderBottomColor: colors.line },
+                ],
+                pressed && { opacity: 0.85 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={link.title}
+            >
+              <AppIcon name={link.icon} size={32} tone="soft" />
+              <Text style={[styles.moreTitle, { color: colors.ink }]}>
+                {link.title}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </ScrollView>
 
       <Modal
         visible={addOpen}
@@ -362,6 +407,33 @@ const styles = StyleSheet.create({
   },
   grid: {
     gap: spacing.md,
+  },
+  moreLabel: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 13,
+    letterSpacing: 0.2,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  moreCard: {
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
+  moreRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
+  },
+  moreRowBorder: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  moreTitle: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 16,
+    letterSpacing: -0.2,
   },
   gridRow: {
     flexDirection: 'row',
