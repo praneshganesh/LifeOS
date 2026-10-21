@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   Pressable,
   StyleSheet,
   View,
@@ -123,7 +124,12 @@ export default function PlanSettingsScreen() {
         ? 'Pick a plan to keep Things, Talk, and sync going.'
         : entitlement.status === 'lapsed'
           ? 'Resubscribe to continue. A new trial does not start.'
-          : [renewalSentence, switchLine, 'One login on your devices.', 'Cancel anytime in Apple Settings.']
+          : [
+              renewalSentence,
+              switchLine,
+              'One login on your devices.',
+              'Cancel in Apple Settings to stop the next renewal. The period you already paid for stays active until it ends.',
+            ]
               .filter(Boolean)
               .join(' ');
 
@@ -278,7 +284,7 @@ export default function PlanSettingsScreen() {
 
           <SubscribeBtn
             name="Pro"
-            hint={`One login · ${PRO_TALK_DAILY} Talk turns / day`}
+            hint={`Unlimited Things · ${PRO_TALK_DAILY} Talk asks / day`}
             price={proOffer?.priceString?.trim() || '…'}
             current={proCurrent}
             busy={busy === 'pro'}
@@ -288,9 +294,25 @@ export default function PlanSettingsScreen() {
           />
 
           <Text style={[styles.fine, { color: colors.mute }]}>
-            Charged to your Apple ID. Renews automatically. Cancel anytime.
+            Charged to your Apple ID. Renews automatically until you cancel in
+            Apple Settings. Cancel stops the next charge. It does not refund the
+            current period.
           </Text>
       </>
+
+      {planId === 'pro' ? (
+        <Pressable
+          onPress={() => {
+            void Linking.openURL('https://apps.apple.com/account/subscriptions');
+          }}
+          hitSlop={8}
+          style={styles.restore}
+        >
+          <Text style={[styles.restoreText, { color: colors.ink }]}>
+            Manage subscription in Apple Settings
+          </Text>
+        </Pressable>
+      ) : null}
 
       <Pressable onPress={() => void onRestore()} hitSlop={8} style={styles.restore}>
         <Text style={[styles.restoreText, { color: colors.mute }]}>

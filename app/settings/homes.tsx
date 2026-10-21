@@ -33,7 +33,7 @@ export default function HomesSettingsScreen() {
 
   return (
     <ModuleScreen
-      title="Homes & defaults"
+      title="Home & currency"
       backLabel="Settings"
       backFallbackHref="/settings"
       bottomExtra={DETAIL_DOCK_PAD}

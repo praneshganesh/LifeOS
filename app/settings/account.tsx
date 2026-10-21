@@ -161,46 +161,44 @@ export default function AccountSettingsScreen() {
         : 'Not signed in';
 
   return (
-    <ModuleScreen title="Account" defaultOrigin="settings" bottomExtra={DETAIL_DOCK_PAD}>
-      <ModuleSection label="Identity">
+    <ModuleScreen
+      title="Account"
+      defaultOrigin="settings"
+      backLabel="Settings"
+      backFallbackHref="/settings"
+      bottomExtra={DETAIL_DOCK_PAD}
+    >
+      <ModuleSection label="Signed in as">
         <ListCard>
           <ListRow
             icon="id"
             title={state.hasAppleIdentity ? 'Apple' : 'This device'}
             subtitle={statusSubtitle}
-            meta={
-              state.hasAppleIdentity
-                ? 'Saved'
-                : state.userId
-                  ? 'Anonymous'
-                  : undefined
-            }
             last
           />
         </ListCard>
         <Text style={[styles.hint, { color: colors.mute }]}>
-          Sign in with Apple keeps your household, sync, and subscription tied to
-          one identity across phones. You can try Saavi without signing in first.
+          Sign in with Apple so a new phone can restore your household and plan.
         </Text>
       </ModuleSection>
 
-      <ModuleSection label="Actions">
+      <ModuleSection label="Sign in">
         <ListCard>
           {Platform.OS === 'ios' && appleOk && !state.hasAppleIdentity ? (
             <ListRow
               icon="key"
               title={busy ? 'Connecting…' : 'Sign in with Apple'}
-              subtitle="Link this device so a new phone can restore your data"
+              subtitle="Keeps your data if you change phones"
               onPress={() => void onConnectApple()}
-              last={!state.userId && !state.hasAppleIdentity}
+              last
             />
           ) : null}
           {Platform.OS === 'ios' && appleOk && state.hasAppleIdentity ? (
             <ListRow
               icon="key"
-              title="Signed in with Apple"
+              title="Apple is linked"
               subtitle="You’re set for restore on another device"
-              last={false}
+              last={!state.userId}
             />
           ) : null}
           {Platform.OS !== 'ios' ? (
@@ -208,23 +206,15 @@ export default function AccountSettingsScreen() {
               icon="phone"
               title="Sign in with Apple"
               subtitle="Available on iPhone and iPad"
-              last={!(state.hasAppleIdentity || state.userId)}
+              last
             />
           ) : null}
-          {state.hasAppleIdentity || state.userId ? (
+          {state.hasAppleIdentity ? (
             <ListRow
               icon="shield"
-              title="Sign out of cloud"
-              subtitle="Leaves Apple identity on this device"
+              title="Sign out"
+              subtitle="Stays on this phone until you delete the account"
               onPress={onSignOut}
-            />
-          ) : null}
-          {state.configured && (state.hasAppleIdentity || state.userId) ? (
-            <ListRow
-              icon="shield"
-              title="Delete account"
-              subtitle="Erases your login and this phone’s record. Does not cancel Apple billing."
-              onPress={onDeleteAccount}
               last
             />
           ) : null}
@@ -236,12 +226,26 @@ export default function AccountSettingsScreen() {
         ) : null}
       </ModuleSection>
 
-      <ModuleSection label="More">
+      {state.configured && (state.hasAppleIdentity || state.userId) ? (
+        <ModuleSection label="Delete">
+          <ListCard>
+            <ListRow
+              icon="shield"
+              title="Delete account"
+              subtitle="Removes your login and this phone’s copy. Does not cancel Apple billing."
+              onPress={onDeleteAccount}
+              last
+            />
+          </ListCard>
+        </ModuleSection>
+      ) : null}
+
+      <ModuleSection label="Advanced">
         <ListCard>
           <ListRow
             icon="package"
-            title="Export & backup"
-            subtitle="Cloud sync and recovery code"
+            title="Export or wipe"
+            subtitle="JSON backup, recovery code, or clear this phone"
             onPress={() => router.push('/settings/data')}
             last
           />

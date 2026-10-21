@@ -1,5 +1,6 @@
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { reloadAppAfterWipe, wipeLifeOsData } from '@/lib/dataExport';
+import { MEDIA_BUCKET } from '@/lib/media/mediaSync';
 
 /**
  * Erases the signed-in Supabase user (and a household they alone belong to),
@@ -9,6 +10,26 @@ export async function deleteMyAccount(): Promise<
   { ok: true } | { ok: false; error: string }
 > {
   if (isSupabaseConfigured() && supabase) {
+    // Storage forbids DELETE on storage.objects from SQL. Remove files first
+    // when that helper exists (staging / next builds). Older servers skip this.
+    const { data: paths, error: listError } = await supabase.rpc(
+      'list_my_media_paths'
+    );
+    if (!listError && Array.isArray(paths)) {
+      const names = paths.filter(
+        (p): p is string => typeof p === 'string' && p.length > 0
+      );
+      for (let i = 0; i < names.length; i += 100) {
+        const chunk = names.slice(i, i + 100);
+        const { error: removeError } = await supabase.storage
+          .from(MEDIA_BUCKET)
+          .remove(chunk);
+        if (removeError) {
+          return { ok: false, error: removeError.message };
+        }
+      }
+    }
+
     const { error } = await supabase.rpc('delete_my_account');
     if (error) {
       return { ok: false, error: error.message };

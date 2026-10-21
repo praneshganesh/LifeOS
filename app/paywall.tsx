@@ -165,8 +165,8 @@ export default function PaywallScreen() {
         <Text style={[styles.title, { color: colors.ink }]}>{title}</Text>
         <Text style={[styles.sub, { color: colors.mute }]}>
           {entitlement.paywallReason === 'subscription_ended'
-            ? 'Resubscribe to continue. This does not start a new trial.'
-            : 'Subscribe with Apple. Cancel anytime in Settings.'}
+            ? 'Resubscribe to keep your household, Things, and Talk. This does not start a new trial.'
+            : 'Pro keeps Things, reminders, and capture unlimited. Talk is asking Saavi by voice or chat. Each ask uses one Talk turn.'}
         </Text>
 
         <View style={styles.cadenceRow}>
@@ -198,7 +198,7 @@ export default function PaywallScreen() {
 
         <PlanCard
           name="Pro"
-          hint={`Your devices · ${PRO_TALK_DAILY} Talk turns / day`}
+          hint={`Unlimited Things · ${PRO_TALK_DAILY} Talk asks / day`}
           offer={proOffer}
           loading={loadingOffers && billingReady}
           billingReady={billingReady}
@@ -232,8 +232,10 @@ export default function PaywallScreen() {
         </Pressable>
 
         <Text style={[styles.legal, { color: colors.mute }]}>
-          Payment is charged to your Apple ID. Subscriptions renew unless cancelled
-          at least 24 hours before the period ends.{' '}
+          Payment is charged to your Apple ID. Renews automatically until you
+          cancel in Apple Settings (at least 24 hours before the period ends).
+          Cancel stops the next renewal. It does not refund the period already
+          paid.{' '}
           <Text
             style={[styles.legalLink, { color: colors.ink }]}
             onPress={() => router.push('/settings/terms' as Href)}

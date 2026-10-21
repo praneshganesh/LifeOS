@@ -217,8 +217,8 @@ export default function CaptureModal() {
     try {
       const result = await identifyCaptureImage(uri, entitlement.planId);
       if (!result.name) {
-        if (opts?.auto) {
-          setOcrNote('AI couldn’t tell what this is. Type a name below and save.');
+        if (!opts?.auto) {
+          Alert.alert('Identify', 'Couldn’t tell what this is. Type a name and save.');
         }
         return;
       }
@@ -229,11 +229,7 @@ export default function CaptureModal() {
       setIsDocument(false);
       setReceiptLooksLike(false);
       setSaveDestination('thing');
-      const confNote =
-        result.confidence >= 0.65
-          ? 'Identified with AI. Check before saving.'
-          : 'AI guess (low confidence). Edit anything that looks off.';
-      setOcrNote(result.note ? `${confNote} ${result.note}` : confNote);
+      setOcrNote('');
       setStatus('Identified');
       proposeTalkLinks(result.name, result.brand || brand, opts?.text ?? ocrText);
     } catch (err) {
@@ -241,12 +237,12 @@ export default function CaptureModal() {
         err instanceof AiDailyLimitError || err instanceof IdentifyError
           ? err.message
           : 'Something went wrong. Try again.';
-      if (opts?.auto) {
-        setOcrNote(`Couldn’t identify it automatically. ${message} Type a name below.`);
-      } else if (err instanceof AiDailyLimitError) {
-        Alert.alert('Daily AI limit', message);
-      } else {
-        Alert.alert('Identify', message);
+      if (!opts?.auto) {
+        if (err instanceof AiDailyLimitError) {
+          Alert.alert('Daily AI limit', message);
+        } else {
+          Alert.alert('Identify', message);
+        }
       }
     } finally {
       setIdentifying(false);
@@ -318,8 +314,8 @@ export default function CaptureModal() {
           : suggestReceiptDestination(hints);
     setSaveDestination(dest);
     if (dest === 'document') setIsDocument(true);
-    setStatus('Receipt read on device. Confirm the amount and log it as an expense.');
-    setOcrNote('Read on device. Pick Expense (or both), then save.');
+    setStatus('Receipt');
+    setOcrNote('');
     proposeTalkLinks(nextName, hints.brand || '', text);
     return nextName;
   }
@@ -361,9 +357,7 @@ export default function CaptureModal() {
 
     if (!aiAssist) {
       setOcrText('');
-      setOcrNote(
-        'AI is off. The photo stays on this phone. Nothing was read or sent. Fill in what you want, then save.'
-      );
+      setOcrNote('');
       setStatus('Private capture');
       if (forcedLink && linkedItem) {
         setIsDocument(Boolean(linkedItem.isDocument));
@@ -378,8 +372,8 @@ export default function CaptureModal() {
     }
 
     setPhase('reading');
-    setStatus('Reading text on your device…');
-    setOcrNote('Read on your device. Nothing is sent to AI or the cloud.');
+    setStatus('Reading…');
+    setOcrNote('');
 
     // Prefer the durable copy, camera temp URIs can disappear mid-read on some devices.
     let result = await recognizeImage(durable);
@@ -387,13 +381,6 @@ export default function CaptureModal() {
       result = await recognizeImage(uri);
     }
     setOcrText(result.text || '');
-    // Surface OCR failure, otherwise blank fields read as "found nothing"
-    // when the engine never ran at all.
-    if (result.engine === 'none') {
-      setOcrNote(
-        'Couldn’t read the photo automatically. Fill in the details below and save.'
-      );
-    }
     const receiptHints = extractReceiptHints(result.text);
     // Policy schedules and IDs also contain "total/amount" + prices, don't
     // let those route to Expense just because they mention money.
@@ -429,10 +416,8 @@ export default function CaptureModal() {
           setBrand(hints.brand);
         }
       }
-      setOcrNote(
-        `Attaching ${attachKind === 'receipt' ? 'receipt' : 'photo'} to ${linkedItem.name}.`
-      );
-      setStatus(`Ready to attach to ${linkedItem.name}`);
+      setOcrNote('');
+      setStatus(`Attach to ${linkedItem.name}`);
       setPhase('review');
       return;
     }
@@ -458,8 +443,8 @@ export default function CaptureModal() {
         ? `${result.identity.fullName} · ${kindLabel}`
         : kindLabel;
       setName(nextName);
-      setStatus('Document fields filled from the MRZ on your device.');
-      setOcrNote('Read on your device. Nothing is sent to AI or the cloud.');
+      setStatus('Document');
+      setOcrNote('');
       proposeTalkLinks(nextName, result.identity.issuingCountry || '', result.text);
     } else {
       const fieldHints = extractDocumentFieldHints(result.text);
@@ -485,16 +470,8 @@ export default function CaptureModal() {
           : kindLabel;
         setName(nextName);
         setBrand(kind === 'emirates_id' || kind === 'driving_licence' ? 'UAE' : '');
-        setStatus(
-          fieldHints?.documentNumber
-            ? `${kindLabel} detected. Check the fields and save.`
-            : `${kindLabel} detected. Tip: scan the back (MRZ) for auto-fill, or enter details below.`
-        );
-        setOcrNote(
-          kind === 'emirates_id' && !fieldHints?.documentNumber
-            ? 'Front of Emirates ID often needs the ID number typed in. You can also retake the back of the card.'
-            : 'Read on your device. Nothing is sent to AI or the cloud.'
-        );
+        setStatus(kindLabel);
+        setOcrNote('');
         proposeTalkLinks(nextName, '', result.text);
       } else if (preset.preferDocument) {
         applyContextDefaults(true);
@@ -513,8 +490,8 @@ export default function CaptureModal() {
           setName('');
           setReceiptLooksLike(false);
           setSaveDestination('thing');
-          setStatus('Identifying with AI…');
-          setOcrNote('No document or receipt text found, so AI is having a look. Uses 1 AI turn.');
+          setStatus('Identifying…');
+          setOcrNote('');
           proposeTalkLinks(preset.defaultName, '', result.text);
           setPhase('review');
           void runIdentify({ uri: durable, auto: true, text: result.text });
@@ -588,11 +565,7 @@ export default function CaptureModal() {
           setName(
             picked.fileName?.replace(/\.pdf$/i, '') || preset.defaultName
           );
-          setOcrNote(
-            aiAssist
-              ? 'PDF stored. Open a photo of the ID page for MRZ reading.'
-              : 'AI is off. The PDF stays on this phone. Fill in the details, then save.'
-          );
+          setOcrNote('');
           setPhase('review');
           return;
         }
@@ -611,11 +584,7 @@ export default function CaptureModal() {
         setIsDocument(true);
         setDocKind('unknown');
         setName(asset.name?.replace(/\.pdf$/i, '') || preset.defaultName);
-        setOcrNote(
-          aiAssist
-            ? 'PDF stored on device. Open a photo of the ID page for MRZ reading.'
-            : 'AI is off. The PDF stays on this phone. Fill in the details, then save.'
-        );
+        setOcrNote('');
         setPhase('review');
         return;
       }
@@ -817,7 +786,7 @@ export default function CaptureModal() {
       if (opts?.scanAnother) {
         resetToCamera();
         setStatus('Ready for the next receipt.');
-        setOcrNote('Previous entry saved.');
+        setOcrNote('');
         return;
       }
 
@@ -873,7 +842,6 @@ export default function CaptureModal() {
       <View style={[styles.black, styles.centered]}>
         <ActivityIndicator size="large" color={colors.forestBright} />
         <Text style={[styles.permTitle, { marginTop: 20 }]}>{status}</Text>
-        <Text style={styles.permBody}>{ocrNote}</Text>
       </View>
     );
   }
@@ -911,8 +879,6 @@ export default function CaptureModal() {
 
           {forcedLink && linkedItem ? (
             <Text style={styles.quietLine}>For {linkedItem.name}</Text>
-          ) : ocrNote ? (
-            <Text style={styles.quietLine}>{ocrNote}</Text>
           ) : null}
 
           {showIdentify ? (
@@ -924,6 +890,10 @@ export default function CaptureModal() {
                 pressed && { opacity: 0.88 },
                 identifying && { opacity: 0.7 },
               ]}
+              accessibilityRole="button"
+              accessibilityLabel={
+                identifying ? 'Identifying' : 'Identify with AI'
+              }
             >
               {identifying ? (
                 <ActivityIndicator color={colors.glyph} size="small" />
@@ -931,7 +901,7 @@ export default function CaptureModal() {
                 <Sparkles size={16} color={colors.glyph} strokeWidth={2} />
               )}
               <Text style={styles.identifyTitle}>
-                {identifying ? 'Looking…' : 'Not the right name?'}
+                {identifying ? 'Identifying…' : 'Identify with AI'}
               </Text>
             </Pressable>
           ) : null}

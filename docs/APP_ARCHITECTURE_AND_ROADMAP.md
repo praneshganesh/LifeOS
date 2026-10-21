@@ -1,209 +1,152 @@
-# Saavi (LifeOS): Architecture, Authentication, Payments & Production Roadmap
+# Saavi (LifeOS): Architecture & roadmap
 
-Master architectural blueprint, data flow definitions, and pending implementation task list for Saavi's TestFlight beta and public App Store / Play Store production launch.
+Master blueprint for how Saavi works today (TestFlight / staging) and what remains before a public launch.
 
----
+For a **product / features overview**, see [`SAAVI_FEATURES.md`](./SAAVI_FEATURES.md).
 
-## 1. System Architecture: Local-First with Background Cloud Sync
-
-Saavi is engineered as an **Offline-First, Local-First Application** with background cloud synchronization.
-
-```
-┌─────────────────────────────────────────────────────────────────────────────────────────────┐
-│                           CLIENT APPLICATION (Expo / React Native)                          │
-│                                                                                             │
-│   ┌───────────────────────────┐                 ┌───────────────────────────────────────┐   │
-│   │        User Action        │                 │          Talk / Ask / Voice           │   │
-│   │  (Add/Edit/Delete/Toggle) │                 │          Conversational Turn          │   │
-│   └─────────────┬─────────────┘                 └───────────────────┬───────────────────┘   │
-│                 │                                                   │                       │
-│                 │ (Immediate in-memory state update)                │ (Local memory context)│
-│                 ▼                                                   ▼                       │
-│   ┌───────────────────────────┐                 ┌───────────────────────────────────────┐   │
-│   │    Local State & Storage  │◄────────────────┤   Deterministic Actions Execution     │   │
-│   │ (AsyncStorage / Key-Value)│ (applyActions)  │       (lib/chat/applyActions.ts)      │   │
-│   └─────────────┬─────────────┘                 └───────────────────▲───────────────────┘   │
-│                 │                                                   │                       │
-│                 │                                                   │ (Structured Actions)  │
-│                 │ (Background Snapshot)                             │                       │
-│                 ▼                               ┌───────────────────┴───────────────────┐   │
-│   ┌───────────────────────────┐                 │  Client Proxy Request (JWT Auth)      │   │
-│   │ Background Sync Manager   │                 │       (lib/chat/agent.ts)             │   │
-│   │   (lib/cloud/sync.ts)     │                 └───────────────────┬───────────────────┘   │
-│   └─────────────┬─────────────┘                                     │                       │
-└─────────────────┼───────────────────────────────────────────────────┼───────────────────────┘
-                  │                                                   │ (HTTPS + Supabase JWT)
-                  │ (RPC Snapshot)                                    ▼
-                  │                               ┌───────────────────────────────────────────┐
-                  │                               │         Chat API Server (Fly.io)          │
-                  │                               │        (`server/chat.mjs`)                │
-                  │                               ├───────────────────────────────────────────┤
-                  │                               │ • JWT Auth & Product Usage Counter Guard  │
-                  │                               │ • Request Abuse Rate Limiting             │
-                  │                               │ • Action Repair & Validation              │
-                  │                               └───────────────────┬───────────────────────┘
-                  │                                                   │                       │
-                  │                                                   │ (JSON completions)    │
-                  │                                                   ▼                       │
-                  ▼                               ┌───────────────────────────────────────────┐
-┌─────────────────────────────────────────────┐   │            OpenAI Chat Model              │
-│          BACKEND CLOUD (Supabase)           │   │    (Structured Action Interpretation)     │
-├─────────────────────────────────────────────┤   └───────────────────────────────────────────┘
-│ • Anonymous Auth & Identity Linking         │
-│ • `life_stores` Encrypted Snapshots         │
-│ • `life_recovery` Hash Table                │
-│ • Private Media Storage Bucket              │
-└─────────────────────────────────────────────┘
-```
-
-### Core Tenets:
-1. **Immediate Local Interaction**: Domain actions update local application state immediately and persist locally without waiting for network operations.
-2. **Deterministic Action Interpretation**: The AI model does not touch app state directly. It interprets intent into structured actions that the client's `applyActions` engine validates, repairs, and applies deterministically.
-3. **Realistic Offline Availability**: Core domain functionality (Things, Expenses, Habits, Classes, Subscriptions, Last Done, Household, local OCR) remains fully available offline. Cloud backup, media sync, and AI conversational features require connectivity.
+Deeper specs: [`SYNC_ARCHITECTURE.md`](./SYNC_ARCHITECTURE.md), [`SUBSCRIPTIONS_AND_INVITES.md`](./SUBSCRIPTIONS_AND_INVITES.md), [`FAMILY.md`](./FAMILY.md), [`AUTH_APPLE.md`](./AUTH_APPLE.md), [`CHAT.md`](./CHAT.md).
 
 ---
 
-## 2. Decision Matrix & Specific Product Rules
+## 1. Product shape
 
-### Decision 1: Trial & Commercial Model (Store Subscription Trial)
-* **Model**: **Apple / Google Store Subscription 7-Day Free Trial**.
-* **Flow**: User starts a subscription via Apple StoreKit / Google Play Billing with an introductory 7-day free trial.
-* **Authority**: **RevenueCat** is the sole source of truth for trial period, billing, and active subscription state.
-* **Free Trial AI Allowance**: **25 Talk turns / day** during the 7-day trial.
-* **Post-Trial / Paid Pro Allowance**: **100 Talk turns / day**, shown on the paywall and plan screen.
-* **Manual Feature Guarantee**: Manual CRUD (adding/editing Things, Expenses, Habits, Classes, Subscriptions, Last Done) remains **100% free and unlimited forever**, even if a trial expires or a subscription lapses.
+Saavi is a **household home OS**: Things, people, spaces, expenses, subscriptions, habits, classes, reminders (Last Done), documents, and capture — plus **Talk** (voice) and **Ask** (chat).
 
-### Decision 2: Clarifying Single Turn vs. Multi-Message Conversations
-* **Talk / Voice Overlay**: 1 conversation = 1 spoken turn (Utterance $\rightarrow$ Actions applied $\rightarrow$ Spoken reply).
-* **Ask Screen (Text Chat)**: 1 conversation = 1 user prompt + assistant response turn.
-* **Daily Counter**: Each completed request to the Chat API increments the daily usage counter for that user.
+It is **not** a local-only app. The phone keeps a **local cache** so core CRUD works offline. **Durable truth** lives in **Supabase** (Auth + Postgres + RLS + Storage). **RevenueCat** is the subscription entitlement source of truth; plan is mirrored into Supabase for server enforcement (Talk caps).
 
-### Decision 3: Identity & Recovery Rebinding Flow
-When a user installs Saavi on a new device or reinstalls:
-1. Supabase automatically provisions a new anonymous identity (`uid_B`).
-2. The user enters their 16-character recovery code in Settings.
-3. Saavi retrieves the encrypted cloud snapshot belonging to the code.
-4. Saavi restores local stores and **re-pushes the snapshot under `uid_B`** (`lib/cloud/sync.ts`).
-5. User taps **"Restore Purchases"** on the Plan screen $\rightarrow$ RevenueCat syncs Apple/Google receipt entitlements to `uid_B`.
-6. This avoids complex session migration infrastructure while keeping recovery 100% reliable.
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Client (Expo 57 / React Native)              │
+│  UI + contexts → AsyncStorage mirror + sync outbox              │
+│  Talk / Ask → chat agent (structured actions → applyActions)  │
+└───────────────┬─────────────────────────────┬───────────────────┘
+                │ row sync / media            │ HTTPS + Supabase JWT
+                ▼                             ▼
+┌───────────────────────────┐   ┌─────────────────────────────────┐
+│ Supabase                  │   │ Chat API (Fly.io, server/)      │
+│ · auth.users (anon→Apple) │   │ · verify JWT                    │
+│ · households + domain rows│   │ · get_ai_allowance / consume    │
+│ · profiles (plan, trial)  │   │ · OpenAI + Identify             │
+│ · media bucket            │   │ · RevenueCat webhook            │
+└───────────────────────────┘   └─────────────────────────────────┘
+```
+
+### Core tenets
+
+1. **UI never waits on the network for a local save.** Writes hit local state + outbox; sync drains when online.
+2. **AI never mutates state directly.** The model returns structured actions; `lib/chat/applyActions.ts` validates and applies them.
+3. **Offline:** Things, expenses, habits, classes, reminders, household, on-device OCR work without network. Talk AI, Identify, cloud sync, and media upload need connectivity + an auth session.
+4. **Talk cost is enforced on the server**, keyed by authenticated user. Client counters are UX only.
 
 ---
 
-## 3. Media & Receipt Image Architecture
+## 2. Commercial model (launch)
+
+**Pro only.** Family seats / invites are deferred ([`FAMILY.md`](./FAMILY.md)).
+
+| | Trial | Pro | After lapse |
+| --- | --- | --- | --- |
+| Length | **7 days**, no card (in-app clock) | Apple subscription (monthly / yearly) | Until resubscribe |
+| App access | Full | Full | **Hard paywall** (`PlanGate` → `/paywall`) |
+| Talk / Ask / Identify | **25 / day** | **100 / day** | **0** |
+| Things & home CRUD | Unlimited during trial | Unlimited | Blocked until Pro |
+
+### Important corrections vs older drafts
+
+- Trial is **not** an Apple introductory offer. App Store products have **no** intro free trial so we don’t stack 14 free days. Revisit only if conversion is weak.
+- Trial clock is **server-side**: `profiles.trial_started_at` + `trial_ended_for()` (see migration `20261019090000_trial_server_clock.sql`). Client prefs are a mirror.
+- After trial, the app **does not** stay free for “unlimited stuff without Talk.” Launch is a full paywall until Pro.
+- Cancel is in **Apple Settings → Subscriptions**. Cancel stops the **next** renewal; it does not refund the period already paid.
+
+### Billing flow
 
 ```
-[Camera / Document Picker]
-           │
-           ▼
-1. Save locally to app cache (`file:///...`)
-           │
-           ├──► Display immediately in UI (0ms delay)
-           │
-           ▼ (Non-blocking Background Upload)
-2. Upload to Private Supabase Storage (`receipts/{userId}/{mediaId}.jpg`)
-           │
-           ├──► On Confirmation: Store durable path: `receipts/{userId}/{mediaId}.jpg`
-           │
-           └──► Local file becomes disposable cache (can be evicted under storage pressure)
+Paywall / Settings → Plan
+  → RevenueCat (react-native-purchases)
+  → Apple StoreKit (TestFlight = sandbox)
+  → CustomerInfo entitlement `pro`
+  → client optimistic mirror + RevenueCat webhook → profiles.plan_id
 ```
 
-### Critical Media Rules:
-1. **Never Delete Unsynced Media**: A local image is never removed from the device cache unless its upload to Supabase Storage has been positively confirmed.
-2. **Durable Paths, Not Expiring URLs**: Store permanent relative paths (`receipts/{userId}/{mediaId}.jpg`), never transient pre-signed URLs that expire.
-3. **On-Device OCR Is Unlimited**: OCR processing (ML Kit / Tesseract) runs completely on-device with zero OpenAI cost and is never counted against the AI interaction allowance.
+Restore purchases rebinds StoreKit entitlements to the current Supabase user. Sign in with Apple links anonymous → durable identity ([`AUTH_APPLE.md`](./AUTH_APPLE.md)).
 
 ---
 
-## 4. Cross-Platform Payments (RevenueCat)
+## 3. Talk / Ask / Identify
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                 Client App (app/settings/plan.tsx)          │
-│                 Calls: `Purchases.purchasePackage()`        │
-└──────────────────────────────┬──────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────┐
-│            RevenueCat (`react-native-purchases`)            │
-├──────────────────────────────┬──────────────────────────────┤
-│ iOS (StoreKit 2)             │ Android (Google Play Billing)│
-│ `saavi_pro_monthly`          │ `saavi_pro_monthly`          │
-│ `saavi_pro_yearly`           │ `saavi_pro_yearly`           │
-│ `saavi_family_yearly`        │ `saavi_family_yearly`        │
-└──────────────────────────────┴──────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────┐
-│             RevenueCat CustomerInfo (Source of Truth)       │
-│                  Entitlement: `pro` / `family`              │
-└─────────────────────────────────────────────────────────────┘
-```
+| Surface | What counts as a turn |
+| --- | --- |
+| Talk overlay | One spoken utterance → actions → reply |
+| Ask tab | One user message + assistant reply |
+| Identify (Capture) | One cloud identify = one AI turn |
 
-* **No Webhooks Needed for Phase 1**: Client inspects `customerInfo.entitlements.active['pro']` directly. No complex webhook middleware or Supabase database mirroring required for launch.
-* **Mandatory Store Compliance**:
-  - Clear disclosure of 7-day trial terms and renewal pricing.
-  - Functional "Restore Purchases" button on `app/settings/plan.tsx`.
-  - Privacy Policy and Terms of Use (EULA) links accessible on the plan and about screens.
+Daily limits: `get_ai_allowance` / `consume_ai_turn` in Supabase, called from `server/chat.mjs` with the user’s access token. On-device OCR is free and unlimited.
 
 ---
 
-## 5. AI Server Enforcement & Rate Limiting (`server/chat.mjs`)
+## 4. Data & sync
 
-To protect OpenAI API costs from direct script tampering without adding Redis:
+Row-level sync for household modules (not a growing JSON blob per module). See [`SYNC_ARCHITECTURE.md`](./SYNC_ARCHITECTURE.md).
 
-```
-[Client Chat Agent Request]
-           │
-           ├──► Header: `Authorization: Bearer <supabase_jwt>`
-           ▼
-┌─────────────────────────────────────────────────────────────┐
-│                  Fly.io Chat API Server                     │
-├─────────────────────────────────────────────────────────────┤
-│ 1. Verify Supabase JWT cryptographically (extract `user_id`)│
-│ 2. Check Daily AI Allowance in Supabase `profiles` / counter│
-│    • Free Trial User: max 5 requests / day                  │
-│    • Paid Pro User: fair-use guard ceiling                  │
-│ 3. If count >= limit:                                       │
-│    └── Return HTTP 429: "Daily AI allowance reached (5/5)"  │
-│ 4. If within limit:                                         │
-│    └── Execute OpenAI completion, increment count, return   │
-└─────────────────────────────────────────────────────────────┘
-```
+| Layer | Role |
+| --- | --- |
+| AsyncStorage | Offline mirror + outbox (SQLite later if needed) |
+| Postgres + RLS | Durable shared state by `household_id` |
+| `life_stores` | Prefs / legacy only; domain rows are tables |
+| Storage `media` | `{household_id}/{uuid}.ext`; local URI never synced |
 
-* **Existing Abuse Protection**: Keep existing IP rate limiter, request-size limits (100KB), and timeout guards (14s) intact.
+Account delete: client removes media via Storage API, then `delete_my_account` RPC (SQL cannot `DELETE` storage rows directly).
 
 ---
 
-## 6. Master Production Roadmap & Action Item Checklist
+## 5. Capture
 
-### Phase 1: TestFlight Beta Validation (Current)
-- [x] **Core Domains**: All 8 domain engines hardened, tested, and verified (`185/185` tests passing).
-- [x] **Talk & Chat API**: Action verification, date normalization, class schedule inference, and feedback styling complete.
-- [x] **On-Device Storage & Local Snapshots**: Versioned storage and 16-character recovery codes functional.
-- [x] **Typecheck & Bundle Export**: `npx tsc --noEmit` and `npx expo export` clean.
-- [ ] **TestFlight Real-Device Validation**:
-  - Class notification timings (Friday 6 PM eve, Saturday 8 AM morning-of).
-  - Voice recognition latency and microphone permissions across iOS & Android.
-  - Biometric Face ID / App lock lifecycle behavior.
-  - End-to-end recovery code test (Installation A $\rightarrow$ Backup $\rightarrow$ Installation B $\rightarrow$ Restore).
+1. Photo / library / file → local durable URI.
+2. Optional on-device OCR → fill name / receipt / document fields.
+3. Optional **Identify with AI** (cloud) when it’s a product photo.
+4. Review is intentionally light: name + brand up front; price / serial / store behind “more.”
 
-### Phase 2: App Store & Play Store Production Launch (Next Milestone)
-- [ ] **Task 2.1: RevenueCat Integration (`react-native-purchases`)**:
-  - Install and initialize RevenueCat with `user.id`.
-  - Configure StoreKit products in App Store Connect & Google Play Console (`saavi_pro_monthly`, `saavi_pro_yearly`).
-  - Wire 7-day free trial presentation and "Restore Purchases" in `app/settings/plan.tsx`.
-- [ ] **Task 2.2: Chat API JWT Verification & 5/day Trial Guard**:
-  - Update `server/chat.mjs` to verify Supabase JWT header.
-  - Enforce 25 AI requests/day for trial users via Supabase counter table/RPC (no Redis).
-- [ ] **Task 2.3: Private Supabase Media Storage**:
-  - Create private Supabase storage bucket `media` with RLS.
-  - Implement background upload in `lib/cloud/mediaSync.ts` to convert local cache to durable storage paths.
-  - Ensure unsynced local media is never evicted.
-- [ ] **Task 2.4: Store Compliance & Assets**:
-  - Link Privacy Policy and Apple standard EULA in `app/settings/about.tsx` and `app/settings/plan.tsx`.
-  - App Store & Play Store screenshots and privacy labels declaration.
+---
 
-### Phase 3: Post-Launch Evolution (Deferred)
-- [ ] **Live Multi-Device Family Invitations & Realtime Sync** (Supabase Realtime).
-- [ ] **Media Cache Settings UI** (Settings $\rightarrow$ Storage $\rightarrow$ Clear Cache).
-- [ ] **Sentry & Product Telemetry** (only once real user scale justifies it).
+## 6. Roadmap status
+
+### Done (in product / staging)
+
+- [x] Domain modules + Today attention
+- [x] Talk / Ask agent + `applyActions`
+- [x] Row sync + media bucket
+- [x] Anonymous auth → Sign in with Apple
+- [x] RevenueCat Pro + restore + webhook plan mirror
+- [x] Server Talk caps (25 / 100 / 0) + JWT on chat API
+- [x] In-app 7-day trial + server trial clock
+- [x] Hard paywall after trial / lapse
+- [x] Capture + Identify; swipe delete; unified add; Settings slimmed for launch
+
+### Still open for public launch
+
+- [ ] Production Supabase: apply trial / delete-account migrations (owner applies; do not auto-run from agent)
+- [ ] Public Privacy / Terms URLs if App Review requires hosted pages
+- [ ] Store listing, screenshots, App Review notes
+- [ ] Android Play + `EXPO_PUBLIC_REVENUECAT_ANDROID_KEY` when launching Android
+- [ ] Optional: server push (APNs / FCM) — see [`PUSH_NOTIFICATIONS_PLAN.md`](./PUSH_NOTIFICATIONS_PLAN.md)
+
+### Deferred (Phase 6+)
+
+- [ ] Family plan + invites when sharing model is solid
+- [ ] Apple intro-offer trial **only if** no-card conversion is weak
+- [ ] Keychain + DeviceCheck to close reinstall trial abuse
+- [ ] Offline clock rollback / forced check-in for long offline trials
+
+Checklist detail: [`MASTER_TASK_LIST.md`](./MASTER_TASK_LIST.md).
+
+---
+
+## 7. Environments
+
+| | Staging (TestFlight testing) | Production |
+| --- | --- | --- |
+| Supabase | `sjtkzihmxrxgidflxeqq` | `fmcezwyfinzasmgxanxv` |
+| Chat API | Fly app for staging | Production Fly app |
+| Billing | RevenueCat sandbox / TestFlight | Live App Store |
+
+Do not apply experimental SQL to production without an explicit go-ahead.

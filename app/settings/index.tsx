@@ -8,14 +8,13 @@ import { Text } from '@/components/ui/Text';
 import { useSpaces } from '@/lib/SpacesContext';
 import { useHousehold } from '@/lib/HouseholdContext';
 import { useCurrency } from '@/lib/CurrencyContext';
-import { loadLocalProfile } from '@/lib/profile';
 import { loadPlanPrefs, planById } from '@/lib/planLimits';
 import {
   fetchSubscriptionSnapshot,
   pendingSwitchLine,
   subscriptionDetailLine,
 } from '@/lib/billing/revenueCat';
-import { resolveSelfDisplayName } from '@/lib/people';
+import { getAuthAccountState } from '@/lib/auth/apple';
 import { moduleHref } from '@/lib/moduleNav';
 import { useTheme } from '@/lib/ThemeContext';
 import { fonts, spacing } from '@/constants/theme';
@@ -26,16 +25,20 @@ export default function SettingsScreen() {
   const { spaces } = useSpaces();
   const { members } = useHousehold();
   const { currency } = useCurrency();
-  const [displayName, setDisplayName] = useState('You');
   const [planTitle, setPlanTitle] = useState('Trial');
+  const [accountLine, setAccountLine] = useState('This device');
 
   useFocusEffect(
     useCallback(() => {
       let live = true;
-      void loadLocalProfile().then((p) => {
+      void getAuthAccountState().then((s) => {
         if (!live) return;
-        setDisplayName(
-          resolveSelfDisplayName(p.displayName, members) || p.displayName
+        setAccountLine(
+          s.hasAppleIdentity
+            ? s.displayHint || 'Signed in with Apple'
+            : s.userId
+              ? 'Temporary account'
+              : 'Not signed in'
         );
       });
       void Promise.all([loadPlanPrefs(), fetchSubscriptionSnapshot()]).then(
@@ -54,7 +57,7 @@ export default function SettingsScreen() {
       return () => {
         live = false;
       };
-    }, [members])
+    }, [])
   );
 
   const homes = spaces.filter((s) => s.kind === 'home');
@@ -73,42 +76,41 @@ export default function SettingsScreen() {
       defaultOrigin="profile"
       bottomExtra={DETAIL_DOCK_PAD}
     >
-      <ModuleSection label="Account">
+      <ModuleSection label="You">
         <ListCard>
           <ListRow
             icon="id"
-            title="Sign in & Apple"
-            subtitle="Save identity across devices"
+            title="Account"
+            subtitle={accountLine}
             onPress={() => router.push('/settings/account' as Href)}
-          />
-          <ListRow
-            icon="family"
-            title="Profile"
-            subtitle={displayName}
-            onPress={() => router.push(moduleHref('/profile', 'settings'))}
-          />
-          <ListRow
-            icon="family"
-            title="Household"
-            subtitle={`${members.length} ${members.length === 1 ? 'person' : 'people'}`}
-            onPress={() => router.push(moduleHref('/family', 'settings'))}
           />
           <ListRow
             icon="credit"
             title="Plan"
             subtitle={planTitle}
             onPress={() => router.push('/settings/plan' as Href)}
+          />
+          <ListRow
+            icon="family"
+            title="Household"
+            subtitle={`${members.length} ${members.length === 1 ? 'person' : 'people'}`}
+            onPress={() => router.push(moduleHref('/family', 'settings'))}
             last
           />
         </ListCard>
       </ModuleSection>
 
-      <ModuleSection label="Preferences">
+      <ModuleSection label="App">
         <ListCard>
           <ListRow
             icon="bell"
             title="Notifications"
             onPress={() => router.push('/settings/notifications' as Href)}
+          />
+          <ListRow
+            icon="key"
+            title="Face ID & lock"
+            onPress={() => router.push('/settings/security' as Href)}
           />
           <ListRow
             icon="sparkles"
@@ -118,7 +120,7 @@ export default function SettingsScreen() {
           />
           <ListRow
             icon="house"
-            title="Homes & defaults"
+            title="Home & currency"
             subtitle={homesMeta}
             onPress={() => router.push('/settings/homes' as Href)}
             last
@@ -126,41 +128,12 @@ export default function SettingsScreen() {
         </ListCard>
       </ModuleSection>
 
-      <ModuleSection label="Privacy & security">
+      <ModuleSection label="Legal">
         <ListCard>
           <ListRow
-            icon="shield"
-            title="Privacy"
-            subtitle="What happens with your data"
+            icon="scroll"
+            title="Privacy & terms"
             onPress={() => router.push('/settings/privacy' as Href)}
-          />
-          <ListRow
-            icon="scroll"
-            title="Privacy policy"
-            onPress={() => router.push('/settings/privacy-policy' as Href)}
-          />
-          <ListRow
-            icon="scroll"
-            title="Terms"
-            onPress={() => router.push('/settings/terms' as Href)}
-          />
-          <ListRow
-            icon="key"
-            title="Security"
-            subtitle="Face ID & app lock"
-            onPress={() => router.push('/settings/security' as Href)}
-            last
-          />
-        </ListCard>
-      </ModuleSection>
-
-      <ModuleSection label="Data">
-        <ListCard>
-          <ListRow
-            icon="package"
-            title="Export & backup"
-            subtitle="Phone + cloud snapshot"
-            onPress={() => router.push('/settings/data' as Href)}
             last
           />
         </ListCard>

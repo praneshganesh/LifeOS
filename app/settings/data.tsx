@@ -207,7 +207,7 @@ export default function DataSettingsScreen() {
 
   return (
     <ModuleScreen
-      title="Export & backup"
+      title="Export or wipe"
       backLabel="Settings"
       backFallbackHref="/settings"
       bottomExtra={DETAIL_DOCK_PAD}

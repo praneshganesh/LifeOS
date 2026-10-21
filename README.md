@@ -2,6 +2,9 @@
 
 Expo app for household inventory, habits, classes, reminders, and Talk.
 
+**Features:** [`docs/SAAVI_FEATURES.md`](docs/SAAVI_FEATURES.md)  
+**Architecture:** [`docs/APP_ARCHITECTURE_AND_ROADMAP.md`](docs/APP_ARCHITECTURE_AND_ROADMAP.md)
+
 ## Local development
 
 ```bash

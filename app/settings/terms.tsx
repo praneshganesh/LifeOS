@@ -57,7 +57,7 @@ export default function TermsScreen() {
       />
       <Block
         title="Subscriptions"
-        body="Pro is billed by Apple to your Apple ID. The price and length are shown on the paywall before you confirm. A subscription renews until you cancel it in iOS Settings → Apple ID → Subscriptions, at least 24 hours before the period ends. Deleting your Saavi account does not cancel that Apple subscription. Restore purchases puts an existing subscription back on this phone. Refunds are handled by Apple."
+        body="Pro is billed by Apple to your Apple ID. The price and length are shown on the paywall before you confirm. A subscription renews until you cancel it in iOS Settings → Apple ID → Subscriptions, at least 24 hours before the period ends. Cancel stops the next renewal. It does not refund the period already paid. Deleting your Saavi account does not cancel that Apple subscription. Restore purchases puts an existing subscription back on this phone. Refunds are handled by Apple."
       />
       <Block
         title="Trial and Talk"

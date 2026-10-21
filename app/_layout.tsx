@@ -95,6 +95,7 @@ function RootNavigation({
         <Stack.Screen name="last-done/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="profile/index" options={{ headerShown: false }} />
         <Stack.Screen name="settings/index" options={{ headerShown: false }} />
+        <Stack.Screen name="settings/account" options={{ headerShown: false }} />
         <Stack.Screen name="settings/privacy" options={{ headerShown: false }} />
         <Stack.Screen name="settings/privacy-policy" options={{ headerShown: false }} />
         <Stack.Screen name="settings/terms" options={{ headerShown: false }} />

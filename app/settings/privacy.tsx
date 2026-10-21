@@ -7,7 +7,7 @@ export default function PrivacySettingsScreen() {
   const router = useRouter();
   return (
     <ModuleScreen
-      title="Privacy"
+      title="Privacy & terms"
       backLabel="Settings"
       backFallbackHref="/settings"
       bottomExtra={DETAIL_DOCK_PAD}
