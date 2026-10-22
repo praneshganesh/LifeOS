@@ -327,6 +327,13 @@ export async function restoreFromRecoveryCode(code: string): Promise<CloudSnapsh
   if (!supabase) throw new Error('Cloud is not configured.');
   if (!isValidRecoveryCode(code)) throw new Error('That recovery code is not valid.');
   const normalized = normalizeRecoveryCode(code);
+
+  // Open a session first so fetch is not stuck on the shared unauthenticated
+  // path; server still rate-limits by IP so a new anonymous sign-in does not
+  // reset the try pool.
+  const userId = await ensureCloudSession();
+  if (!userId) throw new Error('Could not open a cloud session.');
+
   const { data, error } = await supabase.rpc('fetch_life_recovery', {
     p_code: normalized,
   });
@@ -335,9 +342,6 @@ export async function restoreFromRecoveryCode(code: string): Promise<CloudSnapsh
   if (!snapshot?.stores || typeof snapshot.stores !== 'object') {
     throw new Error('No backup found for that code.');
   }
-
-  const userId = await ensureCloudSession();
-  if (!userId) throw new Error('Could not open a cloud session.');
 
   // Household first so the legacy domain import below is skipped when rows exist.
   const { data: claimed, error: claimErr } = await supabase.rpc(

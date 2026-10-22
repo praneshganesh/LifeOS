@@ -325,7 +325,8 @@ function addActionToInput(
   source: InventoryItem['source'],
   lastUserText?: string,
   household: HouseholdMember[] = [],
-  todayAnchor?: string
+  todayAnchor?: string,
+  defaultCurrency?: string
 ): Omit<InventoryItem, 'id' | 'createdAt'> {
   const name = titleCase(action.name.trim());
   const blob = `${name} ${action.category || ''} ${action.room || ''}`;
@@ -362,7 +363,11 @@ function addActionToInput(
     // keep room as-is (usually unused in the new model)
   }
 
-  const price = formatMoney(action.price) || '—';
+  const price =
+    formatMoney(action.price, {
+      defaultCurrency,
+      utterance: lastUserText,
+    }) || '—';
   const purchasedFrom = formatPurchasedFrom(action.purchasedFrom);
   const manualUrl = sanitizeManualUrl(action.manualUrl);
   // "until next december" is deterministic on-device, when the user spoke a
@@ -641,7 +646,14 @@ export async function applyChatActions(
     if (!action || action.type === 'none') continue;
     if (action.type === 'add_item' && action.name?.trim()) {
       const item = await api.addItem(
-        addActionToInput(action, source, lastUserText, household, today)
+        addActionToInput(
+          action,
+          source,
+          lastUserText,
+          household,
+          today,
+          defaultCurrency
+        )
       );
       lastAddedId = item.id;
       lastAddedName = item.name;
@@ -805,7 +817,11 @@ export async function applyChatActions(
         patch.category = action.patch.category.trim();
       }
       if (action.patch?.price != null && action.patch.price !== '') {
-        patch.price = formatMoney(action.patch.price) || action.patch.price.trim();
+        patch.price =
+          formatMoney(action.patch.price, {
+            defaultCurrency,
+            utterance: lastUserText,
+          }) || action.patch.price.trim();
       }
       if (action.patch?.purchasedFrom != null && action.patch.purchasedFrom !== '') {
         patch.purchasedFrom =

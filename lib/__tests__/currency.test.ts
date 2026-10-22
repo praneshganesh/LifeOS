@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  clampPriceString,
   currencyFromSpokenText,
   MAX_MONEY_AMOUNT,
   normalizeMoneyAmount,
   sanitizeAmountInput,
   sanitizeIntegerInput,
+  sanitizeThingPriceInput,
 } from '@/lib/currency';
 
 describe('currency field guards', () => {
@@ -37,5 +39,12 @@ describe('currency field guards', () => {
     assert.equal(currencyFromSpokenText('45 dirhams'), 'AED');
     assert.equal(currencyFromSpokenText('$12'), 'USD');
     assert.equal(currencyFromSpokenText('12.50'), undefined);
+  });
+
+  it('keeps currency while editing a Thing price', () => {
+    assert.equal(sanitizeThingPriceInput('60', 'USD 50'), 'USD 60');
+    assert.equal(sanitizeThingPriceInput('USD 75.5', 'USD 50'), 'USD 75.5');
+    assert.equal(clampPriceString('50', 'USD'), 'USD 50');
+    assert.equal(clampPriceString('USD 50'), 'USD 50');
   });
 });

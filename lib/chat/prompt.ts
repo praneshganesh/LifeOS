@@ -246,7 +246,10 @@ export function buildSubscriptionSummary(
 }
 
 /** Normalize spoken/typed prices into a short display string. */
-export function formatMoney(raw?: string | null): string | undefined {
+export function formatMoney(
+  raw?: string | null,
+  opts?: { defaultCurrency?: string; utterance?: string | null }
+): string | undefined {
   if (!raw?.trim()) return undefined;
   const s = raw.trim();
   if (s === '—' || s === '-') return undefined;
@@ -261,23 +264,34 @@ export function formatMoney(raw?: string | null): string | undefined {
     ? n.toLocaleString('en-US', { maximumFractionDigits: 2 })
     : amount;
 
-  if (/\b(aed|dirham|dirhams|dhs|dh)\b/i.test(s) || /د\.?إ/.test(s)) {
-    return `AED ${pretty}`;
-  }
-  if (/\b(usd|dollars?|\$)\b/i.test(s)) {
+  const spoken = `${opts?.utterance || ''} ${s}`;
+  if (/\b(usd|dollars?|\$)\b/i.test(spoken)) {
     return `USD ${pretty}`;
   }
-  if (/\b(eur|euros?|€)\b/i.test(s)) {
+  if (/\b(eur|euros?|€)\b/i.test(spoken)) {
     return `EUR ${pretty}`;
   }
-  if (/\b(gbp|pounds?|£)\b/i.test(s)) {
+  if (/\b(gbp|pounds?|£)\b/i.test(spoken)) {
     return `GBP ${pretty}`;
   }
-  // Bare number in UAE context, default AED
-  if (/^\s*[\d,.]+\s*$/.test(s)) {
+  if (/\b(aed|dirham|dirhams|dhs|dh)\b/i.test(spoken) || /د\.?إ/.test(spoken)) {
     return `AED ${pretty}`;
   }
-  if (/^aed\s*/i.test(s)) return `AED ${pretty}`;
+  if (/\b(sar|riyals?)\b/i.test(spoken)) {
+    return `SAR ${pretty}`;
+  }
+  if (/\b(inr|rupees?)\b/i.test(spoken)) {
+    return `INR ${pretty}`;
+  }
+  const iso = spoken.toUpperCase().match(/\b([A-Z]{3})\b/);
+  if (iso && /^(USD|EUR|GBP|AED|SAR|INR|CAD|AUD|SGD|MYR|PKR|EGP|JPY|CHF|HKD|NZD|KWD|QAR|BHD|OMR)$/.test(iso[1])) {
+    return `${iso[1]} ${pretty}`;
+  }
+  // Bare number → household default (never hardcode AED).
+  if (/^\s*[\d,.]+\s*$/.test(s)) {
+    const cur = (opts?.defaultCurrency || 'USD').trim().toUpperCase() || 'USD';
+    return `${cur} ${pretty}`;
+  }
   return s;
 }
 

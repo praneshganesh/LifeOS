@@ -160,16 +160,34 @@ export function normalizeMoneyAmount(raw: string | number | undefined | null): n
 }
 
 /** Cap a Thing/OCR price string for storage; returns '—' when empty/invalid. */
-export function clampPriceString(raw: string | undefined | null): string {
+export function clampPriceString(
+  raw: string | undefined | null,
+  fallbackCurrency?: string | null
+): string {
   const trimmed = (raw ?? '').trim();
   if (!trimmed || trimmed === '—') return '—';
   const n = normalizeMoneyAmount(trimmed);
   if (!Number.isFinite(n) || n <= 0) return '—';
-  // Keep currency words if present; otherwise store the capped number.
-  const hasLetters = /[a-zA-Z]/.test(trimmed);
-  if (!hasLetters) return String(n);
-  const cur = trimmed.replace(/[\d.,\s-]+/g, ' ').trim().split(/\s+/)[0];
+  const cur =
+    currencyFromSpokenText(trimmed) ||
+    normalizeCurrencyCode(fallbackCurrency) ||
+    '';
   return cur ? `${cur} ${n}` : String(n);
+}
+
+/**
+ * Keep a currency code while editing a Thing price amount field.
+ * `previous` supplies the code when sanitize would otherwise strip it.
+ */
+export function sanitizeThingPriceInput(
+  next: string,
+  previous?: string | null
+): string {
+  const cur =
+    currencyFromSpokenText(next) || currencyFromSpokenText(previous) || '';
+  const amount = sanitizeAmountInput(next);
+  if (!amount) return cur ? `${cur} ` : '';
+  return cur ? `${cur} ${amount}` : amount;
 }
 
 /** Digits-only for pack totals, counts, etc. */

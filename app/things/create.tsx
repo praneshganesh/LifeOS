@@ -23,7 +23,7 @@ import { useInventory } from '@/lib/InventoryContext';
 import { useHousehold } from '@/lib/HouseholdContext';
 import { useCurrency } from '@/lib/CurrencyContext';
 import { useToast } from '@/lib/ToastContext';
-import { clampPriceString, sanitizeAmountInput } from '@/lib/currency';
+import { clampPriceString, sanitizeThingPriceInput } from '@/lib/currency';
 import { inferMeta } from '@/lib/chat/applyActions';
 import { useBrandSuggestions, useStoreSuggestions } from '@/lib/useFieldSuggestions';
 import { captureHref, type CaptureContextKind } from '@/lib/captureContext';
@@ -138,7 +138,7 @@ export default function CreateThingScreen() {
         spaceId: params.spaceId || meta.spaceId,
         icon: copy.icon ?? meta.icon,
         purchaseDate: purchaseDate.trim() || localDayKey(),
-        price: clampPriceString(price),
+        price: clampPriceString(price, currency),
         purchasedFrom: purchasedFrom.trim() || undefined,
         personId: person?.id,
         assignedTo: person?.name,
@@ -148,7 +148,7 @@ export default function CreateThingScreen() {
         documentNumber: isPaper ? docNumber || undefined : undefined,
         condition: '—',
         serial: docNumber || '—',
-        estimatedValue: clampPriceString(price),
+        estimatedValue: clampPriceString(price, currency),
         isDocument: kind === 'document' || (kind === 'thing' && meta.isDocument),
         source: 'manual',
         timeline: [
@@ -239,7 +239,7 @@ export default function CreateThingScreen() {
           <DetailSection label={kind === 'insurance' ? 'Premium' : 'Price'}>
             <DetailField
               value={price}
-              onChangeText={(t) => setPrice(sanitizeAmountInput(t))}
+              onChangeText={(t) => setPrice(sanitizeThingPriceInput(t, price || currency))}
               placeholder={`${currency} 0`}
               keyboardType="decimal-pad"
             />

@@ -58,7 +58,7 @@ import {
   clampPriceString,
   currencyFromSpokenText,
   normalizeMoneyAmount,
-  sanitizeAmountInput,
+  sanitizeThingPriceInput,
 } from '@/lib/currency';
 import { useCurrency } from '@/lib/CurrencyContext';
 import { resolveCapturePreset } from '@/lib/captureContext';
@@ -660,7 +660,7 @@ export default function CaptureModal() {
             : preset.defaultName),
         brand: brand.trim() || (asDocument ? 'Document' : 'Unknown'),
         serial: serial.trim() || docNumber.trim() || '—',
-        price: clampPriceString(price),
+        price: clampPriceString(price, defaultCurrency),
         purchasedFrom: purchasedFrom.trim() || undefined,
         purchaseDate: purchaseDate.trim() || localDayKey(),
         warrantyExpiry: expiry || '—',
@@ -987,7 +987,7 @@ export default function CaptureModal() {
             // Keep attach flow light, no enterprise form dump
             <>
               {(!price || price === '—') && attachKind === 'receipt' ? (
-                <Field label="Price (optional)" value={price} onChange={(t) => setPrice(sanitizeAmountInput(t))} placeholder={`${defaultCurrency} 0`} />
+                <Field label="Price (optional)" value={price} onChange={(t) => setPrice(sanitizeThingPriceInput(t, price || defaultCurrency))} placeholder={`${defaultCurrency} 0`} />
               ) : null}
               {attachKind === 'receipt' && (!purchasedFrom || purchasedFrom === '') ? (
                 <Field
@@ -1064,7 +1064,9 @@ export default function CaptureModal() {
                       <Field
                         label="Price"
                         value={price}
-                        onChange={(t) => setPrice(sanitizeAmountInput(t))}
+                        onChange={(t) =>
+                          setPrice(sanitizeThingPriceInput(t, price || defaultCurrency))
+                        }
                         placeholder={`${defaultCurrency} 0`}
                       />
                       <Field
@@ -1097,7 +1099,9 @@ export default function CaptureModal() {
                           <Field
                             label="Price"
                             value={price}
-                            onChange={(t) => setPrice(sanitizeAmountInput(t))}
+                            onChange={(t) =>
+                              setPrice(sanitizeThingPriceInput(t, price || defaultCurrency))
+                            }
                             placeholder={`${defaultCurrency} 0`}
                           />
                           <Field

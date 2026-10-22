@@ -15,7 +15,7 @@ import { useLastDone } from '@/lib/LastDoneContext';
 import { defaultDocumentReminder } from '@/lib/documentReminders';
 import { useToast } from '@/lib/ToastContext';
 import { useBrandSuggestions, useStoreSuggestions } from '@/lib/useFieldSuggestions';
-import { clampPriceString, sanitizeAmountInput } from '@/lib/currency';
+import { clampPriceString, sanitizeThingPriceInput } from '@/lib/currency';
 import { type ThemeColors, fonts, radius, spacing } from '@/constants/theme';
 
 export function AssetEditor({ assetId }: { assetId: string }) {
@@ -239,8 +239,8 @@ export function AssetEditor({ assetId }: { assetId: string }) {
               <Field
                 label="Price"
                 value={price}
-                onChangeText={(t) => setPrice(sanitizeAmountInput(t))}
-                placeholder="AED 800"
+                onChangeText={(t) => setPrice(sanitizeThingPriceInput(t, price))}
+                placeholder="USD 800"
               />
               <Field
                 label="Bought from"
