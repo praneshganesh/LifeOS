@@ -1,12 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Platform, StyleSheet, TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
-import Animated from 'react-native-reanimated';
 import {
   OnboardingPrimaryButton,
   OnboardingScreen,
   OnboardingSecondaryButton,
-  enter,
 } from '@/components/OnboardingKit';
 import { useHousehold } from '@/lib/HouseholdContext';
 import { DEFAULT_PROFILE, loadLocalProfile, saveLocalProfile } from '@/lib/profile';
@@ -61,7 +59,7 @@ export default function OnboardingName() {
     <OnboardingScreen
       step={1}
       title="First, what should we call you?"
-      lead="Just your first name is fine."
+      lead="Your name as you’d like it shown at home."
       footer={
         <>
           <OnboardingPrimaryButton
@@ -73,27 +71,25 @@ export default function OnboardingName() {
         </>
       }
     >
-      <Animated.View entering={enter(2)}>
-        <TextInput
-          value={name}
-          onChangeText={setName}
-          placeholder="Your name"
-          placeholderTextColor={colors.faint}
-          style={[styles.input, { borderBottomColor: focused ? colors.accent : colors.line }]}
-          autoFocus
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          autoCorrect={false}
-          spellCheck={false}
-          autoComplete="given-name"
-          textContentType="givenName"
-          autoCapitalize="words"
-          returnKeyType="next"
-          onSubmitEditing={() => trimmed && void next(true)}
-          accessibilityLabel="Your name"
-          maxLength={40}
-        />
-      </Animated.View>
+      <TextInput
+        value={name}
+        onChangeText={setName}
+        placeholder="Your name"
+        placeholderTextColor={colors.faint}
+        style={[styles.input, { borderBottomColor: focused ? colors.accent : colors.line }]}
+        autoFocus
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        autoCorrect={false}
+        spellCheck={false}
+        autoComplete="name"
+        textContentType="name"
+        autoCapitalize="words"
+        returnKeyType="next"
+        onSubmitEditing={() => trimmed && void next(true)}
+        accessibilityLabel="Your name"
+        maxLength={40}
+      />
     </OnboardingScreen>
   );
 }

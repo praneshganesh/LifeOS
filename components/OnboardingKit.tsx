@@ -110,17 +110,12 @@ export function OnboardingScreen({
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <Animated.Text
-          entering={enter(0)}
-          style={[styles.title, { color: colors.ink }]}
-          accessibilityRole="header"
-        >
+        {/* Plain Text: Reanimated entering can leave title/lead at opacity 0 on some simulators. */}
+        <Text style={[styles.title, { color: colors.ink }]} accessibilityRole="header">
           {title}
-        </Animated.Text>
+        </Text>
         {lead ? (
-          <Animated.Text entering={enter(1)} style={[styles.lead, { color: colors.mute }]}>
-            {lead}
-          </Animated.Text>
+          <Text style={[styles.lead, { color: colors.mute }]}>{lead}</Text>
         ) : null}
         {children}
       </ScrollView>

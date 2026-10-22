@@ -46,8 +46,10 @@ export type LastDoneItem = {
   inventoryItemId?: string;
   personId?: string;
   assignedTo?: string;
-  /** Absolute next-reminder date, if set */
+  /** Absolute next-reminder date, if set (YYYY-MM-DD) */
   remindAt?: string;
+  /** Optional local clock for a one-shot remindAt (HH:mm). */
+  remindTime?: string;
   /** Extra context the user spoke, not shown in lists. */
   notes?: string;
   /**
@@ -437,6 +439,9 @@ export function normalizeItem(raw: unknown): LastDoneItem | null {
     item.assignedTo = r.assignedTo.trim();
   }
   if (typeof r.remindAt === 'string') item.remindAt = r.remindAt;
+  if (typeof r.remindTime === 'string' && /^\d{1,2}:\d{2}$/.test(r.remindTime.trim())) {
+    item.remindTime = normalizeRemindTime(r.remindTime);
+  }
   if (typeof r.updatedAt === 'string') item.updatedAt = r.updatedAt;
   if (typeof r.notes === 'string' && r.notes.trim()) {
     item.notes = r.notes.trim();
@@ -590,6 +595,36 @@ export function toDateInputValue(isoOrDate?: string | Date | null): string {
   return `${y}-${m}-${day}`;
 }
 
+/** Normalize "9:05" / "09:5" → "09:05". Returns empty string if invalid. */
+export function normalizeRemindTime(raw: string | undefined | null): string {
+  if (!raw) return '';
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(raw).trim());
+  if (!m) return '';
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (!Number.isFinite(h) || !Number.isFinite(min) || h > 23 || min > 59) return '';
+  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+}
+
+/** Clock for alerts: one-shot remindTime, else recurring interval hour/minute. */
+export function dueClockForItem(item: {
+  remindTime?: string;
+  remindInterval?: { hour?: number; minute?: number };
+}): { hour: number; minute: number } | null {
+  const fromOnce = normalizeRemindTime(item.remindTime);
+  if (fromOnce) {
+    const [h, m] = fromOnce.split(':').map(Number);
+    return { hour: h!, minute: m! };
+  }
+  if (item.remindInterval?.hour != null) {
+    return {
+      hour: item.remindInterval.hour,
+      minute: item.remindInterval.minute ?? 0,
+    };
+  }
+  return null;
+}
+
 export function addInterval(from: Date, interval: RemindInterval): Date {
   if (interval.unit === 'weekdays' && interval.weekdays?.length) {
     const next = nextWeekdayRemindDay(
@@ -663,6 +698,7 @@ export function createLastDoneItem(
   opts: {
     doneAt?: Date | null;
     remindAt?: string;
+    remindTime?: string;
     remindInterval?: RemindInterval;
     inventoryItemId?: string;
     personId?: string;
@@ -678,6 +714,8 @@ export function createLastDoneItem(
     logs: opts.doneAt === null ? [] : [createLogEntry(opts.doneAt ?? new Date())],
   };
   if (opts.remindAt) item.remindAt = opts.remindAt;
+  const clock = normalizeRemindTime(opts.remindTime);
+  if (clock) item.remindTime = clock;
   if (opts.remindInterval) item.remindInterval = opts.remindInterval;
   if (opts.notes?.trim()) item.notes = opts.notes.trim();
   if (opts.inventoryItemId) item.inventoryItemId = opts.inventoryItemId;

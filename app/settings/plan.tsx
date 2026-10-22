@@ -242,8 +242,9 @@ export default function PlanSettingsScreen() {
         <Text style={[styles.heroSub, { color: colors.mute }]}>{subline}</Text>
         <Text style={[styles.usageLine, { color: colors.slate }]}>
           {usage.assets} things · {usage.homes} home
-          {usage.homes === 1 ? '' : 's'} · {usage.members} people · Talk{' '}
-          {talkUsed}/{talkLimit} today
+          {usage.homes === 1 ? '' : 's'} · {usage.members}{' '}
+          {usage.members === 1 ? 'person' : 'people'} · Talk {talkUsed}/{talkLimit}{' '}
+          today
         </Text>
         {meters.assets.over || meters.homes.over || meters.members.over ? (
           <Text style={[styles.overNote, { color: colors.coral }]}>

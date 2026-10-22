@@ -95,9 +95,9 @@ export function messageForAiDailyLimit(
     return `You've used today's ${limit} free Talk turns. Upgrade to Pro for more, or keep adding things manually.`;
   }
   if (planId === 'family') {
-    return `Household Talk limit reached (${used}/${limit} today). Try again tomorrow. Manual capture stays unlimited.`;
+    return `Household Talk limit reached (${used}/${limit} today). Try again after the daily reset (UTC midnight). Manual capture stays unlimited.`;
   }
-  return `Daily Talk limit reached (${used}/${limit}). Try again tomorrow. Manual capture stays unlimited.`;
+  return `Daily Talk limit reached (${used}/${limit}). Try again after the daily reset (UTC midnight). Manual capture stays unlimited.`;
 }
 
 export async function loadAiUsage(
@@ -171,24 +171,22 @@ export async function syncPlanIdToSupabase(
   billing?: PlanBillingMirror | null
 ): Promise<void> {
   try {
+    // Paid plans are written only by the RevenueCat webhook → admin_set_plan_id.
+    // set_my_plan_id on the client accepts trial / lapsed only.
+    if (planId === 'pro' || planId === 'family') return;
+
     const { isSupabaseConfigured, supabase } = await import('@/lib/supabase');
     if (!isSupabaseConfigured() || !supabase) return;
     const { ensureCloudSession } = await import('@/lib/cloud/sync');
     await ensureCloudSession();
-    let detail = billing;
-    if (detail === undefined && (planId === 'pro' || planId === 'family')) {
-      const { fetchSubscriptionSnapshot } = await import('@/lib/billing/revenueCat');
-      detail = await fetchSubscriptionSnapshot();
-    }
-    const paid = planId === 'pro' || planId === 'family';
-    const productId = paid && detail?.productId ? detail.productId : null;
+    void billing;
     const { error } = await supabase.rpc('set_my_plan_id', {
       p_plan: planId,
-      p_cadence: paid && productId ? detail?.cadence ?? null : null,
-      p_product_id: productId,
-      p_renews_at: paid && productId ? detail?.renewsAt ?? null : null,
-      p_pending_product_id: detail?.updatePending ? detail.pendingProductId ?? null : null,
-      p_update_pending: Boolean(detail?.updatePending) || planId === 'trial',
+      p_cadence: null,
+      p_product_id: null,
+      p_renews_at: null,
+      p_pending_product_id: null,
+      p_update_pending: planId === 'trial',
     });
     if (error && __DEV__) {
       console.warn('[aiUsage] set_my_plan_id', error.message);

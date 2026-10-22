@@ -16,6 +16,7 @@ import {
   labelsMatch,
   normalizeItem,
   normalizeLabel,
+  normalizeRemindTime,
   parseDateInput,
   resolveRemindAt,
   sortByMostRecent,
@@ -54,6 +55,7 @@ type LastDoneContextValue = {
   setReminder: (input: {
     label: string;
     remindAt: string;
+    remindTime?: string;
     notes?: string;
     remindInterval?: RemindInterval;
     inventoryItemId?: string | null;
@@ -71,6 +73,7 @@ type LastDoneContextValue = {
       label?: string;
       notes?: string | null;
       remindAt?: string | null;
+      remindTime?: string | null;
       remindInterval?: RemindInterval | null;
       alertMode?: 'auto' | 'custom' | null;
       userAlerts?: import('@/lib/reminderAlerts').UserAlertSpec[] | null;
@@ -324,6 +327,7 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
     async (input: {
       label: string;
       remindAt: string;
+      remindTime?: string;
       notes?: string;
       remindInterval?: RemindInterval;
       inventoryItemId?: string | null;
@@ -338,6 +342,10 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
         remindInterval: input.remindInterval,
       });
       if (!remindFields.remindAt) throw new Error('Invalid reminder date');
+      const clock =
+        !input.remindInterval && !remindFields.remindInterval
+          ? normalizeRemindTime(input.remindTime)
+          : '';
       const linkId =
         typeof input.inventoryItemId === 'string' && input.inventoryItemId
           ? input.inventoryItemId
@@ -366,10 +374,12 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
         const updated: LastDoneItem = touch({
           ...match,
           ...remindFields,
+          remindTime: clock || undefined,
           ...(input.notes?.trim() ? { notes: input.notes.trim() } : {}),
           ...(linkId ? { inventoryItemId: linkId } : {}),
           ...(personId ? { personId, assignedTo: assignedTo || match.assignedTo } : {}),
         });
+        if (!clock) delete updated.remindTime;
         await persist(list.map((i) => (i.id === updated.id ? updated : i)));
         void scheduleLastDoneReminder(updated);
         void queueReminderUpsert(updated);
@@ -380,6 +390,7 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
         createLastDoneItem(label, {
           doneAt: null,
           remindAt: remindFields.remindAt,
+          remindTime: clock || undefined,
           remindInterval: remindFields.remindInterval,
           notes: input.notes?.trim(),
           inventoryItemId: linkId,
@@ -402,6 +413,7 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
         label?: string;
         notes?: string | null;
         remindAt?: string | null;
+        remindTime?: string | null;
         remindInterval?: RemindInterval | null;
         alertMode?: 'auto' | 'custom' | null;
         userAlerts?: import('@/lib/reminderAlerts').UserAlertSpec[] | null;
@@ -427,6 +439,7 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
           updated = {
             ...updated,
             remindAt: undefined,
+            remindTime: undefined,
             remindInterval: undefined,
             onceDone: undefined,
           };
@@ -436,6 +449,23 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
           updated = {
             ...updated,
             remindAt: startOfDayISO(parsed),
+            // Keep one-shot clock when only the date changes.
+            remindTime: updated.remindTime,
+            remindInterval: undefined,
+            onceDone: undefined,
+          };
+        }
+      }
+      if (patch.remindTime !== undefined) {
+        if (patch.remindTime === null || patch.remindTime === '') {
+          const { remindTime: _drop, ...rest } = updated;
+          updated = rest;
+        } else {
+          const clock = normalizeRemindTime(patch.remindTime);
+          if (!clock) throw new Error('Invalid reminder time');
+          updated = {
+            ...updated,
+            remindTime: clock,
             remindInterval: undefined,
             onceDone: undefined,
           };
@@ -446,6 +476,7 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
           updated = {
             ...updated,
             remindAt: undefined,
+            remindTime: undefined,
             remindInterval: undefined,
             onceDone: undefined,
           };
@@ -453,6 +484,7 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
           const anchor = parseDateInput(getLastDoneAt(updated)) ?? new Date();
           updated = {
             ...updated,
+            remindTime: undefined,
             ...resolveRemindAt(anchor, { remindInterval: patch.remindInterval }),
             onceDone: undefined,
           };

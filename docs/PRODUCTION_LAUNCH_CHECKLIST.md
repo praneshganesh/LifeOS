@@ -2,28 +2,30 @@
 
 Do **not** run production SQL from the agent. Apply migrations yourself on the production Supabase project (`fmcezwyfinzasmgxanxv`) after staging is verified.
 
-## Staging (already the day-to-day target)
+## Staging (`sjtkzihmxrxgidflxeqq`)
 
-- [ ] Apply `supabase/migrations/20261021120000_launch_hardening.sql` on staging (`sjtkzihmxrxgidflxeqq`)
-- [ ] Confirm Talk / Ask refuse after the daily limit (UTC day; client `localDate` ignored for billing)
-- [ ] Confirm paid plan cannot be wiped client-side while `renews_at` is still in the future
-- [ ] Confirm `admin_set_plan_id` no-ops for deleted auth users (RC webhook after delete)
-- [ ] Confirm recovery fetch soft rate limit (many bad codes → “try again later”)
-- [ ] Redeploy Fly `chat-api` with the UTC billing-day change in `server/chat.mjs`
-- [ ] EAS / TestFlight build has `EXPO_PUBLIC_CHAT_API_URL` + Supabase URL/anon key for staging (or prod when cut over)
-- [ ] Ask on a physical device: add expense / Thing via chat (not web without tokens)
+- [x] UTC Talk billing day (`billing_day`, not ambiguous `day`)
+- [x] Client `set_my_plan_id` → **trial / lapsed only** (Pro via RevenueCat webhook)
+- [x] Recovery: actor + code rate limits, RLS on throttle tables, owner_user_id on codes
+- [x] Delete account clears recovery by household **and** owner_user_id
+- [x] Money caps + reject negatives (expenses / Thing price / OCR)
+- [x] Splash Saavi, onboarding name, reminder time, full names, Life dock, “1 person”
+- [x] Fly chat-api UTC billing + clearer daily-limit copy
+- [ ] Confirm purchase → RevenueCat webhook → `admin_set_plan_id` sets Pro
+- [ ] TestFlight smoke on a real device (camera, Talk, Apple, Face ID, swipe)
 
-## Production cut-over
+## Production cut-over (`fmcezwyfinzasmgxanxv` — still empty)
 
-- [ ] Apply **all** migrations to production (empty project today), including trial clock, AI allowance, delete account + storage, launch hardening
-- [ ] Point the App Store / production EAS profile at production Supabase URL + anon key
-- [ ] RevenueCat production keys + App Store products; webhook → `admin_set_plan_id`
-- [ ] Fly chat-api env: production Supabase, OpenAI, proxy token if used
-- [ ] Smoke: Sign in with Apple, purchase Pro, restore, Talk cap, delete account, recovery restore
-- [ ] Confirm “Reset to trial” is absent outside `__DEV__` (already gated)
+Apply **every** file under `supabase/migrations/` in order, then:
 
-## Intentionally deferred
+- [ ] Point production EAS at production Supabase URL + publishable key
+- [ ] RevenueCat production webhook → Fly `/rc/webhook`
+- [ ] Fly chat-api production Supabase + OpenAI env
+- [ ] Smoke: Apple sign-in, buy Pro, restore, Talk cap, delete account
 
-- Insurance-specific editor (policies still use Thing fields)
+## Deferred (post-launch OK)
+
+- DeviceCheck / Keychain reinstall (anonymous trial farming)
+- Insurance-specific editor
 - Weekly habit cadence
-- DeviceCheck / Keychain reinstall gap
+- Recovery code expiry / TTL

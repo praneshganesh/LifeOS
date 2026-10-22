@@ -68,7 +68,8 @@ export default function SpacesScreen() {
   const [addOpen, setAddOpen] = useState(false);
   const [profileName, setProfileName] = useState('');
   const profileLetter = selfAvatarInitial(profileName, members);
-  const dockClearance = Math.max(insets.bottom, 10) + 96;
+  /** Dock (~54) + bottom inset + breathing room so the More list isn’t covered. */
+  const dockClearance = Math.max(insets.bottom, 10) + 120;
   /** Cap card height, filling the whole screen made Things (and peers) feel huge. */
   const HUB_CARD_H = 132;
 

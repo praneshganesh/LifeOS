@@ -44,7 +44,7 @@ export default function ThingsScreen() {
   const whoOptions = useMemo(() => {
     const people = members.map((m) => ({
       key: `person:${m.id}`,
-      label: m.name.split(' ')[0] || m.name,
+      label: m.name,
     }));
     return [{ key: 'all', label: 'Anyone' }, ...people];
   }, [members]);

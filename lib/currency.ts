@@ -126,7 +126,10 @@ const MAX_MONEY_WHOLE_DIGITS = 8;
  * Caps magnitude so absurd values cannot be typed in.
  */
 export function sanitizeAmountInput(raw: string): string {
-  let s = String(raw).replace(/[^\d.]/g, '');
+  const src = String(raw);
+  // Never flip a typed/pasted negative into a positive amount.
+  if (/-/.test(src)) return '';
+  let s = src.replace(/[^\d.]/g, '');
   const dot = s.indexOf('.');
   if (dot !== -1) {
     s = s.slice(0, dot + 1) + s.slice(dot + 1).replace(/\./g, '');
@@ -145,13 +148,28 @@ export function sanitizeAmountInput(raw: string): string {
  * Reject negatives / NaN; clamp absurd magnitudes. Returns NaN when invalid.
  */
 export function normalizeMoneyAmount(raw: string | number | undefined | null): number {
+  if (typeof raw === 'string' && /-\s*\d/.test(raw)) return NaN;
+  if (typeof raw === 'number' && raw < 0) return NaN;
   const n =
     typeof raw === 'number'
       ? raw
-      : Number.parseFloat(String(raw ?? '').replace(/[^\d.,-]/g, '').replace(/,/g, ''));
+      : Number.parseFloat(String(raw ?? '').replace(/[^\d.,]/g, '').replace(/,/g, ''));
   if (!Number.isFinite(n) || n < 0) return NaN;
   if (n > MAX_MONEY_AMOUNT) return MAX_MONEY_AMOUNT;
   return Math.round(n * 100) / 100;
+}
+
+/** Cap a Thing/OCR price string for storage; returns '—' when empty/invalid. */
+export function clampPriceString(raw: string | undefined | null): string {
+  const trimmed = (raw ?? '').trim();
+  if (!trimmed || trimmed === '—') return '—';
+  const n = normalizeMoneyAmount(trimmed);
+  if (!Number.isFinite(n) || n <= 0) return '—';
+  // Keep currency words if present; otherwise store the capped number.
+  const hasLetters = /[a-zA-Z]/.test(trimmed);
+  if (!hasLetters) return String(n);
+  const cur = trimmed.replace(/[\d.,\s-]+/g, ' ').trim().split(/\s+/)[0];
+  return cur ? `${cur} ${n}` : String(n);
 }
 
 /** Digits-only for pack totals, counts, etc. */

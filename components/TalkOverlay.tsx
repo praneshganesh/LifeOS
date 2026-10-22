@@ -1266,6 +1266,12 @@ export function FloatingNav() {
     };
   }, []);
 
+  // Leaving Ask (or any screen) while the keyboard was open can miss the hide
+  // event on simulator / some iOS builds; never keep the dock permanently gone.
+  useEffect(() => {
+    setKeyboardOpen(false);
+  }, [pathname]);
+
   if (
     pathname.includes('capture') ||
     pathname.includes('onboarding') ||

@@ -1,7 +1,7 @@
 import { useTheme } from '@/lib/ThemeContext';
 import { useMemo, useEffect, useRef } from 'react';
-import { Animated, Easing, Image, Platform, StyleSheet, View } from 'react-native';
-import { type ThemeColors } from '@/constants/theme';
+import { Animated, Easing, Image, Platform, StyleSheet, Text, View } from 'react-native';
+import { fonts, type ThemeColors } from '@/constants/theme';
 
 type Props = {
   /** Called after the brand moment finishes (native splash already hidden). */
@@ -10,7 +10,7 @@ type Props = {
 
 const NATIVE_DRIVER = Platform.OS !== 'web';
 
-/** In-app brand beat, HDR lockup on the linen field, no pattern behind it. */
+/** In-app brand beat: Saavi mark + wordmark (not the old LifeOS lockup). */
 export function BrandSplash({ onFinished }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -80,10 +80,11 @@ export function BrandSplash({ onFinished }: Props) {
         ]}
       >
         <Image
-          source={require('@/assets/brand/lifeos-logo-hdr-home.jpg')}
+          source={require('@/assets/images/splash-icon.png')}
           style={styles.mark}
           resizeMode="contain"
         />
+        <Text style={styles.wordmark}>Saavi</Text>
       </Animated.View>
     </View>
   );
@@ -102,8 +103,15 @@ function makeStyles(colors: ThemeColors) {
       alignItems: 'center',
     },
     mark: {
-      width: 280,
-      height: 280,
+      width: 96,
+      height: 96,
+    },
+    wordmark: {
+      marginTop: 18,
+      fontFamily: fonts.sansSemi,
+      fontSize: 34,
+      letterSpacing: -0.8,
+      color: colors.ink,
     },
   });
 }

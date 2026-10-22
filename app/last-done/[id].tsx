@@ -31,10 +31,12 @@ import { ListCard } from '@/components/ui/ListKit';
 import { FormGroup } from '@/components/ui/FormKit';
 import {
   defaultActivityYear,
+  dueClockForItem,
   formatInterval,
   formatRelativeDone,
   formatRemindDate,
   hasActivityHistory,
+  normalizeRemindTime,
   shouldShowActivityHeatmap,
   sortLogsNewestFirst,
   toDateInputValue,
@@ -245,6 +247,20 @@ export default function LastDoneDetailScreen() {
       showToast('Reminder date updated');
     } catch {
       showError('Couldn’t update the date. Try again.');
+    }
+  }
+
+  async function onRemindTimeChange(hhmm: string) {
+    if (!item) return;
+    const clock = normalizeRemindTime(hhmm);
+    try {
+      await updateActivity(item.id, {
+        remindAt: item.remindAt || toDateInputValue(new Date()),
+        remindTime: clock || null,
+      });
+      showToast(clock ? 'Time updated' : 'All-day reminder');
+    } catch {
+      showError('Couldn’t update the time. Try again.');
     }
   }
 
@@ -622,13 +638,20 @@ export default function LastDoneDetailScreen() {
             </View>
 
             {rhythmMode === 'once' && item.remindAt ? (
-              <DatePillRow
-                label="Due"
-                value={toDateInputValue(item.remindAt)}
-                onChange={(v) => void onRemindDateChange(v)}
-                minimumDate={new Date()}
-                last
-              />
+              <View>
+                <DatePillRow
+                  label="Due"
+                  value={toDateInputValue(item.remindAt)}
+                  onChange={(v) => void onRemindDateChange(v)}
+                  minimumDate={new Date()}
+                />
+                <TimeField
+                  label="Time"
+                  value={normalizeRemindTime(item.remindTime) || '09:00'}
+                  onChange={(v) => void onRemindTimeChange(v)}
+                  last
+                />
+              </View>
             ) : null}
 
             {rhythmMode === 'weekdays' ? (
@@ -863,13 +886,7 @@ function AlertsSection({
     opts?: { toast?: boolean }
   ) => Promise<void>;
 }) {
-  const dueTime =
-    item.remindInterval?.hour != null
-      ? {
-          hour: item.remindInterval.hour,
-          minute: item.remindInterval.minute ?? 0,
-        }
-      : null;
+  const dueTime = dueClockForItem(item);
   // Optimistic mode so Custom doesn’t flash closed while persist/sync catches up.
   const [draftMode, setDraftMode] = useState<'auto' | 'custom' | null>(null);
   const savedMode = item.alertMode === 'custom' ? 'custom' : 'auto';

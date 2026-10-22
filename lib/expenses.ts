@@ -116,10 +116,13 @@ export function createExpense(input: NewExpenseInput): Expense {
   const today = localDayKey();
   const title = input.title.trim() || input.merchant?.trim() || 'Expense';
   const amount = normalizeMoneyAmount(input.amount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error('Invalid expense amount');
+  }
   return {
     id: input.id ?? `exp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     title,
-    amount: Number.isFinite(amount) ? amount : 0,
+    amount,
     currency: (input.currency || getRuntimeDefaultCurrency()).toUpperCase(),
     category: input.category || 'other',
     date: input.date || today,

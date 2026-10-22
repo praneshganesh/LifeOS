@@ -16,10 +16,12 @@ describe('currency field guards', () => {
     assert.equal(sanitizeAmountInput('12.3.4'), '12.34');
     assert.equal(sanitizeAmountInput('abc'), '');
     assert.equal(sanitizeAmountInput('999999999999'), '99999999');
+    assert.equal(sanitizeAmountInput('-50'), '');
   });
 
   it('rejects negatives and clamps absurd money amounts', () => {
     assert.ok(Number.isNaN(normalizeMoneyAmount(-12)));
+    assert.ok(Number.isNaN(normalizeMoneyAmount('-50')));
     assert.ok(Number.isNaN(normalizeMoneyAmount('abc')));
     assert.equal(normalizeMoneyAmount('45.678'), 45.68);
     assert.equal(normalizeMoneyAmount(1e15), MAX_MONEY_AMOUNT);

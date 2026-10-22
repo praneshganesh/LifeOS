@@ -18,7 +18,7 @@ import { DotField, type DotTone } from '@/components/ui/DotField';
 import { moduleTone } from '@/lib/moduleTone';
 import { HomeHeader } from '@/components/HomeHeader';
 import { greetingForNow } from '@/data/mock';
-import { buildDashboard, formatDashDate, givenName, type DashRow } from '@/lib/dashboard';
+import { buildDashboard, formatDashDate, type DashRow } from '@/lib/dashboard';
 import { loadHomeSurface } from '@/lib/homeSurface';
 import { useInventory } from '@/lib/InventoryContext';
 import { useLastDone } from '@/lib/LastDoneContext';
@@ -88,7 +88,6 @@ export default function HomeDashboard() {
   );
 
   const displayName = resolveSelfDisplayName(profileName, members);
-  const first = givenName(displayName);
   const avatarLetter = selfAvatarInitial(profileName, members);
   const dash = useMemo(
     () =>
@@ -113,7 +112,7 @@ export default function HomeDashboard() {
     [classPacks]
   );
 
-  const hello = first ? `${greetingForNow()}, ${first}` : greetingForNow();
+  const hello = displayName ? `${greetingForNow()}, ${displayName}` : greetingForNow();
   const visible = (row: DashRow) => !isDismissed(row.id);
   const featured =
     dash.featured && visible(dash.featured)

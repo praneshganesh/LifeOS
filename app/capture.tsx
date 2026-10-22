@@ -54,7 +54,12 @@ import { messageForPlanLimit } from '@/lib/planLimits';
 import { persistLocalMediaUri } from '@/lib/mediaPersist';
 import { pickFileWeb } from '@/lib/pickFileWeb';
 import { guessExpenseCategory, parseAmount, findDuplicateExpense, formatAmount, type Expense, type NewExpenseInput } from '@/lib/expenses';
-import { currencyFromSpokenText, sanitizeAmountInput } from '@/lib/currency';
+import {
+  clampPriceString,
+  currencyFromSpokenText,
+  normalizeMoneyAmount,
+  sanitizeAmountInput,
+} from '@/lib/currency';
 import { useCurrency } from '@/lib/CurrencyContext';
 import { resolveCapturePreset } from '@/lib/captureContext';
 import { inferMeta } from '@/lib/chat/applyActions';
@@ -302,7 +307,10 @@ export default function CaptureModal() {
     setDocKind('unknown');
     if (hints.brand) setBrand(hints.brand);
     if (hints.serial) setSerial(hints.serial);
-    if (hints.price) setPrice(hints.price);
+    if (hints.price) {
+      const n = normalizeMoneyAmount(hints.price);
+      if (Number.isFinite(n) && n > 0) setPrice(String(n));
+    }
     if (hints.purchaseDate) setPurchaseDate(hints.purchaseDate);
     if (hints.merchant) setPurchasedFrom(hints.merchant);
     setReceiptLooksLike(true);
@@ -406,7 +414,8 @@ export default function CaptureModal() {
       if (result.text?.trim()) {
         const hints = extractReceiptHints(result.text);
         if (hints.price && (!linkedItem.price || linkedItem.price === '—')) {
-          setPrice(hints.price);
+          const n = normalizeMoneyAmount(hints.price);
+          if (Number.isFinite(n) && n > 0) setPrice(String(n));
         }
         if (hints.serial && (!linkedItem.serial || linkedItem.serial === '—')) {
           setSerial(hints.serial);
@@ -651,7 +660,7 @@ export default function CaptureModal() {
             : preset.defaultName),
         brand: brand.trim() || (asDocument ? 'Document' : 'Unknown'),
         serial: serial.trim() || docNumber.trim() || '—',
-        price: price.trim() || '—',
+        price: clampPriceString(price),
         purchasedFrom: purchasedFrom.trim() || undefined,
         purchaseDate: purchaseDate.trim() || localDayKey(),
         warrantyExpiry: expiry || '—',

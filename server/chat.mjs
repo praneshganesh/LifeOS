@@ -1136,7 +1136,7 @@ const server = createServer(async (req, res) => {
     json(req, res, 429, {
       error:
         limited.reason === 'daily'
-          ? 'Daily Talk limit reached. Try again tomorrow.'
+          ? 'Daily Talk limit reached. Try again after the daily reset (UTC midnight).'
           : 'Too many Talk requests. Wait a moment.',
     });
     return;
@@ -1209,7 +1209,7 @@ const server = createServer(async (req, res) => {
         const used = Number(aiAllowance?.used || 0);
         const limit = Number(aiAllowance?.limit || 0);
         json(req, res, 429, {
-          error: `Daily Talk limit reached (${used}/${limit}). Try again tomorrow. Manual capture stays unlimited.`,
+          error: `Daily Talk limit reached (${used}/${limit}). Try again after the daily reset (UTC midnight). Manual capture stays unlimited.`,
           aiAllowance,
         });
         return;
@@ -1387,7 +1387,7 @@ const server = createServer(async (req, res) => {
       const used = Number(aiAllowance?.used || 0);
       const limit = Number(aiAllowance?.limit || 0);
       json(req, res, 429, {
-        error: `Daily Talk limit reached (${used}/${limit}). Try again tomorrow. Manual capture stays unlimited.`,
+        error: `Daily Talk limit reached (${used}/${limit}). Try again after the daily reset (UTC midnight). Manual capture stays unlimited.`,
         aiAllowance,
       });
       return;

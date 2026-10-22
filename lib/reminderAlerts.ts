@@ -492,6 +492,8 @@ export type PlannedFire = { at: Date; title: string; body: string };
 export type DatedReminderInput = {
   label: string;
   remindAt?: string;
+  /** One-shot clock HH:mm (preferred over interval hour when set). */
+  remindTime?: string;
   remindInterval?: { hour?: number; minute?: number };
   createdAt: string;
   alertMode?: AlertMode;
@@ -512,8 +514,13 @@ export function planDatedReminderFires(
   const dueDate = item.remindAt?.trim().slice(0, 10) ?? '';
   const p = parseDueDate(dueDate);
   if (!p) return [];
-  const dueTime =
-    item.remindInterval?.hour != null
+  const once = item.remindTime?.trim().match(/^(\d{1,2}):(\d{2})$/);
+  const dueTime = once
+    ? {
+        hour: Math.min(23, Number(once[1])),
+        minute: Math.min(59, Number(once[2])),
+      }
+    : item.remindInterval?.hour != null
       ? { hour: item.remindInterval.hour, minute: item.remindInterval.minute ?? 0 }
       : null;
   const createdAt = new Date(item.createdAt);

@@ -21,6 +21,7 @@ import {
 import { ModuleScreen } from '@/components/ui/ModuleScreen';
 import { Text } from '@/components/ui/Text';
 import { DateField } from '@/components/ui/DateField';
+import { TimeField } from '@/components/ui/TimeField';
 import { useLastDone } from '@/lib/LastDoneContext';
 import { useDeleteWithConfirm } from '@/lib/useDeleteWithConfirm';
 import { useInventory } from '@/lib/InventoryContext';
@@ -32,12 +33,14 @@ import {
   itemSubtitle,
   labelsMatch,
   normalizeLabel,
+  normalizeRemindTime,
   parseDateInput,
   toDateInputValue,
   type LastDoneItem,
   type LogDoneInput,
   type RemindInterval,
 } from '@/lib/lastDone';
+import { formatQuietHoursLabel } from '@/components/ui/TimeField';
 import { timelineAfterMaintenance } from '@/lib/maintenanceLink';
 import { groupByCategory } from '@/lib/lastDoneCategories';
 import {
@@ -158,6 +161,7 @@ export default function LastDoneModal() {
 
   const [remindKey, setRemindKey] = useState<string | null>(null);
   const [remindOn, setRemindOn] = useState(() => shiftDays(1));
+  const [remindTime, setRemindTime] = useState('09:00');
   const [remindPickerOpen, setRemindPickerOpen] = useState(false);
 
   const trimmed = normalizeLabel(query);
@@ -273,13 +277,17 @@ export default function LastDoneModal() {
     setSaving(true);
     try {
       blurActiveElement();
+      const clock = normalizeRemindTime(remindTime) || '09:00';
       const saved = await setReminder({
         label: trimmed,
         remindAt: when,
+        remindTime: clock,
         notes: notesDraft.trim() || undefined,
         inventoryItemId: linkItemId ?? null,
       });
-      showToast(`Reminder set for ${formatFriendlyDate(saved.remindAt || when)}`);
+      showToast(
+        `Reminder set for ${formatFriendlyDate(saved.remindAt || when)} · ${formatQuietHoursLabel(clock)}`
+      );
       if (router.canDismiss()) router.dismiss();
       else router.back();
     } catch (err) {
@@ -409,6 +417,14 @@ export default function LastDoneModal() {
               }}
               minimumDate={new Date()}
             />
+            <View style={{ marginTop: spacing.sm }}>
+              <TimeField
+                label="Time"
+                value={remindTime}
+                onChange={setRemindTime}
+                last
+              />
+            </View>
           </View>
 
           <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.md }}>
