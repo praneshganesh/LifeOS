@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import * as Crypto from 'expo-crypto';
 import type { Session, User } from '@supabase/supabase-js';
+import { fillRandomBytes } from '@/lib/cryptoRandom';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { ensureCloudSession, pullCloudAfterSignIn } from '@/lib/cloud/sync';
 import { configureRevenueCat } from '@/lib/billing/revenueCat';
@@ -21,7 +22,7 @@ export type AppleAuthResult =
 
 function randomNonce(bytes = 32): string {
   const arr = new Uint8Array(bytes);
-  globalThis.crypto.getRandomValues(arr);
+  fillRandomBytes(arr);
   return Array.from(arr, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 

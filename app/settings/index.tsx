@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { Platform } from 'react-native';
 import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import Constants from 'expo-constants';
 import { DETAIL_DOCK_PAD } from '@/components/ui/DetailKit';
@@ -109,7 +110,7 @@ export default function SettingsScreen() {
           />
           <ListRow
             icon="key"
-            title="Face ID & lock"
+            title={Platform.OS === 'ios' ? 'Face ID & lock' : 'Biometric lock'}
             onPress={() => router.push('/settings/security' as Href)}
           />
           <ListRow

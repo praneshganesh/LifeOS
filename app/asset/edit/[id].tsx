@@ -16,7 +16,22 @@ import { defaultDocumentReminder } from '@/lib/documentReminders';
 import { useToast } from '@/lib/ToastContext';
 import { useBrandSuggestions, useStoreSuggestions } from '@/lib/useFieldSuggestions';
 import { clampPriceString, sanitizeThingPriceInput } from '@/lib/currency';
+import { useCurrency } from '@/lib/CurrencyContext';
+import { formatDisplayDate } from '@/lib/dates';
 import { type ThemeColors, fonts, radius, spacing } from '@/constants/theme';
+
+function stripMoneyFromInsight(text: string): string {
+  return text
+    .replace(
+      /\b(?:USD|EUR|GBP|AED|SAR|INR|CAD|AUD|SGD|MYR|PKR|EGP|JPY|CHF|HKD|NZD|KWD|QAR|BHD|OMR)\s*[\d,]+(?:\.\d+)?\b/gi,
+      ''
+    )
+    .replace(/\$\s*[\d,]+(?:\.\d+)?/g, '')
+    .replace(/\s*·\s*·\s*/g, ' · ')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/^\s*·\s*|\s*·\s*$/g, '')
+    .trim();
+}
 
 export function AssetEditor({ assetId }: { assetId: string }) {
   const { colors } = useTheme();
@@ -25,6 +40,7 @@ export function AssetEditor({ assetId }: { assetId: string }) {
   const { setReminder } = useLastDone();
   const { spaces, roomsForSpace } = useSpaces();
   const { members } = useHousehold();
+  const { currency: householdCurrency } = useCurrency();
   const { showToast, showError } = useToast();
   const brands = useBrandSuggestions();
   const stores = useStoreSuggestions();
@@ -57,7 +73,7 @@ export function AssetEditor({ assetId }: { assetId: string }) {
     setSpaceId(item.spaceId);
     setCategory(item.category);
     setSerial(item.serial);
-    setPrice(item.price);
+    setPrice(item.price === '—' ? '' : item.price || '');
     setPurchasedFrom(item.purchasedFrom || '');
     setWarrantyExpiry(item.warrantyExpiry);
     setCondition(item.condition);
@@ -88,13 +104,13 @@ export function AssetEditor({ assetId }: { assetId: string }) {
         spaceId: spaceId || item!.spaceId,
         category: category.trim() || item!.category,
         serial: serial.trim(),
-        price: clampPriceString(price),
+        price: clampPriceString(price, householdCurrency),
         purchasedFrom: purchasedFrom.trim() || undefined,
         purchaseDate: purchaseDate.trim(),
         warrantyExpiry: warrantyExpiry.trim(),
         warrantyActive: Boolean(warrantyExpiry.trim()),
         condition: condition.trim() || '—',
-        insight: insight.trim() || undefined,
+        insight: stripMoneyFromInsight(insight.trim()) || undefined,
         documentNumber: documentNumber.trim() || undefined,
         fullName: fullName.trim() || undefined,
         nationality: nationality.trim() || undefined,
@@ -104,11 +120,13 @@ export function AssetEditor({ assetId }: { assetId: string }) {
         assignedTo: person?.name,
         timeline: [
           {
-            date: new Date().toLocaleDateString('en-GB', {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
-            }),
+            date:
+              formatDisplayDate(new Date().toISOString().slice(0, 10)) ||
+              new Date().toLocaleDateString(undefined, {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+              }),
             event: 'Details updated',
           },
           ...item!.timeline,
@@ -239,8 +257,10 @@ export function AssetEditor({ assetId }: { assetId: string }) {
               <Field
                 label="Price"
                 value={price}
-                onChangeText={(t) => setPrice(sanitizeThingPriceInput(t, price))}
-                placeholder="USD 800"
+                onChangeText={(t) =>
+                  setPrice(sanitizeThingPriceInput(t, price || householdCurrency))
+                }
+                placeholder={`${householdCurrency} 800`}
               />
               <Field
                 label="Bought from"

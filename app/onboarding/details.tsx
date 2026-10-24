@@ -1,5 +1,12 @@
 import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import {
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import Animated, { FadeIn, LinearTransition } from 'react-native-reanimated';
 import { ChevronDown, Moon, Wallet, type LucideIcon } from 'lucide-react-native';
@@ -86,7 +93,7 @@ export default function OnboardingDetails() {
           </View>
         </Pressable>
 
-        {pickerOpen ? (
+        {pickerOpen && Platform.OS !== 'android' ? (
           <Animated.View
             entering={FadeIn.duration(200)}
             style={styles.currencies}
@@ -121,6 +128,63 @@ export default function OnboardingDetails() {
           </Animated.View>
         ) : null}
       </Animated.View>
+
+      {Platform.OS === 'android' ? (
+        <Modal
+          visible={pickerOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setPickerOpen(false)}
+        >
+          <Pressable
+            style={styles.modalBackdrop}
+            onPress={() => setPickerOpen(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Close currency list"
+          >
+            <Pressable
+              style={[styles.modalSheet, { backgroundColor: colors.surface }]}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <Text style={styles.modalTitle}>Currency</Text>
+              <ScrollView
+                style={styles.modalScroll}
+                contentContainerStyle={styles.currencies}
+                keyboardShouldPersistTaps="handled"
+              >
+                {CURRENCY_OPTIONS.map((c) => {
+                  const on = c.code === currency;
+                  return (
+                    <Pressable
+                      key={c.code}
+                      onPress={() => {
+                        setPicked(c.code);
+                        setPickerOpen(false);
+                      }}
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: on }}
+                      accessibilityLabel={`${c.code}, ${c.hint}`}
+                      style={({ pressed }) => [
+                        styles.chip,
+                        {
+                          backgroundColor: on ? colors.accent : colors.surfaceSoft,
+                        },
+                        pressed && { opacity: 0.7 },
+                      ]}
+                    >
+                      <Text
+                        style={[styles.chipText, { color: on ? colors.accentOn : colors.ink }]}
+                      >
+                        {c.code}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      ) : null}
 
       <Animated.View entering={enter(3)} layout={LinearTransition} style={styles.card}>
         <View style={styles.cardHead}>
@@ -164,6 +228,28 @@ function makeStyles(colors: ThemeColors) {
       borderColor: colors.line,
       marginBottom: 12,
       overflow: 'hidden',
+    },
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.35)',
+      justifyContent: 'flex-end',
+      padding: spacing.lg,
+    },
+    modalSheet: {
+      borderRadius: 22,
+      maxHeight: '70%',
+      paddingTop: spacing.md,
+      paddingBottom: spacing.lg,
+    },
+    modalTitle: {
+      fontFamily: fonts.sansSemi,
+      fontSize: 17,
+      color: colors.ink,
+      paddingHorizontal: spacing.md,
+      marginBottom: spacing.sm,
+    },
+    modalScroll: {
+      maxHeight: 360,
     },
     cardHead: {
       flexDirection: 'row',

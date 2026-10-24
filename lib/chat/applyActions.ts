@@ -40,9 +40,11 @@ import {
 } from '@/lib/subscriptions';
 import { fuzzyMatchMember, resolveAssignment } from '@/lib/people';
 import {
+  currencyForAmount,
   currencyFromSpokenText,
   getRuntimeDefaultCurrency,
 } from '@/lib/currency';
+import { brandFromName } from '@/lib/brands';
 import type { ChatAction, ChatAddAction, ChatAgentResponse, ChatUpdateAction } from '@/lib/chat/types';
 import {
   looksLikeVagueDelete,
@@ -217,11 +219,7 @@ function resolveActionCurrency(
 ): string {
   const fromAction = explicit?.trim().toUpperCase();
   if (fromAction && /^[A-Z]{3}$/.test(fromAction)) return fromAction;
-  return (
-    currencyFromSpokenText(amountRaw) ||
-    currencyFromSpokenText(utterance) ||
-    fallback
-  );
+  return currencyForAmount(amountRaw, utterance) || fallback;
 }
 
 function titleCase(s: string) {
@@ -337,7 +335,11 @@ function addActionToInput(
     month: 'short',
     year: 'numeric',
   });
-  const brand = action.brand?.trim() ? titleCase(action.brand.trim()) : 'Unknown';
+  const brandRaw = action.brand?.trim();
+  const brand =
+    brandRaw && !/^unknown$/i.test(brandRaw)
+      ? titleCase(brandRaw)
+      : brandFromName(action.name) || 'Unknown';
   let category = action.category?.trim() || inferred.category;
   let room = action.room?.trim() || inferred.room;
   const spaceId = 's1';
@@ -383,12 +385,12 @@ function addActionToInput(
     '—';
   const warrantyActive = warrantyExpiry !== '—';
   const condition = resolveCondition(action.condition, lastUserText);
+  // Keep price out of insight so later edits don't leave a stale amount.
   const viaBits = [
     'Added via Chat',
     category,
     person?.assignedTo ? `for ${person.assignedTo}` : null,
     purchasedFrom ? `from ${purchasedFrom}` : null,
-    price !== '—' ? price : null,
     warrantyActive ? `warranty ${warrantyExpiry}` : null,
   ].filter(Boolean);
 

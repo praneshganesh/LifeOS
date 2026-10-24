@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
-import { Image, StyleSheet, useWindowDimensions, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Image, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, ZoomIn } from 'react-native-reanimated';
 import { Sparkles } from 'lucide-react-native';
@@ -110,6 +110,16 @@ export default function OnboardingWelcome() {
           label="Let’s get started"
           onPress={() => router.push('/onboarding/name')}
         />
+        <Pressable
+          onPress={() => router.push('/onboarding/restore' as Href)}
+          accessibilityRole="button"
+          hitSlop={8}
+          style={({ pressed }) => pressed && { opacity: 0.65 }}
+        >
+          <Text style={[styles.restore, { color: colors.ink }]}>
+            I already use Saavi — restore
+          </Text>
+        </Pressable>
         <Text style={styles.privacy}>Private by default. Never sold.</Text>
       </Animated.View>
     </View>
@@ -193,6 +203,12 @@ function makeStyles(colors: ThemeColors) {
     trialText: {
       fontFamily: fonts.sansMedium,
       fontSize: 14,
+    },
+    restore: {
+      fontFamily: fonts.sansMedium,
+      fontSize: 15,
+      textAlign: 'center',
+      paddingVertical: 4,
     },
     privacy: {
       fontFamily: fonts.sans,

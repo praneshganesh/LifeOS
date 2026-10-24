@@ -13,6 +13,7 @@ export default function OnboardingLayout() {
       }}
     >
       <Stack.Screen name="index" />
+      <Stack.Screen name="restore" />
       <Stack.Screen name="name" />
       <Stack.Screen name="family" />
       <Stack.Screen name="intent" />

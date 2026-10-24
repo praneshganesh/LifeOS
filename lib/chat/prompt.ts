@@ -1,3 +1,4 @@
+import { currencyForAmount } from '@/lib/currency';
 import { isIsoDate, localDayKey } from '@/lib/dates';
 
 /** Shared Saavi chat system rules (mirrored on the server). */
@@ -264,33 +265,17 @@ export function formatMoney(
     ? n.toLocaleString('en-US', { maximumFractionDigits: 2 })
     : amount;
 
-  const spoken = `${opts?.utterance || ''} ${s}`;
-  if (/\b(usd|dollars?|\$)\b/i.test(spoken)) {
-    return `USD ${pretty}`;
-  }
-  if (/\b(eur|euros?|€)\b/i.test(spoken)) {
-    return `EUR ${pretty}`;
-  }
-  if (/\b(gbp|pounds?|£)\b/i.test(spoken)) {
-    return `GBP ${pretty}`;
-  }
-  if (/\b(aed|dirham|dirhams|dhs|dh)\b/i.test(spoken) || /د\.?إ/.test(spoken)) {
-    return `AED ${pretty}`;
-  }
-  if (/\b(sar|riyals?)\b/i.test(spoken)) {
-    return `SAR ${pretty}`;
-  }
-  if (/\b(inr|rupees?)\b/i.test(spoken)) {
-    return `INR ${pretty}`;
-  }
-  const iso = spoken.toUpperCase().match(/\b([A-Z]{3})\b/);
-  if (iso && /^(USD|EUR|GBP|AED|SAR|INR|CAD|AUD|SGD|MYR|PKR|EGP|JPY|CHF|HKD|NZD|KWD|QAR|BHD|OMR)$/.test(iso[1])) {
-    return `${iso[1]} ${pretty}`;
-  }
-  // Bare number → household default (never hardcode AED).
-  if (/^\s*[\d,.]+\s*$/.test(s)) {
-    const cur = (opts?.defaultCurrency || 'USD').trim().toUpperCase() || 'USD';
+  // Prefer currency on the amount itself, then a window around that amount in
+  // the utterance (so "$30" wins over an earlier "pounds of rice").
+  const cur =
+    currencyForAmount(s, opts?.utterance) ||
+    (opts?.defaultCurrency || '').trim().toUpperCase() ||
+    '';
+  if (cur && /^[A-Z]{3}$/.test(cur)) {
     return `${cur} ${pretty}`;
+  }
+  if (/^\s*[\d,.]+\s*$/.test(s)) {
+    return `USD ${pretty}`;
   }
   return s;
 }

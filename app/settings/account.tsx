@@ -204,9 +204,9 @@ export default function AccountSettingsScreen() {
           {Platform.OS !== 'ios' ? (
             <ListRow
               icon="phone"
-              title="Sign in with Apple"
-              subtitle="Available on iPhone and iPad"
-              last
+              title="Apple Sign In"
+              subtitle="Use an iPhone to link Apple. Restore with your recovery code anytime."
+              last={!state.hasAppleIdentity}
             />
           ) : null}
           {state.hasAppleIdentity ? (

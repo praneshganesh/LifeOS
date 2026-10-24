@@ -37,6 +37,8 @@ import { dayKey } from '@/lib/habits';
 import { remainingCount } from '@/lib/classes';
 import { reminderTodayProgress } from '@/lib/lastDone';
 import { startOfTomorrow, useAttentionDismissals } from '@/lib/attentionDismiss';
+import { localDayKey } from '@/lib/dates';
+import { useToast } from '@/lib/ToastContext';
 
 const DOCK_CLEARANCE = 108;
 
@@ -46,7 +48,7 @@ export default function HomeDashboard() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { items } = useInventory();
-  const { items: lastDoneItems, logDone } = useLastDone();
+  const { items: lastDoneItems, logDone, updateActivity } = useLastDone();
   const { members } = useHousehold();
   const { habits, checkIn } = useHabits();
   const { packs: classPacks } = useClasses();
@@ -56,6 +58,7 @@ export default function HomeDashboard() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const { dismiss, isDismissed, reload: reloadDismissed } = useAttentionDismissals();
+  const { showToast } = useToast();
 
   useFocusEffect(
     useCallback(() => {
@@ -166,7 +169,22 @@ export default function HomeDashboard() {
   }
 
   function snoozeFor(row: DashRow) {
-    return () => void dismiss(row.id, startOfTomorrow());
+    return () => {
+      void (async () => {
+        if (row.lastDoneId) {
+          const tomorrow = localDayKey(new Date(startOfTomorrow()));
+          try {
+            await updateActivity(row.lastDoneId, { remindAt: tomorrow });
+            showToast('Snoozed until tomorrow');
+          } catch {
+            // Fall back to local hide if the reminder row is gone.
+            void dismiss(row.id, startOfTomorrow());
+          }
+          return;
+        }
+        void dismiss(row.id, startOfTomorrow());
+      })();
+    };
   }
 
   if (!ready) {

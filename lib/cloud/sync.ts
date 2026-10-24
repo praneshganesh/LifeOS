@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
+import { fillRandomBytes } from '@/lib/cryptoRandom';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import {
   CLOUD_PREF_KEYS,
@@ -90,7 +91,7 @@ async function ensureRecoveryCode(): Promise<string> {
   const existing = await loadRecoveryCode();
   if (existing) return existing;
   const bytes = new Uint8Array(16);
-  globalThis.crypto.getRandomValues(bytes);
+  fillRandomBytes(bytes);
   const code = generateRecoveryCode(bytes);
   await writeSecure(RECOVERY_KEY, normalizeRecoveryCode(code));
   return code;
@@ -328,12 +329,8 @@ export async function restoreFromRecoveryCode(code: string): Promise<CloudSnapsh
   if (!isValidRecoveryCode(code)) throw new Error('That recovery code is not valid.');
   const normalized = normalizeRecoveryCode(code);
 
-  // Open a session first so fetch is not stuck on the shared unauthenticated
-  // path; server still rate-limits by IP so a new anonymous sign-in does not
-  // reset the try pool.
-  const userId = await ensureCloudSession();
-  if (!userId) throw new Error('Could not open a cloud session.');
-
+  // Validate the code before opening an anonymous session so failed restores
+  // do not leave orphan auth users. Server still rate-limits by IP.
   const { data, error } = await supabase.rpc('fetch_life_recovery', {
     p_code: normalized,
   });
@@ -342,6 +339,9 @@ export async function restoreFromRecoveryCode(code: string): Promise<CloudSnapsh
   if (!snapshot?.stores || typeof snapshot.stores !== 'object') {
     throw new Error('No backup found for that code.');
   }
+
+  const userId = await ensureCloudSession();
+  if (!userId) throw new Error('Could not open a cloud session.');
 
   // Household first so the legacy domain import below is skipped when rows exist.
   const { data: claimed, error: claimErr } = await supabase.rpc(

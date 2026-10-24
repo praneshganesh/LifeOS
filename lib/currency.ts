@@ -159,15 +159,20 @@ export function normalizeMoneyAmount(raw: string | number | undefined | null): n
   return Math.round(n * 100) / 100;
 }
 
-/** Cap a Thing/OCR price string for storage; returns '—' when empty/invalid. */
+/**
+ * Cap a Thing/OCR price string for storage.
+ * Empty/cleared → '' (UI shows "—"). Never persist the literal em dash.
+ */
 export function clampPriceString(
   raw: string | undefined | null,
   fallbackCurrency?: string | null
 ): string {
   const trimmed = (raw ?? '').trim();
-  if (!trimmed || trimmed === '—') return '—';
+  if (!trimmed || trimmed === '—' || trimmed === '-') return '';
+  // Currency code alone (user cleared the amount) → empty.
+  if (/^[A-Za-z]{3}$/.test(trimmed) && !/\d/.test(trimmed)) return '';
   const n = normalizeMoneyAmount(trimmed);
-  if (!Number.isFinite(n) || n <= 0) return '—';
+  if (!Number.isFinite(n) || n <= 0) return '';
   const cur =
     currencyFromSpokenText(trimmed) ||
     normalizeCurrencyCode(fallbackCurrency) ||
@@ -177,16 +182,23 @@ export function clampPriceString(
 
 /**
  * Keep a currency code while editing a Thing price amount field.
- * `previous` supplies the code when sanitize would otherwise strip it.
+ * Fully clearing the field yields '' so save does not store "—".
+ * Typing a different ISO/symbol switches the currency.
  */
 export function sanitizeThingPriceInput(
   next: string,
   previous?: string | null
 ): string {
+  const trimmed = String(next ?? '');
+  if (!trimmed.trim()) return '';
+  const amount = sanitizeAmountInput(trimmed);
+  if (!amount) {
+    // Allow mid-edit of a bare currency code ("U", "US", "USD") without
+    // forcing the previous amount back; empty amount = cleared price.
+    return '';
+  }
   const cur =
-    currencyFromSpokenText(next) || currencyFromSpokenText(previous) || '';
-  const amount = sanitizeAmountInput(next);
-  if (!amount) return cur ? `${cur} ` : '';
+    currencyFromSpokenText(trimmed) || currencyFromSpokenText(previous) || '';
   return cur ? `${cur} ${amount}` : amount;
 }
 
@@ -196,8 +208,27 @@ export function sanitizeIntegerInput(raw: string): string {
 }
 
 /**
+ * Slice of utterance near a numeric amount so "10 pounds of rice for $30"
+ * resolves USD for 30 and does not force GBP onto 30.
+ */
+export function textNearAmount(
+  utterance: string | null | undefined,
+  amountToken: string
+): string {
+  const u = String(utterance || '');
+  if (!u || !amountToken) return u;
+  const needle = amountToken.replace(/[^\d.]/g, '');
+  if (!needle) return u;
+  const lower = u.toLowerCase();
+  const idx = lower.indexOf(needle);
+  if (idx < 0) return u;
+  return u.slice(Math.max(0, idx - 28), Math.min(u.length, idx + needle.length + 28));
+}
+
+/**
  * Infer currency from spoken/OCR text when the user named one.
- * Returns undefined when nothing was said, caller should use household default.
+ * Symbols ($, €, £, ₹, د.إ) match without word boundaries.
+ * "pounds of …" is weight, not GBP.
  */
 export function currencyFromSpokenText(
   raw: string | number | undefined | null
@@ -206,11 +237,27 @@ export function currencyFromSpokenText(
   const s = String(raw);
   if (/\$/.test(s) || /\b(usd|dollars?)\b/i.test(s)) return 'USD';
   if (/€/.test(s) || /\b(eur|euros?)\b/i.test(s)) return 'EUR';
-  if (/£/.test(s) || /\b(gbp|pounds?)\b/i.test(s)) return 'GBP';
-  if (/\b(aed|dirhams?|dhs|dh)\b/i.test(s)) return 'AED';
+  if (/£/.test(s) || /\b(gbp)\b/i.test(s)) return 'GBP';
+  // Sterling "pounds" — not "10 pounds of rice".
+  if (/\bpounds?\b/i.test(s) && !/\bpounds?\s+of\b/i.test(s)) return 'GBP';
+  if (/₹/.test(s) || /\b(inr|rupees?)\b/i.test(s)) return 'INR';
+  if (/د\.?إ/.test(s) || /\b(aed|dirhams?|dhs|dh)\b/i.test(s)) return 'AED';
   if (/\b(sar|riyals?)\b/i.test(s)) return 'SAR';
-  if (/\b(inr|rupees?)\b/i.test(s)) return 'INR';
   const iso = s.match(/\b([A-Z]{3})\b/);
   if (iso && KNOWN.has(iso[1])) return iso[1];
   return undefined;
+}
+
+/** Prefer currency attached to the amount; then a window around it in the utterance. */
+export function currencyForAmount(
+  amountRaw: string | number | undefined | null,
+  utterance?: string | null
+): string | undefined {
+  const fromAmount = currencyFromSpokenText(amountRaw);
+  if (fromAmount) return fromAmount;
+  const token =
+    typeof amountRaw === 'number'
+      ? String(amountRaw)
+      : String(amountRaw ?? '').match(/(\d+(?:[.,]\d+)?)/)?.[1] || '';
+  return currencyFromSpokenText(textNearAmount(utterance, token));
 }
