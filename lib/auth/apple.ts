@@ -132,7 +132,7 @@ export async function connectWithApple(opts?: {
     return { ok: false, error: 'Sign in with Apple is not available on this device.' };
   }
 
-  await ensureCloudSession();
+  await ensureCloudSession({ create: true });
   const { data: before } = await supabase.auth.getSession();
   const current = before.session?.user;
   const preferLink =

@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as SecureStore from 'expo-secure-store';
-import { Platform } from 'react-native';
 import { fillRandomBytes } from '@/lib/cryptoRandom';
+import { isOnboardingDone } from '@/lib/onboarding';
+import { readSecureStore, writeSecureStore } from '@/lib/secureStore';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import {
   CLOUD_PREF_KEYS,
@@ -21,7 +21,7 @@ async function syncEngine() {
   return import('@/lib/sync/engine');
 }
 
-const RECOVERY_KEY = 'lifeos:cloud:recovery';
+/** AsyncStorage only — colons are fine here, not in SecureStore. */
 const META_KEY = 'lifeos:cloud:meta:v1';
 
 export type CloudMeta = {
@@ -37,33 +37,6 @@ const EMPTY_META: CloudMeta = {
   lastPullAt: null,
   lastError: null,
 };
-
-async function readSecure(key: string): Promise<string | null> {
-  if (Platform.OS === 'web') {
-    try {
-      return globalThis.localStorage?.getItem(key) ?? null;
-    } catch {
-      return null;
-    }
-  }
-  try {
-    return await SecureStore.getItemAsync(key);
-  } catch {
-    return null;
-  }
-}
-
-async function writeSecure(key: string, value: string): Promise<void> {
-  if (Platform.OS === 'web') {
-    try {
-      globalThis.localStorage?.setItem(key, value);
-    } catch {
-      /* ignore */
-    }
-    return;
-  }
-  await SecureStore.setItemAsync(key, value);
-}
 
 export async function loadCloudMeta(): Promise<CloudMeta> {
   try {
@@ -81,7 +54,7 @@ async function saveCloudMeta(meta: CloudMeta): Promise<void> {
 }
 
 export async function loadRecoveryCode(): Promise<string | null> {
-  const raw = await readSecure(RECOVERY_KEY);
+  const raw = await readSecureStore('recovery');
   if (!raw) return null;
   const normalized = normalizeRecoveryCode(raw);
   return normalized.length === 16 ? formatRecoveryCode(normalized) : null;
@@ -93,7 +66,7 @@ async function ensureRecoveryCode(): Promise<string> {
   const bytes = new Uint8Array(16);
   fillRandomBytes(bytes);
   const code = generateRecoveryCode(bytes);
-  await writeSecure(RECOVERY_KEY, normalizeRecoveryCode(code));
+  await writeSecureStore('recovery', normalizeRecoveryCode(code));
   return code;
 }
 
@@ -139,10 +112,22 @@ async function writeLocalStores(stores: Record<string, unknown>): Promise<void> 
   if (entries.length) await AsyncStorage.multiSet(entries);
 }
 
-export async function ensureCloudSession(): Promise<string | null> {
+/**
+ * Reuse an existing auth session, or open an anonymous one.
+ * By default, do not create a session until onboarding is done — Welcome /
+ * first-launch hydration must not leave orphan auth users or recovery rows.
+ * Pass `{ create: true }` from "Let's get started", restore, or Apple link.
+ */
+export async function ensureCloudSession(opts?: {
+  create?: boolean;
+}): Promise<string | null> {
   if (!supabase) return null;
   const { data: existing } = await supabase.auth.getSession();
   if (existing.session?.user.id) return existing.session.user.id;
+  if (opts?.create !== true) {
+    const done = await isOnboardingDone().catch(() => false);
+    if (!done) return null;
+  }
   const { data, error } = await supabase.auth.signInAnonymously();
   if (error) throw error;
   return data.user?.id ?? null;
@@ -224,13 +209,14 @@ async function pushStores(userId: string): Promise<void> {
     });
     if (error) throw error;
   }
-  // Recovery code = prefs snapshot + a claim on this household's rows.
-  const code = await ensureRecoveryCode();
+  // Recovery only when bound to a household — never create orphan codes.
   const householdId = await (await syncEngine()).getCachedHouseholdId().catch(() => null);
+  if (!householdId) return;
+  const code = await ensureRecoveryCode();
   const { error: recErr } = await supabase.rpc('upsert_life_recovery', {
     p_code: normalizeRecoveryCode(code),
     p_body: snapshot,
-    ...(householdId ? { p_household: householdId } : {}),
+    p_household: householdId,
   });
   if (recErr) throw recErr;
 }
@@ -241,13 +227,17 @@ export async function bootstrapCloud(): Promise<CloudMeta> {
     return { ...meta, lastError: null };
   }
   try {
-    const userId = await ensureCloudSession();
+    // Intentional start (onboarding CTA or post-onboarding gate).
+    const userId = await ensureCloudSession({ create: true });
     if (!userId) {
       const next = { ...meta, lastError: 'Could not open a cloud session.' };
       await saveCloudMeta(next);
       return next;
     }
     await ensureRecoveryCode();
+    // Household before recovery upsert so we never write a null-household row.
+    const engine = await syncEngine();
+    await engine.ensureHouseholdId().catch(() => null);
     const pulled = await pullStores(userId);
     const now = new Date().toISOString();
     if (pulled === 0) {
@@ -299,8 +289,9 @@ export async function syncCloudNow(): Promise<CloudMeta> {
     return loadCloudMeta();
   }
   try {
-    const userId = await ensureCloudSession();
-    if (!userId) throw new Error('Could not open a cloud session.');
+    // Never open a new session from background / first-load preference writes.
+    const userId = await ensureCloudSession({ create: false });
+    if (!userId) return loadCloudMeta();
     await pushStores(userId);
     const next: CloudMeta = {
       userId,
@@ -340,7 +331,8 @@ export async function restoreFromRecoveryCode(code: string): Promise<CloudSnapsh
     throw new Error('No backup found for that code.');
   }
 
-  const userId = await ensureCloudSession();
+  // Reuse a Welcome session if one somehow exists; otherwise open one now.
+  const userId = await ensureCloudSession({ create: true });
   if (!userId) throw new Error('Could not open a cloud session.');
 
   // Household first so the legacy domain import below is skipped when rows exist.
@@ -364,7 +356,7 @@ export async function restoreFromRecoveryCode(code: string): Promise<CloudSnapsh
       )
     : snapshot.stores;
   await writeLocalStores(stores);
-  await writeSecure(RECOVERY_KEY, normalized);
+  await writeSecureStore('recovery', normalized);
 
   await pushStores(userId);
   await saveCloudMeta({

@@ -45,6 +45,7 @@ import {
   getRuntimeDefaultCurrency,
 } from '@/lib/currency';
 import { brandFromName } from '@/lib/brands';
+import { coerceDurablePurchases } from '@/lib/chat/durablePurchase';
 import type { ChatAction, ChatAddAction, ChatAgentResponse, ChatUpdateAction } from '@/lib/chat/types';
 import {
   looksLikeVagueDelete,
@@ -58,6 +59,7 @@ import {
   normalizeWarrantyExpiry,
   remindAtFromUtterance,
   parseReminderFromUtterance,
+  parseDailyReminder,
   parseRecurringWeekdayReminder,
   finalizeReminderLabel,
   reminderLabelFromUtterance,
@@ -382,8 +384,8 @@ function addActionToInput(
     (spokeRelative ? spokenWarranty : undefined) ||
     normalizeWarrantyExpiry(action.warrantyExpiry) ||
     spokenWarranty ||
-    '—';
-  const warrantyActive = warrantyExpiry !== '—';
+    '';
+  const warrantyActive = Boolean(warrantyExpiry);
   const condition = resolveCondition(action.condition, lastUserText);
   // Keep price out of insight so later edits don't leave a stale amount.
   const viaBits = [
@@ -409,9 +411,9 @@ function addActionToInput(
     personId: person?.personId,
     warrantyExpiry,
     warrantyActive,
-    condition,
-    serial: '—',
-    estimatedValue: price !== '—' ? price : '—',
+    condition: condition === '—' ? '' : condition,
+    serial: '',
+    estimatedValue: price !== '—' ? price : '',
     insight: viaBits.join(' · '),
     timeline: [
       {
@@ -1258,13 +1260,16 @@ export async function applyChatActions(
         console.log('[LifeOS chat] skip set_reminder: query, not create', action.label);
         continue;
       }
+      // "every day" / "daily" beats a model weekdays Mon–Fri guess.
+      const daily = parseDailyReminder(lastUserText);
       const recurring =
-        action.remindInterval?.unit === 'weekdays'
+        daily ||
+        (action.remindInterval?.unit === 'weekdays'
           ? {
               remindAt: action.remindAt,
               remindInterval: action.remindInterval,
             }
-          : parseRecurringWeekdayReminder(lastUserText);
+          : parseRecurringWeekdayReminder(lastUserText));
       const spokenAt = remindAtFromUtterance(lastUserText);
       const modelAt = action.remindAt ? normalizeDateField(action.remindAt) : undefined;
       // Prefer what the user said. If they named no day, ignore the model's
@@ -2463,7 +2468,10 @@ function ensureTalkActions(
   lastUserText?: string,
   opts?: { talkFocus?: TalkFocus | null; localDate?: string }
 ): ChatAction[] {
-  let list: ChatAction[] = actions.filter((a) => a && a.type !== 'none');
+  let list: ChatAction[] = coerceDurablePurchases(
+    actions.filter((a) => a && a.type !== 'none'),
+    lastUserText
+  );
   if (looksLikeClassEnrollment(lastUserText)) {
     list = list.filter((a) => a.type !== 'habit_check_in');
   }
@@ -2529,7 +2537,9 @@ function ensureTalkActions(
     return list.length ? list : actions;
   }
   if (looksLikeReminder(lastUserText) && !types.has('set_reminder')) {
-    const recurring = parseRecurringWeekdayReminder(lastUserText);
+    const recurring =
+      parseDailyReminder(lastUserText) ||
+      parseRecurringWeekdayReminder(lastUserText);
     // Default to today when the user didn't name a day, silent skip felt broken.
     const remindAt = remindAtFromUtterance(lastUserText) || localDayKey();
     const label = reminderLabelFromUtterance(lastUserText) || 'Reminder';

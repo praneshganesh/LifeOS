@@ -647,7 +647,7 @@ describe('applyChatActions', () => {
     );
     assert.equal(saved.warrantyExpiry, '2028-12-31');
     assert.equal(saved.warrantyActive, true);
-    assert.equal(saved.condition, '—');
+    assert.equal(saved.condition, '');
   });
 
   it('pulls warranty from the utterance when the model omits it', async () => {

@@ -19,6 +19,14 @@ function dash(v: unknown): string {
   return v.trim();
 }
 
+/** Optional text fields: store empty, never the literal em dash. */
+function optionalText(v: unknown): string {
+  if (typeof v !== 'string') return '';
+  const t = v.trim();
+  if (!t || t === '—' || t === '-') return '';
+  return t;
+}
+
 export function normalizeInventoryItem(raw: unknown): InventoryItem | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
@@ -49,11 +57,11 @@ export function normalizeInventoryItem(raw: unknown): InventoryItem | null {
     manualUrl: typeof r.manualUrl === 'string' ? r.manualUrl : undefined,
     assignedTo: typeof r.assignedTo === 'string' ? r.assignedTo : undefined,
     personId: typeof r.personId === 'string' ? r.personId : undefined,
-    warrantyExpiry: dash(r.warrantyExpiry),
-    warrantyActive: Boolean(r.warrantyActive),
-    condition: dash(r.condition),
-    serial: dash(r.serial),
-    estimatedValue: dash(r.estimatedValue),
+    warrantyExpiry: optionalText(r.warrantyExpiry),
+    warrantyActive: Boolean(r.warrantyActive) && Boolean(optionalText(r.warrantyExpiry)),
+    condition: optionalText(r.condition),
+    serial: optionalText(r.serial),
+    estimatedValue: optionalText(r.estimatedValue) || (hasValue(String(r.price || '')) ? dash(r.price) : ''),
     insight: typeof r.insight === 'string' ? r.insight : undefined,
     timeline,
     isDocument: Boolean(r.isDocument),

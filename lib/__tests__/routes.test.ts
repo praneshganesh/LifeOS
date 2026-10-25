@@ -9,6 +9,7 @@ import {
   looksLikeReminder,
   looksLikeReminderQuery,
   normalizeWarrantyExpiry,
+  parseDailyReminder,
   parseRecurringWeekdayReminder,
   parseReminderFromUtterance,
   remindAtFromUtterance,
@@ -152,6 +153,28 @@ describe('reminder speech', () => {
     const parsed = parseReminderFromUtterance(utterance);
     assert.equal(parsed?.label, "Mira's payment");
     assert.match(parsed?.notes ?? '', /off plan property/i);
+  });
+
+  it('parses every day at 6pm as a daily interval, not weekdays', () => {
+    const wed = new Date(2026, 8, 9, 12, 0, 0);
+    const utterance = 'Remind me every day at 6pm to take vitamins';
+    const daily = parseDailyReminder(utterance, wed);
+    assert.equal(daily?.remindInterval.unit, 'days');
+    assert.equal(daily?.remindInterval.value, 1);
+    assert.equal(daily?.remindInterval.hour, 18);
+    assert.equal(daily?.remindAt, '2026-09-09');
+    assert.equal(parseRecurringWeekdayReminder(utterance, wed), undefined);
+    assert.equal(parseReminderFromUtterance(utterance)?.label, 'Take vitamins');
+  });
+
+  it('parses daily starting today and strips schedule from the title', () => {
+    const wed = new Date(2026, 8, 9, 12, 0, 0);
+    const utterance = 'Remind me daily starting today to water plants';
+    const daily = parseDailyReminder(utterance, wed);
+    assert.equal(daily?.remindAt, '2026-09-09');
+    assert.equal(daily?.remindInterval.startsAt, '2026-09-09');
+    assert.equal(parseReminderFromUtterance(utterance)?.label, 'Water plants');
+    assert.equal(reminderLabelFromUtterance('remind me'), 'Reminder');
   });
 
   it('parses every Tuesday and Friday at 6:30 AM', () => {

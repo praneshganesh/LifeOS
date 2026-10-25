@@ -659,11 +659,11 @@ export default function CaptureModal() {
             ? receiptTitleFromOcr(ocrText, extractReceiptHints(ocrText))
             : preset.defaultName),
         brand: brand.trim() || (asDocument ? 'Document' : 'Unknown'),
-        serial: serial.trim() || docNumber.trim() || '—',
+        serial: serial.trim() || docNumber.trim() || '',
         price: clampPriceString(price, defaultCurrency),
         purchasedFrom: purchasedFrom.trim() || undefined,
         purchaseDate: purchaseDate.trim() || localDayKey(),
-        warrantyExpiry: expiry || '—',
+        warrantyExpiry: expiry || '',
         imageUri: photoUri ?? undefined,
         ocrText: ocrText || undefined,
         category,
@@ -689,7 +689,7 @@ export default function CaptureModal() {
             ...fields,
             icon,
             warrantyActive: Boolean(expiry),
-            condition: '—',
+            condition: '',
             estimatedValue: '—',
             timeline: [
               {

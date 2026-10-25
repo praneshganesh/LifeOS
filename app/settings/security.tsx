@@ -83,7 +83,9 @@ export default function SecuritySettingsScreen() {
         if (!has || !enrolled) {
           Alert.alert(
             'Biometrics unavailable',
-            'Set up Face ID or a device passcode in system Settings first.'
+            Platform.OS === 'ios'
+              ? 'Set up Face ID or a device passcode in system Settings first.'
+              : 'Set up biometrics or a screen lock in system Settings first.'
           );
           return;
         }
@@ -112,13 +114,15 @@ export default function SecuritySettingsScreen() {
       <ModuleSection label="Device">
         <ListCard>
           <ToggleRow
-            title="Face ID / biometrics"
+            title={Platform.OS === 'ios' ? 'Face ID / biometrics' : 'Biometric lock'}
             subtitle={
               Platform.OS === 'web'
                 ? 'Not available on web'
                 : hardwareOk
                   ? 'Unlock Saavi after launch or auto-lock'
-                  : 'Set up biometrics in system Settings'
+                  : Platform.OS === 'ios'
+                    ? 'Set up Face ID or a device passcode in system Settings'
+                    : 'Set up biometrics or a screen lock in system Settings'
             }
             value={prefs.biometrics}
             onChange={(v) => void update({ biometrics: v })}

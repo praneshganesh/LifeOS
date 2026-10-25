@@ -4,10 +4,14 @@ import { useTheme } from '@/lib/ThemeContext';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { bootstrapCloud, syncCloudNow } from '@/lib/cloud/sync';
 import { syncRowsNow } from '@/lib/sync/engine';
+import { isOnboardingDone } from '@/lib/onboarding';
 
 /**
  * Pull cloud snapshot into AsyncStorage before inventory providers hydrate.
  * Offline or missing env: continue with whatever is already on the phone.
+ *
+ * First-run (onboarding not done): do NOT open an anonymous session or create
+ * a household — that waits for "Let's get started" or a successful restore.
  */
 export function CloudGate({ children }: { children: ReactNode }) {
   const { colors } = useTheme();
@@ -19,13 +23,22 @@ export function CloudGate({ children }: { children: ReactNode }) {
     const timeout = setTimeout(() => {
       if (!cancelled) setReady(true);
     }, 10000);
-    void bootstrapCloud().finally(() => {
-      clearTimeout(timeout);
-      if (!cancelled) setReady(true);
-      // Row-level sync (docs/SYNC_ARCHITECTURE.md) runs after hydration.
-      // it never blocks first paint and merges via last-write-wins.
-      void syncRowsNow();
-    });
+
+    void (async () => {
+      try {
+        const done = await isOnboardingDone();
+        if (!done) {
+          // Welcome / restore first; avoid stray empty households.
+          return;
+        }
+        await bootstrapCloud();
+        if (!cancelled) void syncRowsNow();
+      } finally {
+        clearTimeout(timeout);
+        if (!cancelled) setReady(true);
+      }
+    })();
+
     return () => {
       cancelled = true;
       clearTimeout(timeout);
@@ -35,10 +48,12 @@ export function CloudGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isSupabaseConfigured()) return;
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'background') {
+      if (state !== 'background') return;
+      void isOnboardingDone().then((done) => {
+        if (!done) return;
         void syncCloudNow();
         void syncRowsNow();
-      }
+      });
     });
     return () => sub.remove();
   }, []);

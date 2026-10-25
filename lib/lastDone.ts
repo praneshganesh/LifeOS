@@ -656,6 +656,17 @@ export function resolveRemindAt(
   }
 ): Pick<LastDoneItem, 'remindAt' | 'remindInterval'> {
   if (opts.remindInterval) {
+    // Explicit first due (snooze keep, "Every 1 wk" on a due-today row,
+    // "daily starting today") wins over rolling from doneAt.
+    if (opts.remindAt) {
+      const parsed = parseDateInput(opts.remindAt);
+      if (parsed) {
+        return {
+          remindInterval: opts.remindInterval,
+          remindAt: startOfDayISO(parsed),
+        };
+      }
+    }
     if (opts.remindInterval.unit === 'weekdays') {
       const day = nextWeekdayRemindDay(
         opts.remindInterval.weekdays ?? [],

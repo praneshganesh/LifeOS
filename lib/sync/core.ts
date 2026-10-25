@@ -247,10 +247,16 @@ export function genericToRow<T extends Titled>(
   householdId: string,
   ids: IdResolver
 ): GenericRow {
+  const personLocal =
+    typeof (item as { personId?: unknown }).personId === 'string'
+      ? ((item as { personId?: string }).personId as string)
+      : '';
+  const personSync = personLocal ? ids.toSync(personLocal) : null;
   return {
     id: ids.toSync(item.id),
     household_id: householdId,
-    person_id: null,
+    // Keep the FK in sync with body.personId when we have a real uuid.
+    person_id: personSync && isUuid(personSync) ? personSync : null,
     title: String(item.title ?? item.name ?? ''),
     body: itemToBody(item, ids),
     client_mutated_at: item.updatedAt ?? null,

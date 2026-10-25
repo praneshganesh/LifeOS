@@ -10,6 +10,9 @@ import { DotField } from '@/components/ui/DotField';
 import { OnboardingPrimaryButton, enter } from '@/components/OnboardingKit';
 import { moduleTone, type ModuleToneKey } from '@/lib/moduleTone';
 import { TRIAL_DAYS } from '@/lib/planLimits';
+import { bootstrapCloud } from '@/lib/cloud/sync';
+import { syncRowsNow } from '@/lib/sync/engine';
+import { isSupabaseConfigured } from '@/lib/supabase';
 import { type ThemeColors, fonts, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
 
@@ -108,7 +111,15 @@ export default function OnboardingWelcome() {
         </View>
         <OnboardingPrimaryButton
           label="Let’s get started"
-          onPress={() => router.push('/onboarding/name')}
+          onPress={() => {
+            // First intentional start: open cloud session / household now.
+            if (isSupabaseConfigured()) {
+              void bootstrapCloud()
+                .then(() => syncRowsNow())
+                .catch(() => undefined);
+            }
+            router.push('/onboarding/name');
+          }}
         />
         <Pressable
           onPress={() => router.push('/onboarding/restore' as Href)}

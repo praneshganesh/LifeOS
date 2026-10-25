@@ -48,7 +48,11 @@ export function AppLockGate({ children }: { children: ReactNode }) {
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
       const enrolled = await LocalAuthentication.isEnrolledAsync();
       if (!hasHardware || !enrolled) {
-        setHint('Set up Face ID / biometrics in system Settings to lock Saavi.');
+        setHint(
+          Platform.OS === 'ios'
+            ? 'Set up Face ID or a device passcode in system Settings to lock Saavi.'
+            : 'Set up biometrics or a screen lock in system Settings to lock Saavi.'
+        );
         setBusy(false);
         return;
       }

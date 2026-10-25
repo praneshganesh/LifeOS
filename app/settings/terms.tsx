@@ -1,4 +1,4 @@
-import { Linking } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import { ModuleScreen } from '@/components/ui/ModuleScreen';
 import { Text } from '@/components/ui/Text';
 import { DETAIL_DOCK_PAD } from '@/components/ui/DetailKit';
@@ -57,7 +57,11 @@ export default function TermsScreen() {
       />
       <Block
         title="Subscriptions"
-        body="Pro is billed by Apple to your Apple ID. The price and length are shown on the paywall before you confirm. A subscription renews until you cancel it in iOS Settings → Apple ID → Subscriptions, at least 24 hours before the period ends. Cancel stops the next renewal. It does not refund the period already paid. Deleting your Saavi account does not cancel that Apple subscription. Restore purchases puts an existing subscription back on this phone. Refunds are handled by Apple."
+        body={
+          Platform.OS === 'ios'
+            ? 'Pro is billed by Apple to your Apple ID. The price and length are shown on the paywall before you confirm. A subscription renews until you cancel it in iOS Settings → Apple ID → Subscriptions, at least 24 hours before the period ends. Cancel stops the next renewal. It does not refund the period already paid. Deleting your Saavi account does not cancel that Apple subscription. Restore purchases puts an existing subscription back on this phone. Refunds are handled by Apple.'
+            : 'Pro is billed through Google Play (or the store where you installed Saavi). The price and length are shown on the paywall before you confirm. A subscription renews until you cancel it in the store’s subscription settings, at least 24 hours before the period ends. Cancel stops the next renewal. It does not refund the period already paid. Deleting your Saavi account does not cancel that store subscription. Restore purchases puts an existing subscription back on this phone. Refunds are handled by the store.'
+        }
       />
       <Block
         title="Trial and Talk"
@@ -67,22 +71,26 @@ export default function TermsScreen() {
         title="Your record"
         body="You are responsible for what you put in Saavi. Don’t use Talk or Ask to break the law or to attack the service. We may stop a request that would do that."
       />
-      <Block
-        title="Apple’s license"
-        body="The App Store license for the app itself is Apple’s standard end user license. These terms cover how Saavi’s subscription and service work on top of that."
-      />
-      <Text
-        onPress={() => void Linking.openURL(APPLE_EULA)}
-        style={{
-          fontFamily: fonts.sansMedium,
-          fontSize: 16,
-          lineHeight: 23,
-          color: colors.accent,
-          marginTop: spacing.lg,
-        }}
-      >
-        Apple standard license
-      </Text>
+      {Platform.OS === 'ios' ? (
+        <>
+          <Block
+            title="Apple’s license"
+            body="The App Store license for the app itself is Apple’s standard end user license. These terms cover how Saavi’s subscription and service work on top of that."
+          />
+          <Text
+            onPress={() => void Linking.openURL(APPLE_EULA)}
+            style={{
+              fontFamily: fonts.sansMedium,
+              fontSize: 16,
+              lineHeight: 23,
+              color: colors.accent,
+              marginTop: spacing.lg,
+            }}
+          >
+            Apple standard license
+          </Text>
+        </>
+      ) : null}
       <Text
         onPress={() => void Linking.openURL(`mailto:${SUPPORT_EMAIL}`)}
         style={{

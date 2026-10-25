@@ -1,5 +1,7 @@
 import type { ChatAction } from '@/lib/chat/types';
 import { openingLineForFocus, type TalkFocus } from '@/lib/chat/focus';
+import { formatMoney } from '@/lib/chat/prompt';
+import { getRuntimeDefaultCurrency } from '@/lib/currency';
 import { displayWarrantyExpiry } from '@/lib/dates';
 import { parseDateInput } from '@/lib/lastDone';
 
@@ -155,7 +157,13 @@ export function composeAppliedReply(params: {
     const bits = [`Added ${params.addedName.trim()}`];
     if (who) bits.push(`for ${who}`);
     if (add && add.type === 'add_item') {
-      if (add.price) bits.push(add.price);
+      if (add.price) {
+        bits.push(
+          formatMoney(add.price, {
+            defaultCurrency: getRuntimeDefaultCurrency(),
+          }) || add.price
+        );
+      }
       if (add.purchasedFrom) bits.push(`from ${add.purchasedFrom}`);
       const warranty = displayWarrantyExpiry(add.warrantyExpiry);
       if (warranty) bits.push(`warranty until ${warranty}`);

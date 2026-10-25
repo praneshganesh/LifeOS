@@ -496,6 +496,10 @@ function stripReminderDatePhrases(s: string): string {
       /\b(?:every|each)\s+(?:other\s+)?(?:weekdays?|weekends?|(?:sun(?:day)?|mon(?:day)?|tue(?:s(?:day)?)?|wed(?:nesday)?|thu(?:rs(?:day)?)?|fri(?:day)?|sat(?:urday)?)s?(?:\s*(?:,|and|&|\/)\s*(?:sun(?:day)?|mon(?:day)?|tue(?:s(?:day)?)?|wed(?:nesday)?|thu(?:rs(?:day)?)?|fri(?:day)?|sat(?:urday)?)s?)*)\b/gi,
       ''
     )
+    .replace(/\b(?:every|each)\s+day\b/gi, '')
+    .replace(/\bdaily\b/gi, '')
+    .replace(/\bstarting\s+(?:today|tomorrow)\b/gi, '')
+    .replace(/\bevery\s+\d+\s+(?:days?|weeks?|months?)\b/gi, '')
     .replace(/\b(?:at\s+)?\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)\b/gi, '')
     .replace(/\bat\s+\d{1,2}:\d{2}\b/gi, '')
     .replace(/\bfor\s+\d{1,3}\s+(?:weeks?|months?)\b/gi, '')
@@ -513,6 +517,50 @@ function stripReminderDatePhrases(s: string): string {
     .replace(/\s+/g, ' ')
     .replace(/[.,;:!?]+$/g, '')
     .trim();
+}
+
+/**
+ * "every day at 6pm" / "daily starting today" → daily days interval.
+ * Prefer this over model "weekdays Mon–Fri" for every-day speech.
+ */
+export function parseDailyReminder(
+  text?: string,
+  from = new Date()
+):
+  | {
+      remindAt: string;
+      remindInterval: {
+        value: number;
+        unit: 'days';
+        hour?: number;
+        minute?: number;
+        startsAt?: string;
+      };
+    }
+  | undefined {
+  if (!text?.trim()) return undefined;
+  if (!/\b(?:every|each)\s+day\b|\bdaily\b/i.test(text)) return undefined;
+  // Named Mon–Sun / weekends → weekday parser instead.
+  if (
+    /\b(?:weekdays?|weekends?|sun(?:day)?|mon(?:day)?|tue(?:s(?:day)?)?|wed(?:nesday)?|thu(?:rs(?:day)?)?|fri(?:day)?|sat(?:urday)?)s?\b/i.test(
+      text
+    )
+  ) {
+    return undefined;
+  }
+
+  const clock = parseTimeOfDayFromUtterance(text);
+  const today = localDayKey(from);
+  const startToday = /\bstarting\s+today\b|\btoday\b/i.test(text);
+  return {
+    remindAt: today,
+    remindInterval: {
+      value: 1,
+      unit: 'days',
+      ...(clock ? { hour: clock.hour, minute: clock.minute } : {}),
+      ...(startToday ? { startsAt: today } : {}),
+    },
+  };
 }
 
 /** Split a reminder utterance into a short title and optional notes. */
@@ -571,9 +619,11 @@ export function parseReminderFromUtterance(
  */
 export function finalizeReminderLabel(raw: string): string {
   let s = raw.trim().replace(/\s+/g, ' ');
+  s = s.replace(/^(?:please\s+)?(?:remind\s+me(?:\s+to)?|set\s+(?:a\s+)?reminder(?:\s+to)?|reminder)\s*/i, '');
+  s = stripReminderDatePhrases(s);
   s = s.replace(/^(?:for|to|about|regarding)\s+/i, '');
   s = s.replace(/[.,;:!?]+$/g, '').trim();
-  if (!s) return 'Reminder';
+  if (!s || /^remind(?:\s+me)?$/i.test(s)) return 'Reminder';
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 

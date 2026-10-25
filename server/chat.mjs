@@ -117,8 +117,8 @@ Facts (critical):
 - change a reminder due date ("update the due date to next Tuesday", "make it Friday", "change the reminder to tomorrow") → update_last_done { id from LastDone/session focus, patch: { remindAt } }. Never set_reminder again for a follow-up date change.
 
 Actions:
-- durable goods (laptop, machine, headphones, passport) → add_item (name, brand?, room?, category?, price?, purchasedFrom?, warrantyExpiry?, manualUrl?, assignedTo?, personId?). warrantyExpiry YYYY-MM-DD; year-only "until 2028" → 2028-12-31. Omit condition unless they said used/refurbished/etc; never invent Good. "I got a new X" is not a condition.
-- spent/paid/coffee run/groceries/bill (one-off consumable spend, not a Thing) → add_expense { title, amount, currency?, category?, date?, merchant?, assignedTo?, personId? } categories: food|transport|home|shopping|health|travel|bills|entertainment|other. "at/in/from STORE for X" or "got X from STORE for N dirhams" → always set merchant to STORE (keep spelling if ASR is unclear; normalize only when the real retailer is obvious). Named currency words → ISO codes (dirhams→AED, dollars→USD, euros→EUR, pounds→GBP, rupees→INR). If they name no currency, omit currency (app uses Default currency). Named person ("for Aarav") → that personId. Vague "show/open that/show me" after ANY successful action → open that same record using session focus (kind + id). Never open an unrelated Thing.
+- durable goods (laptop, lamp, TV, machine, headphones, passport) → add_item (name, brand?, room?, category?, price?, purchasedFrom?, warrantyExpiry?, manualUrl?, assignedTo?, personId?). A durable item with a brand (e.g. "got a Philips lamp for 50 dollars") is ALWAYS add_item with that price — never add_expense. warrantyExpiry YYYY-MM-DD; year-only "until 2028" → 2028-12-31. Omit condition unless they said used/refurbished/etc; never invent Good. "I got a new X" is not a condition.
+- spent/paid/coffee run/groceries/bill (one-off consumable spend, not a durable Thing) → add_expense { title, amount, currency?, category?, date?, merchant?, assignedTo?, personId? } categories: food|transport|home|shopping|health|travel|bills|entertainment|other. "at/in/from STORE for X" or "got X from STORE for N dirhams" → always set merchant to STORE (keep spelling if ASR is unclear; normalize only when the real retailer is obvious). Named currency words → ISO codes (dirhams→AED, dollars→USD, euros→EUR, pounds→GBP, rupees→INR). If they name no currency, omit currency (app uses Default currency). Named person ("for Aarav") → that personId. Vague "show/open that/show me" after ANY successful action → open that same record using session focus (kind + id). Never open an unrelated Thing.
 - refine an expense (change amount/merchant/title of yogurt, coffee, groceries already in Expenses JSON) → update_expense { id, patch: { amount?, currency?, merchant?, title?, date?, category? } }. Never update_item for consumable spend. Spoken currency words → ISO code; otherwise leave currency unset.
 - delete an expense ("delete that juice", "remove the coffee spend") → remove_expense { id } from Expenses JSON. Never remove_item for spend. Vague "delete that" uses session focus.
 - recurring subscription ("I pay for Netflix", "Spotify is 22 a month") → add_subscription { title, amount, currency?, cycle?, renewsOn?, category?, provider?, assignedTo?, personId? } cycle: weekly|monthly|yearly; categories: streaming|software|fitness|cloud|news|other. Same currency rules as expenses.
@@ -680,6 +680,69 @@ function repairRemovalAction(a, { ids, expenseIds, sessionFocus, lastUserText })
   return a;
 }
 
+const DURABLE_NOUN =
+  /\b(lamps?|lights?|tvs?|televisions?|laptops?|notebooks?|macbooks?|iphones?|ipads?|phones?|tablets?|headphones?|earbuds?|airpods?|watches?|cameras?|fridges?|refrigerators?|washers?|dryers?|dishwashers?|ovens?|microwaves?|vacuums?|routers?|printers?|monitors?|speakers?|keyboards?|mice|mouses?|consoles?|playstations?|xbox(?:es)?|switches?|blenders?|toasters?|kettles?|fans?|projectors?|machines?)\b/i;
+const CONSUMABLE_SPEND =
+  /\b(coffee|latte|espresso|juice|smoothie|tea|groceries|grocery|lunch|dinner|breakfast|uber|taxi|fuel|petrol|gas|bill|rent|ticket|tickets|meal|snack|pizza|burger)\b/i;
+const KNOWN_BRANDS = [
+  'Philips', 'Samsung', 'Sony', 'LG', 'Apple', 'Google', 'Microsoft', 'Dell', 'HP',
+  'Lenovo', 'Asus', 'Acer', 'Xiaomi', 'Huawei', 'OnePlus', 'Nokia', 'Bose', 'JBL',
+  'Nikon', 'Canon', 'Dyson', 'Nespresso', 'KitchenAid', 'Bosch', 'Siemens',
+  'Whirlpool', 'GE', 'Panasonic', 'Toshiba', 'Sharp', 'Hisense', 'TCL', 'IKEA',
+  'Nike', 'Adidas',
+];
+
+function brandFromTitle(name) {
+  const raw = String(name || '').trim();
+  if (!raw) return '';
+  const lower = raw.toLowerCase();
+  for (const brand of KNOWN_BRANDS) {
+    const b = brand.toLowerCase();
+    if (lower === b || lower.startsWith(`${b} `) || lower.startsWith(`${b}-`)) {
+      return brand;
+    }
+  }
+  return '';
+}
+
+function looksLikeDurablePurchase(title, utterance) {
+  const titleText = String(title || '').trim();
+  const spoken = String(utterance || '').trim();
+  const blob = `${titleText} ${spoken}`.trim();
+  if (!blob) return false;
+  if (CONSUMABLE_SPEND.test(titleText) && !brandFromTitle(titleText) && !DURABLE_NOUN.test(titleText)) {
+    return false;
+  }
+  if (CONSUMABLE_SPEND.test(blob) && !brandFromTitle(blob) && !DURABLE_NOUN.test(blob)) {
+    return false;
+  }
+  return Boolean(brandFromTitle(titleText) || brandFromTitle(spoken) || DURABLE_NOUN.test(blob));
+}
+
+function repairDurableExpenseToItem(a, { lastUserText }) {
+  if (a.type !== 'add_expense') return a;
+  if (!looksLikeDurablePurchase(a.title, lastUserText)) return a;
+  const title = String(a.title || '').trim();
+  if (!title) return a;
+  const brand = brandFromTitle(title) || brandFromTitle(lastUserText) || '';
+  const amount = a.amount;
+  const currency = String(a.currency || '').trim().toUpperCase();
+  let price;
+  if (typeof amount === 'number' && Number.isFinite(amount)) {
+    price = /^[A-Z]{3}$/.test(currency) ? `${currency} ${amount}` : String(amount);
+  } else if (typeof amount === 'string' && amount.trim()) {
+    price =
+      /^[A-Z]{3}$/.test(currency) && !/^[A-Z]{3}\b/i.test(amount.trim())
+        ? `${currency} ${amount.trim()}`
+        : amount.trim();
+  }
+  const next = { type: 'add_item', name: title };
+  if (brand) next.brand = brand;
+  if (price) next.price = price;
+  if (String(a.merchant || '').trim()) next.purchasedFrom = String(a.merchant).trim();
+  return next;
+}
+
 function repairAddExpenseAction(a, { lastUserText, defaultCurrency }) {
   if (a.type !== 'add_expense') return a;
   const next = { ...a };
@@ -731,6 +794,7 @@ export function repairActions(actions, { focusItemId, focusExpenseId, sessionFoc
     action = repairPeopleAction(action, { people, lastUserText });
     action = repairNavigationAction(action, { ids, expenseIds, itemFocus, expenseFocus, sessionFocus, lastUserText });
     action = repairRemovalAction(action, { ids, expenseIds, sessionFocus, lastUserText });
+    action = repairDurableExpenseToItem(action, { lastUserText });
     action = repairAddExpenseAction(action, { lastUserText, defaultCurrency });
     return action;
   });

@@ -273,7 +273,8 @@ export async function ensureHouseholdId(): Promise<string | null> {
   if (!supabase) return null;
   const cached = await AsyncStorage.getItem(HOUSEHOLD_KEY);
   if (cached && isUuid(cached)) return cached;
-  const userId = await ensureCloudSession();
+  // Do not create auth/household during Welcome hydration.
+  const userId = await ensureCloudSession({ create: false });
   if (!userId) return null;
   const { data, error } = await supabase.rpc('ensure_household');
   if (error) throw error;

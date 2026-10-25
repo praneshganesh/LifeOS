@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import { DETAIL_DOCK_PAD } from '@/components/ui/DetailKit';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
@@ -63,7 +64,11 @@ export default function PrivacySettingsScreen() {
           />
           <ListRow
             title="Terms"
-            subtitle="Subscription, trial, and the Apple license"
+            subtitle={
+              Platform.OS === 'ios'
+                ? 'Subscription, trial, and the Apple license'
+                : 'Subscription, trial, and store billing'
+            }
             onPress={() => router.push('/settings/terms' as Href)}
             last
           />

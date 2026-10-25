@@ -1,11 +1,21 @@
-import { Linking } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import { ModuleScreen } from '@/components/ui/ModuleScreen';
 import { Text } from '@/components/ui/Text';
 import { DETAIL_DOCK_PAD } from '@/components/ui/DetailKit';
 import { fonts, spacing } from '@/constants/theme';
+import { useTheme } from '@/lib/ThemeContext';
 
 const SUPPORT_EMAIL = 'hello@ibp-labs.com';
-import { useTheme } from '@/lib/ThemeContext';
+
+const HOW_WE_COLLECT =
+  Platform.OS === 'ios'
+    ? 'You type it, use the camera, or choose a photo or PDF. Sign in with Apple can include an email if you allow it. Camera, photos, and the microphone are used only when you capture or talk. You can turn them off in iOS Settings. Speech recognition, Face ID, and on-device text reading stay on the phone. Reminders are scheduled on the device. We use this to keep your record, sync it, answer Talk, Ask, and Identify, and apply your subscription.'
+    : 'You type it, use the camera, or choose a photo or PDF. Camera, photos, and the microphone are used only when you capture or talk. You can turn them off in system Settings. Speech recognition, biometrics, and on-device text reading stay on the phone. Reminders are scheduled on the device. We use this to keep your record, sync it, answer Talk, Ask, and Identify, and apply your subscription.';
+
+const DELETE_ACCOUNT_BODY =
+  Platform.OS === 'ios'
+    ? 'Settings → Account → Delete account erases the login, the home record that belongs only to you, attached files, and the copy on this phone. Deleting the account does not cancel an Apple subscription. Cancel that in iOS Settings → Apple ID → Subscriptions.'
+    : 'Settings → Account → Delete account erases the login, the home record that belongs only to you, attached files, and the copy on this phone. Deleting the account does not cancel a store subscription. Cancel that in Google Play or the store where you subscribed.';
 
 function Block({ title, body }: { title: string; body: string }) {
   const { colors } = useTheme();
@@ -58,16 +68,17 @@ export default function PrivacyPolicyScreen() {
       />
       <Block
         title="Your account"
-        body="The first time you open Saavi we create a temporary account so the app can sync. Sign in with Apple replaces that with an Apple identity, including a private relay email if you choose Hide My Email. We store that identity to restore your data and subscription on another phone. We do not ask you to create a password."
+        body={
+          Platform.OS === 'ios'
+            ? 'The first time you start Saavi we create a temporary account so the app can sync. Sign in with Apple replaces that with an Apple identity, including a private relay email if you choose Hide My Email. We store that identity to restore your data and subscription on another phone. We do not ask you to create a password.'
+            : 'The first time you start Saavi we create a temporary account so the app can sync. Linking a store identity (when available) replaces that temporary account so you can restore your data and subscription on another phone. We do not ask you to create a password.'
+        }
       />
       <Block
         title="What is stored"
         body="The things you type or capture: names, dates, amounts, people in your home, rooms, notes, and files you attach (photos and PDFs). A home record can include someone else’s name, such as a person in the household or a child’s class. Those files sit in private storage tied to your account. They are not public and they are not used for advertising."
       />
-      <Block
-        title="How we collect it"
-        body="You type it, use the camera, or choose a photo or PDF. Sign in with Apple can include an email if you allow it. Camera, photos, and the microphone are used only when you capture or talk. You can turn them off in iOS Settings. Speech recognition, Face ID, and on-device text reading stay on the phone. Reminders are scheduled on the device. We use this to keep your record, sync it, answer Talk, Ask, and Identify, and apply your subscription."
-      />
+      <Block title="How we collect it" body={HOW_WE_COLLECT} />
       <Block
         title="Talk, Ask, and Identify"
         body="A Talk turn, an Ask message, or a photo you choose to Identify is sent to Saavi’s server and then to OpenAI so it can answer. Talk and Ask send the message plus a short summary of names, rooms, and dates already in your record. Your photo library is not scanned in the background. Speech recognition and on-device text reading stay on the phone."
@@ -84,10 +95,7 @@ export default function PrivacyPolicyScreen() {
         title="How long we keep it"
         body="We keep the record while the account exists. Settings → Account → Delete account removes it. You can also email hello@ibp-labs.com and ask us to delete it."
       />
-      <Block
-        title="Deleting your account"
-        body="Settings → Account → Delete account erases the login, the home record that belongs only to you, attached files, and the copy on this phone. Deleting the account does not cancel an Apple subscription. Cancel that in iOS Settings → Apple ID → Subscriptions."
-      />
+      <Block title="Deleting your account" body={DELETE_ACCOUNT_BODY} />
       <Block
         title="Children"
         body="Saavi is not directed at children under 13, and we do not knowingly collect personal information from them."

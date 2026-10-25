@@ -338,7 +338,9 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
       const label = finalizeReminderLabel(normalizeLabel(input.label ?? ''));
       if (!label) throw new Error('Label required');
       const remindFields = resolveRemindAt(new Date(), {
-        remindAt: input.remindInterval ? undefined : input.remindAt,
+        // Keep the caller's first due date when setting a cadence (don't jump
+        // "Every 1 wk" / "every day" to the next period).
+        remindAt: input.remindAt,
         remindInterval: input.remindInterval,
       });
       if (!remindFields.remindAt) throw new Error('Invalid reminder date');
@@ -451,7 +453,8 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
             remindAt: startOfDayISO(parsed),
             // Keep one-shot clock when only the date changes.
             remindTime: updated.remindTime,
-            remindInterval: undefined,
+            // Snooze / date nudge must not wipe a recurring cadence.
+            remindInterval: updated.remindInterval,
             onceDone: undefined,
           };
         }
@@ -485,7 +488,11 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
           updated = {
             ...updated,
             remindTime: undefined,
-            ...resolveRemindAt(anchor, { remindInterval: patch.remindInterval }),
+            ...resolveRemindAt(anchor, {
+              remindInterval: patch.remindInterval,
+              // Keep today's due when attaching "Every 1 wk" to an open reminder.
+              remindAt: updated.remindAt,
+            }),
             onceDone: undefined,
           };
         }

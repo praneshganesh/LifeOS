@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Platform, StyleSheet, View } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { DETAIL_DOCK_PAD } from '@/components/ui/DetailKit';
 import { ModuleScreen, ModuleSection } from '@/components/ui/ModuleScreen';
 import { ListCard, ListRow } from '@/components/ui/ListKit';
@@ -96,7 +96,9 @@ export default function AccountSettingsScreen() {
 
   function onDeleteAccount() {
     const message =
-      'This permanently deletes your Saavi login, the home record that belongs only to you, attached files, and the copy on this phone. It does not cancel an Apple subscription. Cancel that in iOS Settings → Apple ID → Subscriptions.';
+      Platform.OS === 'ios'
+        ? 'This permanently deletes your Saavi login, the home record that belongs only to you, attached files, and the copy on this phone. It does not cancel an Apple subscription. Cancel that in iOS Settings → Apple ID → Subscriptions.'
+        : 'This permanently deletes your Saavi login, the home record that belongs only to you, attached files, and the copy on this phone. It does not cancel a store subscription. Cancel that in Google Play or the store where you subscribed.';
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       if (!window.confirm(`${message}\n\nThis cannot be undone.`)) return;
       const typed = window.prompt('Type DELETE to confirm');
@@ -177,9 +179,16 @@ export default function AccountSettingsScreen() {
             last
           />
         </ListCard>
-        <Text style={[styles.hint, { color: colors.mute }]}>
-          Sign in with Apple so a new phone can restore your household and plan.
-        </Text>
+        {Platform.OS === 'ios' ? (
+          <Text style={[styles.hint, { color: colors.mute }]}>
+            Sign in with Apple so a new phone can restore your household and plan.
+          </Text>
+        ) : (
+          <Text style={[styles.hint, { color: colors.mute }]}>
+            Restore with your recovery code on a new Android phone. Apple Sign In
+            is available on iPhone.
+          </Text>
+        )}
       </ModuleSection>
 
       <ModuleSection label="Sign in">
@@ -201,20 +210,21 @@ export default function AccountSettingsScreen() {
               last={!state.userId}
             />
           ) : null}
-          {Platform.OS !== 'ios' ? (
-            <ListRow
-              icon="phone"
-              title="Apple Sign In"
-              subtitle="Use an iPhone to link Apple. Restore with your recovery code anytime."
-              last={!state.hasAppleIdentity}
-            />
-          ) : null}
           {state.hasAppleIdentity ? (
             <ListRow
               icon="shield"
               title="Sign out"
               subtitle="Stays on this phone until you delete the account"
               onPress={onSignOut}
+              last
+            />
+          ) : null}
+          {Platform.OS !== 'ios' && !state.hasAppleIdentity ? (
+            <ListRow
+              icon="folder"
+              title="Recovery code"
+              subtitle="Settings → Export or wipe — restore without Apple"
+              onPress={() => router.push('/settings/data' as Href)}
               last
             />
           ) : null}
@@ -232,7 +242,11 @@ export default function AccountSettingsScreen() {
             <ListRow
               icon="shield"
               title="Delete account"
-              subtitle="Removes your login and this phone’s copy. Does not cancel Apple billing."
+              subtitle={
+                Platform.OS === 'ios'
+                  ? 'Removes your login and this phone’s copy. Does not cancel Apple billing.'
+                  : 'Removes your login and this phone’s copy. Cancel any store subscription separately.'
+              }
               onPress={onDeleteAccount}
               last
             />
