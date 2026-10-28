@@ -1,5 +1,14 @@
-import { type ReactNode, type ReactElement, useMemo, Children, cloneElement, isValidElement } from 'react';
 import {
+  type ReactNode,
+  type ReactElement,
+  useMemo,
+  useState,
+  Children,
+  cloneElement,
+  isValidElement,
+} from 'react';
+import {
+  Platform,
   Pressable,
   StyleSheet,
   TextInput,
@@ -194,17 +203,46 @@ export function DetailSection({
 export function DetailField(props: TextInputProps & { soft?: boolean }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const { style, soft = true, ...rest } = props;
+  const { style, soft = true, onFocus, onBlur, ...rest } = props;
+  const [focused, setFocused] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const borderColor = focused
+    ? colors.accent
+    : hovered
+      ? colors.ink
+      : colors.lineStrong;
+  const backgroundColor = focused
+    ? colors.surface
+    : soft
+      ? colors.surfaceSoft
+      : colors.surface;
+
   return (
     <TextInput
       placeholderTextColor={colors.faint}
       selectTextOnFocus
+      selectionColor={colors.accentWash}
+      cursorColor={colors.accent}
       {...rest}
+      onFocus={(e) => {
+        setFocused(true);
+        onFocus?.(e);
+      }}
+      onBlur={(e) => {
+        setFocused(false);
+        onBlur?.(e);
+      }}
+      {...(Platform.OS === 'web'
+        ? {
+            onMouseEnter: () => setHovered(true),
+            onMouseLeave: () => setHovered(false),
+          }
+        : {})}
       style={[
         styles.field,
         {
-          backgroundColor: soft ? colors.surfaceSoft : colors.surface,
-          borderColor: colors.lineStrong,
+          backgroundColor,
+          borderColor,
           color: colors.ink,
         },
         style,
@@ -234,13 +272,21 @@ export function DetailChip({
     <Pressable
       onPress={onPress}
       disabled={disabled || !onPress}
-      style={({ pressed }) => [
+      style={({ pressed, hovered }) => [
         styles.chip,
         fill && styles.chipFill,
         {
-          backgroundColor: selected ? colors.accent : colors.surface,
-          borderColor: selected ? colors.accent : colors.lineStrong,
-          opacity: disabled ? 0.45 : pressed ? 0.9 : 1,
+          backgroundColor: selected
+            ? colors.accent
+            : pressed || hovered
+              ? colors.accentWash
+              : colors.surface,
+          borderColor: selected
+            ? colors.accent
+            : pressed || hovered
+              ? colors.accent
+              : colors.lineStrong,
+          opacity: disabled ? 0.45 : 1,
         },
       ]}
       accessibilityRole="button"

@@ -1,5 +1,6 @@
-import { type ReactNode, useMemo, useRef } from 'react';
+import { type ReactNode, useMemo, useRef, useState } from 'react';
 import {
+  Platform,
   Pressable,
   StyleSheet,
   TextInput,
@@ -77,18 +78,30 @@ export function FormInputRow({
   last?: boolean;
 } & TextInputProps) {
   const { colors } = useTheme();
-  const { style, ...rest } = inputProps;
+  const { style, onFocus, onBlur, ...rest } = inputProps;
   const inputRef = useRef<TextInput>(null);
+  const [focused, setFocused] = useState(false);
+  const [hovered, setHovered] = useState(false);
 
   return (
     <View
       style={[
         styles.inputRow,
+        {
+          backgroundColor:
+            focused || hovered ? colors.accentWash : 'transparent',
+        },
         !last && {
           borderBottomWidth: StyleSheet.hairlineWidth,
-          borderBottomColor: colors.line,
+          borderBottomColor: focused ? colors.accent : colors.line,
         },
       ]}
+      {...(Platform.OS === 'web'
+        ? {
+            onMouseEnter: () => setHovered(true),
+            onMouseLeave: () => setHovered(false),
+          }
+        : {})}
     >
       {label ? (
         <Pressable
@@ -97,7 +110,11 @@ export function FormInputRow({
           hitSlop={6}
         >
           <Text
-            style={[styles.rowLabel, styles.inputLabel, { color: colors.ink }]}
+            style={[
+              styles.rowLabel,
+              styles.inputLabel,
+              { color: focused ? colors.accent : colors.ink },
+            ]}
             numberOfLines={1}
           >
             {label}
@@ -108,7 +125,17 @@ export function FormInputRow({
         ref={inputRef}
         placeholderTextColor={colors.faint}
         selectTextOnFocus
+        selectionColor={colors.accentWash}
+        cursorColor={colors.accent}
         {...rest}
+        onFocus={(e) => {
+          setFocused(true);
+          onFocus?.(e);
+        }}
+        onBlur={(e) => {
+          setFocused(false);
+          onBlur?.(e);
+        }}
         style={[
           styles.input,
           label ? styles.inputTrailing : styles.inputSolo,
@@ -154,11 +181,16 @@ export function FormPill({
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [
+      style={({ pressed, hovered }) => [
         stylesMemo.pill,
         {
-          backgroundColor: active ? colors.accentWash : colors.surfaceSoft,
-          opacity: pressed ? 0.88 : 1,
+          backgroundColor: active
+            ? colors.accentWash
+            : pressed || hovered
+              ? colors.accentWash
+              : colors.surfaceSoft,
+          borderWidth: StyleSheet.hairlineWidth,
+          borderColor: active || pressed || hovered ? colors.accent : 'transparent',
         },
       ]}
       accessibilityRole="button"
