@@ -341,7 +341,7 @@ function addActionToInput(
   const brand =
     brandRaw && !/^unknown$/i.test(brandRaw)
       ? titleCase(brandRaw)
-      : brandFromName(action.name) || 'Unknown';
+      : brandFromName(action.name) || '';
   let category = action.category?.trim() || inferred.category;
   let room = action.room?.trim() || inferred.room;
   const spaceId = 's1';

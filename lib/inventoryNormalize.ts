@@ -41,7 +41,10 @@ export function normalizeInventoryItem(raw: unknown): InventoryItem | null {
   return {
     id: r.id,
     name: r.name.trim() || 'Untitled',
-    brand: typeof r.brand === 'string' && r.brand.trim() ? r.brand : 'Unknown',
+    brand: (() => {
+      const b = optionalText(r.brand);
+      return !b || /^unknown$/i.test(b) ? '' : b;
+    })(),
     category: typeof r.category === 'string' ? r.category : 'General',
     room: typeof r.room === 'string' ? r.room : 'Inbox',
     spaceId: typeof r.spaceId === 'string' ? r.spaceId : 's1',

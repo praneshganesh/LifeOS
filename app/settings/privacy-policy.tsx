@@ -85,11 +85,19 @@ export default function PrivacyPolicyScreen() {
       />
       <Block
         title="Subscriptions"
-        body="Apple charges for Pro through the App Store. RevenueCat tells us whether the subscription is active so the app and the server can apply your plan. We do not receive your card number."
+        body={
+          Platform.OS === 'ios'
+            ? 'Apple charges for Pro through the App Store. RevenueCat tells us whether the subscription is active so the app and the server can apply your plan. We do not receive your card number.'
+            : 'Google Play (or the store where you installed Saavi) charges for Pro. RevenueCat tells us whether the subscription is active so the app and the server can apply your plan. We do not receive your card number.'
+        }
       />
       <Block
         title="Who else sees it"
-        body="Supabase stores the account, the synced record, and attached files. Our server and OpenAI answer Talk, Ask, and Identify. Apple handles Sign in with Apple and payment. RevenueCat reports whether Pro is active. They receive data only for that purpose and protect it to the same standard as this policy. We don’t sell your record, connect Gmail or your bank, or track you across other companies’ apps."
+        body={
+          Platform.OS === 'ios'
+            ? 'Supabase stores the account, the synced record, and attached files. Our server and OpenAI answer Talk, Ask, and Identify. Apple handles Sign in with Apple and payment. RevenueCat reports whether Pro is active. They receive data only for that purpose and protect it to the same standard as this policy. We don’t sell your record, connect Gmail or your bank, or track you across other companies’ apps.'
+            : 'Supabase stores the account, the synced record, and attached files. Our server and OpenAI answer Talk, Ask, and Identify. The store handles payment. RevenueCat reports whether Pro is active. They receive data only for that purpose and protect it to the same standard as this policy. We don’t sell your record, connect Gmail or your bank, or track you across other companies’ apps.'
+        }
       />
       <Block
         title="How long we keep it"

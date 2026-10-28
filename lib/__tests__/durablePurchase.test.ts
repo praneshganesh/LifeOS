@@ -98,4 +98,33 @@ describe('durablePurchase', () => {
     assert.equal(result.lastAddedName, 'Philips Lamp');
     assert.equal(result.loggedExpenseTitle, null);
   });
+
+  it('stores empty brand when none is spoken (not Unknown)', async () => {
+    let brand = 'sentinel';
+    await applyChatActions(
+      [
+        {
+          type: 'add_expense',
+          title: 'toaster',
+          amount: 30,
+          currency: 'USD',
+        },
+      ] as ChatAction[],
+      {
+        addItem: async (item) => {
+          brand = item.brand;
+          return {
+            ...item,
+            id: 'thing-2',
+            createdAt: new Date().toISOString(),
+          } as never;
+        },
+        updateItem: async () => {},
+        removeItem: async () => {},
+      },
+      'ask',
+      { lastUserText: 'I bought a toaster for $30' }
+    );
+    assert.equal(brand, '');
+  });
 });

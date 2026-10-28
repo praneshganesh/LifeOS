@@ -139,6 +139,14 @@ describe('thing row mapping', () => {
     assert.deepEqual(back, item);
   });
 
+  it('writes person_id when body.personId is set', () => {
+    const personId = newUuid();
+    const item = sampleThing({ personId, assignedTo: 'Asha' });
+    const row = thingToRow(item, HH, identityIds);
+    assert.equal(row.person_id, personId);
+    assert.equal(row.body.personId, personId);
+  });
+
   it('maps legacy ids to stable uuids and back', () => {
     const ids = makeResolver();
     const item = sampleThing({ id: 'inv-1736-ab3' });
@@ -182,6 +190,14 @@ describe('reminder row mapping', () => {
     assert.equal(row.remind_at, item.remindAt);
     assert.deepEqual(row.remind_interval, item.remindInterval);
   });
+
+  it('writes person_id when body.personId is set', () => {
+    const personId = newUuid();
+    const item = sampleReminder({ personId, assignedTo: 'Asha' });
+    const row = reminderToRow(item, HH, identityIds);
+    assert.equal(row.person_id, personId);
+    assert.equal(row.body.personId, personId);
+  });
 });
 
 describe('generic + person row mapping', () => {
@@ -207,6 +223,8 @@ describe('generic + person row mapping', () => {
     assert.equal(row.body.receiptUri, undefined);
     assert.equal(row.body.receiptPath, `${HH}/abc.jpg`);
     assert.ok(isUuid(String(row.body.personId)));
+    assert.equal(row.person_id, row.body.personId);
+    assert.ok(isUuid(String(row.person_id)));
     const back = rowToGeneric<Expense>(row, ids);
     assert.equal(back.id, 'exp-legacy-1');
     assert.equal(back.personId, 'p-legacy-1');

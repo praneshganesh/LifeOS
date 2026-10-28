@@ -485,6 +485,22 @@ async function syncMedia(householdId: string): Promise<SyncTable[]> {
 
 let syncing = false;
 let queuedWhileSyncing = false;
+let syncTimer: ReturnType<typeof setTimeout> | null = null;
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Debounce after local writes — a few seconds, not minutes. */
+const SYNC_DEBOUNCE_MS = 2000;
+/** If push fails or household isn't ready yet, try again soon. */
+const SYNC_RETRY_MS = 8000;
+
+function scheduleSyncRetry(): void {
+  if (!isSupabaseConfigured()) return;
+  if (retryTimer) return;
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    void syncRowsNow();
+  }, SYNC_RETRY_MS);
+}
 
 export async function syncRowsNow(): Promise<void> {
   if (!isSupabaseConfigured() || !supabase) return;
@@ -493,9 +509,14 @@ export async function syncRowsNow(): Promise<void> {
     return;
   }
   syncing = true;
+  let needsRetry = false;
   try {
     const householdId = await ensureHouseholdId();
-    if (!householdId) return;
+    if (!householdId) {
+      // Household bootstrap can lag a first write; don't wait for background.
+      needsRetry = true;
+      return;
+    }
 
     await backfillOnce();
 
@@ -518,18 +539,19 @@ export async function syncRowsNow(): Promise<void> {
     await saveIdMapIfDirty();
     if (changedTables.size) emitApplied([...changedTables]);
   } catch {
-    // Offline / auth hiccup, the outbox keeps everything; retry later.
+    // Offline / auth hiccup, the outbox keeps everything; retry soon.
+    needsRetry = true;
     await saveIdMapIfDirty().catch(() => undefined);
   } finally {
     syncing = false;
     if (queuedWhileSyncing) {
       queuedWhileSyncing = false;
       scheduleRowSync();
+    } else if (needsRetry) {
+      scheduleSyncRetry();
     }
   }
 }
-
-let syncTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** Debounced sync, call after any local mutation (fire-and-forget). */
 export function scheduleRowSync(): void {
@@ -538,5 +560,5 @@ export function scheduleRowSync(): void {
   syncTimer = setTimeout(() => {
     syncTimer = null;
     void syncRowsNow();
-  }, 2500);
+  }, SYNC_DEBOUNCE_MS);
 }

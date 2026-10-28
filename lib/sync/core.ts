@@ -178,6 +178,18 @@ export function bodyToItem<T extends { id: string }>(
   return body as T;
 }
 
+/** Top-level person_id FK when body.personId maps to a real uuid. */
+function personIdColumn(
+  item: { personId?: string | null },
+  ids: IdResolver
+): string | null {
+  const personLocal =
+    typeof item.personId === 'string' && item.personId.trim() ? item.personId.trim() : '';
+  if (!personLocal) return null;
+  const personSync = ids.toSync(personLocal);
+  return personSync && isUuid(personSync) ? personSync : null;
+}
+
 export function thingToRow(
   item: InventoryItem,
   householdId: string,
@@ -186,8 +198,7 @@ export function thingToRow(
   return {
     id: ids.toSync(item.id),
     household_id: householdId,
-    // FK stays null; the link lives in body.personId (no dangling-FK failures).
-    person_id: null,
+    person_id: personIdColumn(item, ids),
     name: item.name ?? '',
     category: item.category ?? null,
     space_key: item.spaceId ?? null,
@@ -218,7 +229,7 @@ export function reminderToRow(
   return {
     id: ids.toSync(item.id),
     household_id: householdId,
-    person_id: null,
+    person_id: personIdColumn(item, ids),
     // Only set the FK when the referenced thing has a valid uuid; the link
     // always survives inside body regardless.
     thing_id: thingSyncId && isUuid(thingSyncId) ? thingSyncId : null,
@@ -247,16 +258,11 @@ export function genericToRow<T extends Titled>(
   householdId: string,
   ids: IdResolver
 ): GenericRow {
-  const personLocal =
-    typeof (item as { personId?: unknown }).personId === 'string'
-      ? ((item as { personId?: string }).personId as string)
-      : '';
-  const personSync = personLocal ? ids.toSync(personLocal) : null;
   return {
     id: ids.toSync(item.id),
     household_id: householdId,
     // Keep the FK in sync with body.personId when we have a real uuid.
-    person_id: personSync && isUuid(personSync) ? personSync : null,
+    person_id: personIdColumn(item as { personId?: string | null }, ids),
     title: String(item.title ?? item.name ?? ''),
     body: itemToBody(item, ids),
     client_mutated_at: item.updatedAt ?? null,

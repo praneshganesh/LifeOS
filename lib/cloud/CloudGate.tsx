@@ -48,10 +48,12 @@ export function CloudGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isSupabaseConfigured()) return;
     const sub = AppState.addEventListener('change', (state) => {
-      if (state !== 'background') return;
+      // Flush on background; also catch up when returning so a failed
+      // push doesn't wait until the next edit.
+      if (state !== 'background' && state !== 'active') return;
       void isOnboardingDone().then((done) => {
         if (!done) return;
-        void syncCloudNow();
+        if (state === 'background') void syncCloudNow();
         void syncRowsNow();
       });
     });
