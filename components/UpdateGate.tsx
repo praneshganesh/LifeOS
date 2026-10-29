@@ -42,33 +42,34 @@ export function UpdateGate({ children }: { children: ReactNode }) {
   const [error, setError] = useState('');
 
   const refresh = useCallback(async () => {
-    if (__DEV__) {
-      setMode({ kind: 'none' });
-      return;
-    }
-
-    let policy: AppUpdatePolicy = DEFAULT_UPDATE_POLICY;
+    // Never throw out of here — a gate crash would take down the whole app.
     try {
-      policy = await fetchUpdatePolicy();
-    } catch {
-      policy = DEFAULT_UPDATE_POLICY;
-    }
+      if (__DEV__) {
+        setMode({ kind: 'none' });
+        return;
+      }
 
-    if (needsStoreUpdate(policy)) {
-      setMode({
-        kind: 'forceStore',
-        message: policy.storeMessage,
-        url: storeUrlForPlatform(policy),
-      });
-      return;
-    }
+      let policy: AppUpdatePolicy = DEFAULT_UPDATE_POLICY;
+      try {
+        policy = await fetchUpdatePolicy();
+      } catch {
+        policy = DEFAULT_UPDATE_POLICY;
+      }
 
-    if (!Updates.isEnabled) {
-      setMode({ kind: 'none' });
-      return;
-    }
+      if (needsStoreUpdate(policy)) {
+        setMode({
+          kind: 'forceStore',
+          message: policy.storeMessage,
+          url: storeUrlForPlatform(policy),
+        });
+        return;
+      }
 
-    try {
+      if (!Updates.isEnabled) {
+        setMode({ kind: 'none' });
+        return;
+      }
+
       const result = await Updates.checkForUpdateAsync();
       if (!result.isAvailable) {
         setMode({ kind: 'none' });
@@ -83,7 +84,7 @@ export function UpdateGate({ children }: { children: ReactNode }) {
           : `available-${Date.now()}`;
 
       if (policy.forceOta) {
-        await clearSoftDismiss();
+        await clearSoftDismiss().catch(() => undefined);
         setMode({
           kind: 'forceOta',
           updateId,
@@ -97,7 +98,7 @@ export function UpdateGate({ children }: { children: ReactNode }) {
         return;
       }
 
-      const dismissed = await loadSoftDismiss();
+      const dismissed = await loadSoftDismiss().catch(() => null);
       if (softDismissIsActive(dismissed, updateId)) {
         setMode({ kind: 'none' });
         return;
@@ -109,8 +110,8 @@ export function UpdateGate({ children }: { children: ReactNode }) {
         message: policy.softMessage,
       });
     } catch {
-      // Offline / channel misconfig — don't brick the session.
-      setMode((prev) => (prev.kind === 'forceStore' ? prev : { kind: 'none' }));
+      // Offline / Expo Go / channel misconfig — don't brick the session.
+      setMode({ kind: 'none' });
     }
   }, []);
 
@@ -298,7 +299,11 @@ function makeStyles() {
       opacity: 0.85,
     },
     block: {
-      ...StyleSheet.absoluteFill,
+      position: 'absolute',
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0,
       zIndex: 400,
       alignItems: 'center',
       justifyContent: 'center',
