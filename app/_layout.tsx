@@ -20,6 +20,7 @@ import { AppLockGate } from '@/components/AppLockGate';
 import { NotificationDeepLinkHost } from '@/components/NotificationDeepLinkHost';
 import { ThemeProvider, useTheme } from '@/lib/ThemeContext';
 import { CloudGate } from '@/lib/cloud/CloudGate';
+import { UpdateGate } from '@/components/UpdateGate';
 import { PlanProvider } from '@/lib/PlanContext';
 import { LastDoneProvider } from '@/lib/LastDoneContext';
 import { InventoryProvider } from '@/lib/InventoryContext';
@@ -161,6 +162,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#0D0D0F' }}>
       <KeyboardProvider>
       <ThemeProvider>
+        <UpdateGate>
         <CloudGate>
         <PlanProvider>
         <LastDoneProvider>
@@ -198,6 +200,7 @@ export default function RootLayout() {
         </LastDoneProvider>
         </PlanProvider>
         </CloudGate>
+        </UpdateGate>
       </ThemeProvider>
       </KeyboardProvider>
     </GestureHandlerRootView>

@@ -16,6 +16,7 @@ Do **not** run production SQL from the agent. Apply migrations yourself on the p
 - [x] Splash Saavi, onboarding name, reminder time, full names, Life dock, “1 person”
 - [x] Welcome restore entry; Android crypto for recovery codes
 - [x] Fly chat-api UTC billing + clearer daily-limit copy
+- [x] Soft / hard update gate (`app_update_policy` + EAS Update)
 - [ ] Confirm purchase → RevenueCat webhook → `admin_set_plan_id` sets Pro
 - [ ] TestFlight smoke on a real device (camera, Talk, Apple, Face ID, swipe)
 
@@ -58,6 +59,18 @@ Paid plans only arrive via the RevenueCat webhook → `admin_set_plan_id` (clien
 
 - Staging history: `20261021120000_launch_hardening.sql` was edited after it was applied on staging. Harmless for that project; for production, apply the **current** files in order.
 - Later fixups live in `202610220*` and `202610240*` migrations.
+
+## App updates (soft vs hard)
+
+Config row: `public.app_update_policy` id=`default` (dashboard / SQL). Clients read it on launch and when returning to foreground.
+
+| Goal | What to do |
+|------|------------|
+| Soft (optional OTA) | `eas update --channel production` (or `preview`). Keep `force_ota = false`, `soft_ota_enabled = true`. |
+| Hard OTA (critical JS fix) | Publish the update, then `update app_update_policy set force_ota = true`. Users get a blocking “Update now” → fetch + reload. Set `force_ota = false` after most clients catch up. |
+| Hard store (native / too old) | Ship a store build, then raise `min_native_version` (and optionally `min_ios_build` / `min_android_version_code`). Below that → blocking “Open App Store / Play Store”. |
+
+Dev / Expo Go skips the gate (`__DEV__`). Offline fails open except an already-shown store block.
 
 ## Deferred (post-launch OK)
 
