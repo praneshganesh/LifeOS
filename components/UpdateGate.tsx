@@ -8,7 +8,9 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Updates from 'expo-updates';
+import { RefreshCw } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import {
   clearSoftDismiss,
@@ -36,6 +38,7 @@ type GateMode =
  */
 export function UpdateGate({ children }: { children: ReactNode }) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(), []);
   const [mode, setMode] = useState<GateMode>({ kind: 'none' });
   const [busy, setBusy] = useState(false);
@@ -133,9 +136,15 @@ export function UpdateGate({ children }: { children: ReactNode }) {
     try {
       const result = await Updates.fetchUpdateAsync();
       if (!result.isNew) {
-        setError('Couldn’t download the update. Try again.');
-        setBusy(false);
-        return;
+        // Already fetched on a prior attempt — still reload into it.
+        try {
+          await Updates.reloadAsync();
+          return;
+        } catch {
+          setError('Couldn’t apply the update. Try again.');
+          setBusy(false);
+          return;
+        }
       }
       await Updates.reloadAsync();
     } catch {
@@ -145,10 +154,22 @@ export function UpdateGate({ children }: { children: ReactNode }) {
   }, [busy]);
 
   const openStore = useCallback(async (url: string) => {
+    const fallback =
+      Platform.OS === 'ios'
+        ? 'https://apps.apple.com/app/id6805518688'
+        : 'https://play.google.com/store/apps/details?id=com.praneshganesh.lifeos';
     try {
-      await Linking.openURL(url);
+      await Linking.openURL(url || fallback);
     } catch {
-      setError('Couldn’t open the store. Update Saavi from the App Store or Play Store.');
+      try {
+        await Linking.openURL(fallback);
+      } catch {
+        setError(
+          Platform.OS === 'ios'
+            ? 'Couldn’t open the App Store. Update from the App Store manually.'
+            : 'Couldn’t open the Play Store. Update from the Play Store manually.'
+        );
+      }
     }
   }, []);
 
@@ -158,94 +179,119 @@ export function UpdateGate({ children }: { children: ReactNode }) {
     setMode({ kind: 'none' });
   }, [mode]);
 
+  const softBottom = Math.max(insets.bottom, spacing.md) + 72;
+
   return (
     <View style={{ flex: 1 }}>
       {children}
 
       {mode.kind === 'soft' ? (
         <View
-          style={[styles.banner, { backgroundColor: colors.ink }]}
+          style={[
+            styles.banner,
+            {
+              bottom: softBottom,
+              backgroundColor: colors.bgElevated,
+              borderColor: colors.line,
+            },
+          ]}
           accessibilityRole="summary"
         >
-          <Text style={[styles.bannerText, { color: colors.bg }]}>{mode.message}</Text>
-          <View style={styles.bannerActions}>
-            <Pressable
-              onPress={() => void dismissSoft()}
-              disabled={busy}
-              style={({ pressed }) => [styles.bannerBtnGhost, pressed && { opacity: 0.85 }]}
-              accessibilityRole="button"
-              accessibilityLabel="Later"
-            >
-              <Text style={[styles.bannerBtnGhostText, { color: colors.bg }]}>Later</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => void applyOta()}
-              disabled={busy}
-              style={({ pressed }) => [
-                styles.bannerBtn,
-                { backgroundColor: colors.accent },
-                pressed && { opacity: 0.9 },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Update now"
-            >
-              {busy ? (
-                <ActivityIndicator color={colors.accentOn} />
-              ) : (
-                <Text style={[styles.bannerBtnText, { color: colors.accentOn }]}>
-                  Update
-                </Text>
-              )}
-            </Pressable>
+          <View style={[styles.bannerIcon, { backgroundColor: colors.accentWash }]}>
+            <RefreshCw size={18} color={colors.glyph} strokeWidth={2.2} />
           </View>
-          {error ? (
-            <Text style={[styles.error, { color: colors.coral }]}>{error}</Text>
-          ) : null}
+          <View style={styles.bannerCopy}>
+            <Text style={[styles.bannerTitle, { color: colors.ink }]}>
+              Update available
+            </Text>
+            <Text style={[styles.bannerText, { color: colors.mute }]}>{mode.message}</Text>
+            {error ? (
+              <Text style={[styles.errorInline, { color: colors.coral }]}>{error}</Text>
+            ) : null}
+            <View style={styles.bannerActions}>
+              <Pressable
+                onPress={() => void dismissSoft()}
+                disabled={busy}
+                hitSlop={8}
+                style={({ pressed }) => [
+                  styles.bannerBtnGhost,
+                  pressed && { opacity: 0.7 },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Later"
+              >
+                <Text style={[styles.bannerBtnGhostText, { color: colors.slate }]}>
+                  Later
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => void applyOta()}
+                disabled={busy}
+                style={({ pressed }) => [
+                  styles.bannerBtn,
+                  { backgroundColor: colors.accent },
+                  pressed && { opacity: 0.9 },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Update now"
+              >
+                {busy ? (
+                  <ActivityIndicator color={colors.accentOn} />
+                ) : (
+                  <Text style={[styles.bannerBtnText, { color: colors.accentOn }]}>
+                    Update
+                  </Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
         </View>
       ) : null}
 
       {mode.kind === 'forceOta' || mode.kind === 'forceStore' ? (
         <View
-          style={[styles.block, { backgroundColor: colors.bg }]}
+          style={[styles.blockScrim, { backgroundColor: colors.overlay }]}
           accessibilityViewIsModal
         >
-          <Text style={[styles.blockBrand, { color: colors.ink }]}>Saavi</Text>
-          <Text style={[styles.blockTitle, { color: colors.ink }]}>
-            {mode.kind === 'forceStore' ? 'Update required' : 'Critical update'}
-          </Text>
-          <Text style={[styles.blockBody, { color: colors.mute }]}>{mode.message}</Text>
-          {error ? (
-            <Text style={[styles.error, { color: colors.coral }]}>{error}</Text>
-          ) : null}
-          <Pressable
-            onPress={() =>
-              mode.kind === 'forceStore'
-                ? void openStore(mode.url)
-                : void applyOta()
-            }
-            disabled={busy}
-            style={({ pressed }) => [
-              styles.blockBtn,
-              { backgroundColor: colors.accent },
-              pressed && { opacity: 0.9 },
+          <View
+            style={[
+              styles.blockCard,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.line,
+                paddingBottom: spacing.xl + Math.max(insets.bottom, spacing.sm),
+              },
             ]}
-            accessibilityRole="button"
-            accessibilityLabel={
-              mode.kind === 'forceStore' ? 'Open store' : 'Update now'
-            }
           >
-            {busy ? (
-              <ActivityIndicator color={colors.accentOn} />
-            ) : (
-              <Text style={[styles.blockBtnText, { color: colors.accentOn }]}>
-                {mode.kind === 'forceStore'
-                  ? Platform.OS === 'ios'
-                    ? 'Open App Store'
-                    : 'Open Play Store'
-                  : 'Update now'}
-              </Text>
-            )}
-          </Pressable>
+            <Text style={[styles.blockTitle, { color: colors.ink }]}>Update required</Text>
+            <Text style={[styles.blockBody, { color: colors.mute }]}>{mode.message}</Text>
+            {error ? (
+              <Text style={[styles.errorInline, { color: colors.coral }]}>{error}</Text>
+            ) : null}
+            <Pressable
+              onPress={() =>
+                mode.kind === 'forceStore'
+                  ? void openStore(mode.url)
+                  : void applyOta()
+              }
+              disabled={busy}
+              style={({ pressed }) => [
+                styles.blockBtn,
+                { backgroundColor: colors.accent },
+                pressed && { opacity: 0.9 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Update"
+            >
+              {busy ? (
+                <ActivityIndicator color={colors.accentOn} />
+              ) : (
+                <Text style={[styles.blockBtnText, { color: colors.accentOn }]}>
+                  Update
+                </Text>
+              )}
+            </Pressable>
+          </View>
         </View>
       ) : null}
     </View>
@@ -256,28 +302,53 @@ function makeStyles() {
   return StyleSheet.create({
     banner: {
       position: 'absolute',
-      left: spacing.md,
-      right: spacing.md,
-      bottom: spacing.xl + 64,
-      borderRadius: radius.md,
-      padding: spacing.md,
-      gap: spacing.sm,
+      left: spacing.lg,
+      right: spacing.lg,
       zIndex: 300,
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: spacing.md,
+      padding: spacing.lg,
+      borderRadius: radius.md,
+      borderWidth: StyleSheet.hairlineWidth,
+      shadowColor: '#000',
+      shadowOpacity: 0.14,
+      shadowRadius: 18,
+      shadowOffset: { width: 0, height: 8 },
+      elevation: 10,
+    },
+    bannerIcon: {
+      width: 36,
+      height: 36,
+      borderRadius: radius.sm,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 2,
+    },
+    bannerCopy: {
+      flex: 1,
+      gap: 4,
+    },
+    bannerTitle: {
+      fontFamily: fonts.sansSemi,
+      fontSize: 16,
+      letterSpacing: -0.2,
     },
     bannerText: {
       fontFamily: fonts.sans,
-      fontSize: 15,
-      lineHeight: 21,
+      fontSize: 14,
+      lineHeight: 20,
     },
     bannerActions: {
       flexDirection: 'row',
       justifyContent: 'flex-end',
       alignItems: 'center',
       gap: spacing.sm,
+      marginTop: spacing.sm,
     },
     bannerBtn: {
-      minWidth: 96,
-      height: 40,
+      minWidth: 88,
+      height: 36,
       borderRadius: radius.sm,
       alignItems: 'center',
       justifyContent: 'center',
@@ -285,52 +356,50 @@ function makeStyles() {
     },
     bannerBtnText: {
       fontFamily: fonts.sansSemi,
-      fontSize: 15,
+      fontSize: 14,
     },
     bannerBtnGhost: {
-      height: 40,
-      paddingHorizontal: spacing.md,
+      height: 36,
+      paddingHorizontal: spacing.sm,
       alignItems: 'center',
       justifyContent: 'center',
     },
     bannerBtnGhostText: {
       fontFamily: fonts.sansMedium,
-      fontSize: 15,
-      opacity: 0.85,
+      fontSize: 14,
     },
-    block: {
+    blockScrim: {
       position: 'absolute',
       top: 0,
       right: 0,
       bottom: 0,
       left: 0,
       zIndex: 400,
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingHorizontal: spacing.xxl,
-      gap: spacing.sm,
+      justifyContent: 'flex-end',
     },
-    blockBrand: {
-      fontFamily: fonts.sansSemi,
-      fontSize: 32,
-      letterSpacing: -1,
-      marginBottom: spacing.sm,
+    blockCard: {
+      borderTopLeftRadius: radius.md,
+      borderTopRightRadius: radius.md,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      paddingHorizontal: spacing.xxl,
+      paddingTop: spacing.xxxl,
+      gap: spacing.sm,
+      alignItems: 'stretch',
+      overflow: 'visible',
     },
     blockTitle: {
       fontFamily: fonts.sansSemi,
       fontSize: 22,
-      letterSpacing: -0.4,
-      textAlign: 'center',
+      lineHeight: 28,
+      letterSpacing: -0.3,
     },
     blockBody: {
       fontFamily: fonts.sans,
-      fontSize: 16,
-      lineHeight: 23,
-      textAlign: 'center',
-      marginBottom: spacing.lg,
+      fontSize: 15,
+      lineHeight: 22,
+      marginBottom: spacing.md,
     },
     blockBtn: {
-      minWidth: 200,
       height: 52,
       borderRadius: radius.md,
       alignItems: 'center',
@@ -341,10 +410,9 @@ function makeStyles() {
       fontFamily: fonts.sansSemi,
       fontSize: 16,
     },
-    error: {
+    errorInline: {
       fontFamily: fonts.sans,
-      fontSize: 14,
-      textAlign: 'center',
+      fontSize: 13,
       marginTop: spacing.xs,
     },
   });

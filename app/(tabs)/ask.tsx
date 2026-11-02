@@ -592,7 +592,9 @@ export default function ChatScreen() {
                     styles.bubbleText,
                     {
                       color: m.role === 'user' ? colors.accent : colors.ink,
-                      textAlign: m.role === 'user' ? 'right' : 'left',
+                      // Bubble sits on the right; glyphs stay left-aligned so
+                      // wraps don't orphan short tokens on a right-ragged line.
+                      textAlign: 'left',
                     },
                   ]}
                 >
@@ -758,6 +760,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   bubble: {
+    maxWidth: '92%',
     paddingHorizontal: spacing.md,
     paddingTop: 10,
     // Extra bottom pad on Android so descenders don't kiss the border

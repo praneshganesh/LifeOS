@@ -114,18 +114,24 @@ export function TimeField({
   value,
   onChange,
   last,
+  /** When `value` is empty, show this instead of inventing a clock (e.g. "All day"). */
+  emptyLabel = 'All day',
 }: {
   label: string;
+  /** HH:mm, or '' / unset for no specific time. */
   value: string;
   onChange: (hhmm: string) => void;
   last?: boolean;
+  emptyLabel?: string;
 }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [iosOpen, setIosOpen] = useState(false);
   const [androidOpen, setAndroidOpen] = useState(false);
-  const selected = hhmmToDate(value);
-  const display = formatQuietHoursLabel(value);
+  const hasTime = Boolean(value && /^\d{1,2}:\d{2}$/.test(value.trim()));
+  // Picker needs a concrete Date; don't pretend the activity has this time until chosen.
+  const selected = hhmmToDate(hasTime ? value : '09:00');
+  const display = hasTime ? formatQuietHoursLabel(value) : emptyLabel;
 
   function onNativeChange(event: DateTimePickerEvent, date?: Date) {
     if (Platform.OS === 'android') {
@@ -141,7 +147,11 @@ export function TimeField({
     return (
       <Pressable
         onPress={() => {
-          const d = hhmmToDate(value);
+          const d = hhmmToDate(hasTime ? value : '09:00');
+          if (!hasTime) {
+            onChange(dateToHhmm(d));
+            return;
+          }
           d.setMinutes(d.getMinutes() + 15);
           onChange(dateToHhmm(d));
         }}
@@ -150,7 +160,9 @@ export function TimeField({
         accessibilityLabel={`${label}, ${display}`}
       >
         <Text style={styles.label}>{label}</Text>
-        <Text style={styles.value}>{display}</Text>
+        <Text style={[styles.value, !hasTime && { color: colors.mute }]}>
+          {display}
+        </Text>
       </Pressable>
     );
   }
@@ -165,7 +177,14 @@ export function TimeField({
           accessibilityLabel={`${label}, ${display}`}
         >
           <Text style={styles.label}>{label}</Text>
-          <Text style={[styles.value, { color: colors.accent }]}>{display}</Text>
+          <Text
+            style={[
+              styles.value,
+              { color: hasTime ? colors.accent : colors.mute },
+            ]}
+          >
+            {display}
+          </Text>
         </Pressable>
         {iosOpen ? (
           <View style={styles.iosWrap}>
@@ -192,7 +211,14 @@ export function TimeField({
         accessibilityLabel={`${label}, ${display}`}
       >
         <Text style={styles.label}>{label}</Text>
-        <Text style={[styles.value, { color: colors.accent }]}>{display}</Text>
+        <Text
+          style={[
+            styles.value,
+            { color: hasTime ? colors.accent : colors.mute },
+          ]}
+        >
+          {display}
+        </Text>
       </Pressable>
       {androidOpen ? (
         <DateTimePicker

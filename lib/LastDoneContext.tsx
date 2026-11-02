@@ -246,6 +246,24 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
     return subscribeSyncApplied((tables) => {
       if (!tables.includes('reminders')) return;
       void loadItems().then((loaded) => {
+        const prev = itemsRef.current;
+        // Skip React updates when sync echoes the same rows — otherwise the
+        // activity detail screen re-binds drafts and visibly jitters every few seconds.
+        const unchanged =
+          prev.length === loaded.length &&
+          prev.every(
+            (p, i) =>
+              p.id === loaded[i]?.id &&
+              p.updatedAt === loaded[i]?.updatedAt &&
+              p.label === loaded[i]?.label &&
+              p.notes === loaded[i]?.notes &&
+              p.remindAt === loaded[i]?.remindAt &&
+              p.remindTime === loaded[i]?.remindTime &&
+              JSON.stringify(p.remindInterval ?? null) ===
+                JSON.stringify(loaded[i]?.remindInterval ?? null) &&
+              (p.logs?.length ?? 0) === (loaded[i]?.logs?.length ?? 0)
+          );
+        if (unchanged) return;
         itemsRef.current = loaded;
         setItems(loaded);
         void syncLastDoneReminders(loaded);

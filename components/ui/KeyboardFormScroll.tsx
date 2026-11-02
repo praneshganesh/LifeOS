@@ -10,6 +10,7 @@ import {
 import {
   Keyboard,
   Platform,
+  Pressable,
   ScrollView,
   TextInput,
   type NativeScrollEvent,
@@ -34,6 +35,7 @@ type Props = {
 /**
  * Form scroll that keeps the focused field above the keyboard, Apple-style.
  * Uses keyboard insets + scrolls the focused input into view when the keyboard opens.
+ * Tapping empty space dismisses the keyboard so sticky Save actions stay reachable.
  */
 export const KeyboardFormScroll = forwardRef<ScrollView, Props>(
   function KeyboardFormScroll(
@@ -44,7 +46,7 @@ export const KeyboardFormScroll = forwardRef<ScrollView, Props>(
       style,
       showsVerticalScrollIndicator = false,
       keyboardShouldPersistTaps = 'handled',
-      keyboardDismissMode = 'interactive',
+      keyboardDismissMode = Platform.OS === 'ios' ? 'interactive' : 'on-drag',
     },
     ref
   ) {
@@ -136,7 +138,13 @@ export const KeyboardFormScroll = forwardRef<ScrollView, Props>(
         onScroll={onScroll}
         scrollEventThrottle={16}
       >
-        {children}
+        <Pressable
+          accessible={false}
+          onPress={Keyboard.dismiss}
+          style={{ flexGrow: 1 }}
+        >
+          {children}
+        </Pressable>
       </ScrollView>
     );
   }

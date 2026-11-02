@@ -34,6 +34,7 @@ import {
   dueClockForItem,
   formatInterval,
   formatRelativeDone,
+  formatRemindClock,
   formatRemindDate,
   hasActivityHistory,
   normalizeRemindTime,
@@ -165,12 +166,29 @@ export default function LastDoneDetailScreen() {
   const lastWeekdaysRef = useRef<number[]>(DEFAULT_WEEKDAYS);
   const lastClockRef = useRef({ hour: 9, minute: 0 });
 
+  // Sync reloads replace item object identity every few seconds. Depend on
+  // stable scalars only, and skip setState when values are unchanged — otherwise
+  // drafts/layout thrash and the screen jitters while idle.
+  const remindAtKey = item?.remindAt ?? '';
+  const remindIntervalKey = item?.remindInterval
+    ? JSON.stringify(item.remindInterval)
+    : '';
+  const itemLabel = item?.label ?? '';
+  const itemNotes = item?.notes ?? '';
+
   useEffect(() => {
     if (!item) return;
-    setLabelDraft(item.label);
-    setNotesDraft(item.notes || '');
-    setCalendarYear(defaultActivityYear(item));
-    setPickingSpecificDate(Boolean(item.remindAt && !item.remindInterval));
+    setLabelDraft((prev) => (prev === itemLabel ? prev : itemLabel));
+    setNotesDraft((prev) => {
+      const next = itemNotes || '';
+      return prev === next ? prev : next;
+    });
+    setCalendarYear((prev) => {
+      const next = defaultActivityYear(item);
+      return prev === next ? prev : next;
+    });
+    const once = Boolean(item.remindAt && !item.remindInterval);
+    setPickingSpecificDate((prev) => (prev === once ? prev : once));
     if (item.remindInterval?.unit === 'weekdays' && item.remindInterval.weekdays?.length) {
       lastWeekdaysRef.current = item.remindInterval.weekdays;
       if (item.remindInterval.hour != null) {
@@ -185,7 +203,8 @@ export default function LastDoneDetailScreen() {
     if (cleaned !== item.label && /^(for|to|about)\s+/i.test(item.label.trim())) {
       void updateActivity(item.id, { label: cleaned }).catch(() => undefined);
     }
-  }, [item?.id, item?.label, item?.notes, item?.logs, item?.remindAt, item?.remindInterval]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stable keys above
+  }, [item?.id, itemLabel, itemNotes, remindAtKey, remindIntervalKey]);
 
   const rhythmMode: 'off' | 'once' | 'weekdays' | 'interval' = item?.remindInterval?.unit === 'weekdays'
     ? 'weekdays'
@@ -477,10 +496,17 @@ export default function LastDoneDetailScreen() {
     bg: hubCardBg(category.color, light, categoryBase!.color),
     dot: light ? 'rgba(40,36,32,0.22)' : 'rgba(255,255,255,0.18)',
   };
+  const onceClock = normalizeRemindTime(item.remindTime);
   const scheduleLine = item.remindInterval
     ? formatInterval(item.remindInterval)
     : item.remindAt
-      ? formatRemindDate(item.remindAt)
+      ? (() => {
+          const day = formatRemindDate(item.remindAt!);
+          if (!onceClock) return `${day} · All day`;
+          const [h, m] = onceClock.split(':').map(Number);
+          const clock = formatRemindClock(h, m);
+          return clock ? `${day} · ${clock}` : day;
+        })()
       : null;
 
   return (
@@ -555,8 +581,11 @@ export default function LastDoneDetailScreen() {
           multiline
           scrollEnabled={notesHeight >= 160}
           onContentSizeChange={(e) => {
-            const next = Math.ceil(e.nativeEvent.contentSize.height) + 28;
-            setNotesHeight(Math.max(72, Math.min(160, next)));
+            const next = Math.max(
+              72,
+              Math.min(160, Math.ceil(e.nativeEvent.contentSize.height) + 28)
+            );
+            setNotesHeight((prev) => (prev === next ? prev : next));
           }}
           style={[
             styles.notesField,
@@ -647,8 +676,9 @@ export default function LastDoneDetailScreen() {
                 />
                 <TimeField
                   label="Time"
-                  value={normalizeRemindTime(item.remindTime) || '09:00'}
+                  value={normalizeRemindTime(item.remindTime) || ''}
                   onChange={(v) => void onRemindTimeChange(v)}
+                  emptyLabel="All day"
                   last
                 />
               </View>
@@ -1025,7 +1055,7 @@ function AlertsSection({
         >
           {fires.map((f, idx) => (
             <View
-              key={`${f.at.toISOString()}-${f.kind}`}
+              key={`${f.kind}-${f.minutesBefore ?? 0}-${f.at.getTime()}`}
               style={[
                 styles.alertFireRow,
                 idx < fires.length - 1 && {

@@ -49,9 +49,9 @@ values (
   '0.0.0',
   true,
   false,
-  'A small update is ready. Restart Saavi to get the latest fixes.',
-  'A critical update is required to continue using Saavi.',
-  'This version of Saavi is no longer supported. Please update from the store.',
+  'A small update is ready. Restart to get the latest fixes.',
+  'A required update is ready with important improvements.',
+  'A newer version is ready with improvements. Update to keep using the app.',
   'https://apps.apple.com/app/id6805518688',
   'https://play.google.com/store/apps/details?id=com.praneshganesh.lifeos'
 )

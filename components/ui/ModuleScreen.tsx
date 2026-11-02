@@ -141,7 +141,9 @@ export function ModuleScreen({
         ref={scrollRef}
         contentContainerStyle={[styles.content, contentStyle]}
         bottomExtra={footer ? Math.min(bottomExtra, 28) : bottomExtra}
-        keyboardShouldPersistTaps="always"
+        // "handled": taps on empty chrome dismiss the keyboard so Save / rows work.
+        // "always" trapped the keyboard open on profile / household name edits.
+        keyboardShouldPersistTaps="handled"
       >
         {hero}
         {children}

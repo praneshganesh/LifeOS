@@ -8,6 +8,7 @@ import {
   isValidElement,
 } from 'react';
 import {
+  Keyboard,
   Platform,
   Pressable,
   StyleSheet,
@@ -93,12 +94,18 @@ export function DetailHero({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const tone = detailTone(accent, resolved === 'light', vividFallback ?? accent);
 
+  const commitTitle = () => {
+    Keyboard.dismiss();
+    onTitleCommit?.();
+  };
+
   const titleNode = editableTitle ? (
     <TextInput
       value={titleValue ?? ''}
       onChangeText={onTitleChange}
       onBlur={onTitleCommit}
-      onSubmitEditing={onTitleCommit}
+      onSubmitEditing={commitTitle}
+      blurOnSubmit
       returnKeyType="done"
       multiline={!trailing}
       numberOfLines={trailing ? 1 : undefined}

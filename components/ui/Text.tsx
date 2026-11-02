@@ -1,6 +1,7 @@
 import { Platform, Text as RNText, type TextProps, type TextStyle } from 'react-native';
 import { fonts } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
+import { softenLineWrap } from '@/lib/textWrap';
 
 type Variant =
   | 'brand'
@@ -84,6 +85,14 @@ export function Text({
     },
   };
 
+  const { children, ...rest } = props;
+  const displayChildren =
+    typeof children === 'string'
+      ? softenLineWrap(children)
+      : typeof children === 'number'
+        ? softenLineWrap(String(children))
+        : children;
+
   return (
     <RNText
       style={[
@@ -93,7 +102,9 @@ export function Text({
         Platform.OS === 'android' ? { includeFontPadding: false } : null,
         style,
       ]}
-      {...props}
-    />
+      {...rest}
+    >
+      {displayChildren}
+    </RNText>
   );
 }

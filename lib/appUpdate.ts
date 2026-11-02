@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Application from 'expo-application';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
@@ -36,28 +37,55 @@ export const DEFAULT_UPDATE_POLICY: AppUpdatePolicy = {
   minAndroidVersionCode: null,
   softOtaEnabled: true,
   forceOta: false,
-  softMessage: 'A small update is ready. Restart Saavi to get the latest fixes.',
-  forceMessage: 'A critical update is required to continue using Saavi.',
+  softMessage: 'A small update is ready. Restart to get the latest fixes.',
+  forceMessage: 'A required update is ready with important improvements.',
   storeMessage:
-    'This version of Saavi is no longer supported. Please update from the store.',
+    'A newer version is ready with improvements. Update to keep using the app.',
   iosStoreUrl: 'https://apps.apple.com/app/id6805518688',
   androidStoreUrl:
     'https://play.google.com/store/apps/details?id=com.praneshganesh.lifeos',
 };
 
+/** User-facing update copy: no em/en dashes (typography preference). */
+export function sanitizeUpdateCopy(raw: string): string {
+  return raw.replace(/[\u2014\u2013]/g, '-').replace(/\s+-\s+/g, ' - ').trim();
+}
+
 export function nativeAppVersion(): string {
   return (
+    Application.nativeApplicationVersion ||
     Constants.nativeApplicationVersion ||
     Constants.expoConfig?.version ||
     '0.0.0'
   );
 }
 
-export function nativeBuildNumber(): number | null {
-  const raw = Constants.nativeBuildVersion;
+function parseBuildNumber(raw: string | null | undefined): number | null {
   if (raw == null || raw === '') return null;
   const n = Number.parseInt(String(raw), 10);
   return Number.isFinite(n) ? n : null;
+}
+
+export function nativeBuildNumber(): number | null {
+  return (
+    parseBuildNumber(Application.nativeBuildVersion) ??
+    parseBuildNumber(Constants.nativeBuildVersion) ??
+    parseBuildNumber(Constants.expoConfig?.ios?.buildNumber) ??
+    parseBuildNumber(
+      Constants.expoConfig?.android?.versionCode != null
+        ? String(Constants.expoConfig.android.versionCode)
+        : null
+    )
+  );
+}
+
+function parseOptionalInt(raw: unknown): number | null {
+  if (typeof raw === 'number' && Number.isFinite(raw)) return Math.trunc(raw);
+  if (typeof raw === 'string' && raw.trim()) {
+    const n = Number.parseInt(raw.trim(), 10);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
 }
 
 export function storeUrlForPlatform(policy: AppUpdatePolicy): string {
@@ -99,25 +127,21 @@ export async function fetchUpdatePolicy(): Promise<AppUpdatePolicy> {
         typeof row.min_native_version === 'string' && row.min_native_version.trim()
           ? row.min_native_version.trim()
           : DEFAULT_UPDATE_POLICY.minNativeVersion,
-      minIosBuild:
-        typeof row.min_ios_build === 'number' ? row.min_ios_build : null,
-      minAndroidVersionCode:
-        typeof row.min_android_version_code === 'number'
-          ? row.min_android_version_code
-          : null,
+      minIosBuild: parseOptionalInt(row.min_ios_build),
+      minAndroidVersionCode: parseOptionalInt(row.min_android_version_code),
       softOtaEnabled: row.soft_ota_enabled !== false,
       forceOta: row.force_ota === true,
       softMessage:
         typeof row.soft_message === 'string' && row.soft_message.trim()
-          ? row.soft_message.trim()
+          ? sanitizeUpdateCopy(row.soft_message)
           : DEFAULT_UPDATE_POLICY.softMessage,
       forceMessage:
         typeof row.force_message === 'string' && row.force_message.trim()
-          ? row.force_message.trim()
+          ? sanitizeUpdateCopy(row.force_message)
           : DEFAULT_UPDATE_POLICY.forceMessage,
       storeMessage:
         typeof row.store_message === 'string' && row.store_message.trim()
-          ? row.store_message.trim()
+          ? sanitizeUpdateCopy(row.store_message)
           : DEFAULT_UPDATE_POLICY.storeMessage,
       iosStoreUrl:
         typeof row.ios_store_url === 'string' && row.ios_store_url.trim()
