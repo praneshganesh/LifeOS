@@ -61,6 +61,12 @@ import { categorizeLastDone, paintLastDoneCategory } from '@/lib/lastDoneCategor
 import { blurActiveElement } from '@/lib/a11y';
 import { type ThemeColors, fonts, radius, shadows, spacing } from '@/constants/theme';
 
+/** ~3 lines of note body + vertical padding; grow until this, then scroll. */
+const NOTES_MIN_H = 72;
+const NOTES_MAX_H = 160;
+/** Sticky Mark done: minHeight 56 + safe-area pad + small gap above the bar. */
+const STICKY_MARK_DONE_CLEARANCE = 56;
+
 function specsEqual(a: UserAlertSpec | undefined, b: UserAlertSpec | null): boolean {
   if (!a && !b) return true;
   if (!a || !b) return false;
@@ -96,7 +102,8 @@ function alertFireTitle(fire: AlertFire): string {
     case 'all_day':
       return 'Morning';
     case 'all_day_followup':
-      return 'Afternoon';
+      // 5:00 PM follow-up — label as Evening (time unchanged).
+      return 'Evening';
     case 'at_time':
       return 'At the time';
     default:
@@ -159,12 +166,25 @@ export default function LastDoneDetailScreen() {
 
   const [labelDraft, setLabelDraft] = useState('');
   const [notesDraft, setNotesDraft] = useState('');
-  const [notesHeight, setNotesHeight] = useState(72);
+  const [notesHeight, setNotesHeight] = useState(NOTES_MIN_H);
+  const notesHeightRef = useRef(NOTES_MIN_H);
+  const notesDraftRef = useRef('');
+  /** Only remeasure height after the user changes the text (not idle layout passes). */
+  const notesRemeasureRef = useRef(false);
   const [calendarYear, setCalendarYear] = useState(() => new Date().getFullYear());
   const [pickingSpecificDate, setPickingSpecificDate] = useState(false);
   /** Remember last custom days so switching away from Weekdays isn’t a one-way trip. */
   const lastWeekdaysRef = useRef<number[]>(DEFAULT_WEEKDAYS);
   const lastClockRef = useRef({ hour: 9, minute: 0 });
+
+  // Empty notes always sit at minHeight. Never size from placeholder measurement.
+  useEffect(() => {
+    if (notesDraft.trim()) return;
+    notesRemeasureRef.current = false;
+    if (notesHeightRef.current === NOTES_MIN_H) return;
+    notesHeightRef.current = NOTES_MIN_H;
+    setNotesHeight(NOTES_MIN_H);
+  }, [notesDraft]);
 
   // Sync reloads replace item object identity every few seconds. Depend on
   // stable scalars only, and skip setState when values are unchanged — otherwise
@@ -181,7 +201,10 @@ export default function LastDoneDetailScreen() {
     setLabelDraft((prev) => (prev === itemLabel ? prev : itemLabel));
     setNotesDraft((prev) => {
       const next = itemNotes || '';
-      return prev === next ? prev : next;
+      if (prev === next) return prev;
+      notesDraftRef.current = next;
+      notesRemeasureRef.current = Boolean(next.trim());
+      return next;
     });
     setCalendarYear((prev) => {
       const next = defaultActivityYear(item);
@@ -517,7 +540,12 @@ export default function LastDoneDetailScreen() {
           styles.content,
           {
             paddingTop: Math.max(insets.top, 12) + spacing.xs,
-            paddingBottom: DETAIL_DOCK_PAD + insets.bottom,
+            // Sticky Mark done includes its own safe-area pad; clear the bar + gap.
+            paddingBottom: finishedOnce
+              ? DETAIL_DOCK_PAD + insets.bottom
+              : STICKY_MARK_DONE_CLEARANCE +
+                Math.max(insets.bottom, 12) +
+                spacing.lg,
           },
         ]}
         showsVerticalScrollIndicator={false}
@@ -577,20 +605,34 @@ export default function LastDoneDetailScreen() {
 
         <TextInput
           value={notesDraft}
-          onChangeText={setNotesDraft}
+          onChangeText={(next) => {
+            notesDraftRef.current = next;
+            notesRemeasureRef.current = Boolean(next.trim());
+            setNotesDraft(next);
+          }}
           multiline
-          scrollEnabled={notesHeight >= 160}
+          scrollEnabled={notesHeight >= NOTES_MAX_H}
+          // Height only after text changes — never onLayout / idle contentSize churn.
+          // Empty stays at minHeight so placeholder measurement can't loop.
           onContentSizeChange={(e) => {
+            if (!notesDraftRef.current.trim()) return;
+            if (!notesRemeasureRef.current) return;
+            // contentSize is the text block; vertical padding lives in styles.notesField.
+            const measured = Math.ceil(e.nativeEvent.contentSize.height);
             const next = Math.max(
-              72,
-              Math.min(160, Math.ceil(e.nativeEvent.contentSize.height) + 28)
+              NOTES_MIN_H,
+              Math.min(NOTES_MAX_H, measured + 28)
             );
-            setNotesHeight((prev) => (prev === next ? prev : next));
+            notesRemeasureRef.current = false;
+            if (Math.abs(next - notesHeightRef.current) <= 1) return;
+            notesHeightRef.current = next;
+            setNotesHeight(next);
           }}
           style={[
             styles.notesField,
             {
               height: notesHeight,
+              maxHeight: NOTES_MAX_H,
               color: colors.ink,
               backgroundColor: colors.surfaceSoft,
               borderColor: colors.lineStrong,
@@ -1267,7 +1309,7 @@ function makeStyles(colors: ThemeColors) {
       // 16px+ avoids iOS Safari auto-zoom on focus
       fontSize: 16,
       lineHeight: 22,
-      minHeight: 72,
+      minHeight: NOTES_MIN_H,
       textAlignVertical: 'top',
       marginBottom: spacing.lg,
     },

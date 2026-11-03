@@ -114,97 +114,41 @@ function addMinutes(d: Date, mins: number): Date {
   return new Date(d.getTime() + mins * 60_000);
 }
 
+/**
+ * Automatic schedule (preview + OS planning):
+ * - All-day: 7:00 PM day before + 9:00 AM on the due date
+ * - Timed: 7:00 PM day before + 1 hour before due
+ * Past / at-or-after-due fires are dropped in applyFilters / computeAlertSchedule.
+ */
 function rawAutoAlerts(
   dueDate: string,
   dueTime: { hour: number; minute: number } | null | undefined
 ): AlertFire[] {
   const p = parseDueDate(dueDate);
   if (!p) return [];
-  const band = timeBandForDue(dueTime);
   const due = dueDateTime(dueDate, dueTime);
   if (!due) return [];
 
-  if (band === 'all_day') {
-    return [
-      {
-        at: atLocal(p.y, p.m, p.d, 9, 0),
-        kind: 'all_day',
-      },
-      {
-        at: atLocal(p.y, p.m, p.d, 17, 0),
-        kind: 'all_day_followup',
-      },
-    ];
-  }
-
-  const out: AlertFire[] = [];
-
-  if (band === 'early_morning') {
-    out.push({
+  const out: AlertFire[] = [
+    {
       at: atLocal(p.y, p.m, p.d - 1, 19, 0),
       kind: 'prev_day',
-    });
-    out.push({
-      at: addMinutes(due, -15),
-      kind: 'mins_before',
-      minutesBefore: 15,
-      isFinal: true,
-    });
-    return out;
-  }
+    },
+  ];
 
-  if (band === 'morning') {
-    out.push({
-      at: atLocal(p.y, p.m, p.d - 1, 19, 0),
-      kind: 'prev_day',
-    });
-    out.push({
-      at: addMinutes(due, -120),
-      kind: 'hours_before',
-      minutesBefore: 120,
-    });
-    out.push({
-      at: addMinutes(due, -15),
-      kind: 'mins_before',
-      minutesBefore: 15,
-      isFinal: true,
-    });
-    return out;
-  }
-
-  if (band === 'afternoon') {
-    out.push({
-      at: addMinutes(due, -24 * 60),
-      kind: 'prev_day',
-      minutesBefore: 24 * 60,
-    });
+  if (!dueTime) {
     out.push({
       at: atLocal(p.y, p.m, p.d, 9, 0),
-      kind: 'morning_of',
-    });
-    out.push({
-      at: addMinutes(due, -30),
-      kind: 'mins_before',
-      minutesBefore: 30,
-      isFinal: true,
+      kind: 'all_day',
     });
     return out;
   }
 
-  // evening
-  out.push({
-    at: atLocal(p.y, p.m, p.d, 9, 0),
-    kind: 'morning_of',
-  });
   out.push({
     at: addMinutes(due, -60),
     kind: 'hours_before',
     minutesBefore: 60,
-  });
-  out.push({
-    at: addMinutes(due, -15),
-    kind: 'mins_before',
-    minutesBefore: 15,
+    // Day-of nudge — allow through quiet hours like the old final alert.
     isFinal: true,
   });
   return out;
@@ -269,7 +213,8 @@ function resolveUserAlert(
 function applyFilters(
   fires: AlertFire[],
   input: ComputeAlertInput,
-  due: Date | null
+  due: Date | null,
+  opts?: { dropAtOrAfterDue?: boolean }
 ): AlertFire[] {
   const now = input.now ?? new Date();
   const createdAt = input.createdAt;
@@ -281,11 +226,17 @@ function applyFilters(
     input.quietHoursEnd,
     DEFAULT_NOTIFICATION_PREFS.quietHoursEnd
   );
+  const dueMs = due?.getTime() ?? null;
 
   let list = fires
     .filter((f) => !Number.isNaN(f.at.getTime()))
+    // Skip anything already in the past (covers day-before when create is later).
     .filter((f) => f.at.getTime() > now.getTime())
     .filter((f) => f.at.getTime() - createdAt.getTime() >= CREATE_GAP_MS)
+    .filter((f) => {
+      if (!opts?.dropAtOrAfterDue || dueMs == null) return true;
+      return f.at.getTime() < dueMs;
+    })
     .filter((f) => {
       if (f.isFinal) return true;
       return !isInQuietHours(f.at, qStart, qEnd);
@@ -293,13 +244,13 @@ function applyFilters(
     .sort((a, b) => a.at.getTime() - b.at.getTime());
 
   // Consolidate within 30 minutes, keep closer to deadline.
-  const dueMs = due?.getTime() ?? Number.POSITIVE_INFINITY;
+  const consolidateDue = dueMs ?? Number.POSITIVE_INFINITY;
   const consolidated: AlertFire[] = [];
   for (const f of list) {
     const prev = consolidated[consolidated.length - 1];
     if (prev && Math.abs(f.at.getTime() - prev.at.getTime()) < CONSOLIDATE_MS) {
-      const prevDist = Math.abs(dueMs - prev.at.getTime());
-      const nextDist = Math.abs(dueMs - f.at.getTime());
+      const prevDist = Math.abs(consolidateDue - prev.at.getTime());
+      const nextDist = Math.abs(consolidateDue - f.at.getTime());
       if (nextDist < prevDist) {
         consolidated[consolidated.length - 1] = f;
       }
@@ -343,15 +294,41 @@ export function computeAlertSchedule(input: ComputeAlertInput): AlertFire[] {
   const mode = input.alertMode ?? 'auto';
   let raw: AlertFire[] = [];
 
-  if (mode === 'custom' && input.userAlerts?.length) {
-    raw = input.userAlerts
+  const auto = !(mode === 'custom' && input.userAlerts?.length);
+  if (!auto) {
+    raw = input.userAlerts!
       .map((s) => resolveUserAlert(s, input.dueDate, dueTime))
       .filter((x): x is AlertFire => Boolean(x));
   } else {
     raw = rawAutoAlerts(input.dueDate, dueTime);
   }
 
-  return applyFilters(raw, input, due);
+  // Auto never fires at/after due (custom may still use "At the time").
+  // All-day due is end-of-day (23:59:59), so the 9:00 AM due-day alert stays.
+  let list = applyFilters(raw, input, due, { dropAtOrAfterDue: auto });
+
+  // If every auto alert was dropped (created too close to due, day-before past,
+  // etc.), keep one last chance so the reminder can still fire.
+  // Timed → due clock. All-day → 7:00 PM on the due day (never 23:59 — that
+  // instant is only the filtering boundary). If 7 PM is already past, nothing.
+  if (auto && list.length === 0 && due) {
+    const now = input.now ?? new Date();
+    if (dueTime) {
+      if (due.getTime() > now.getTime()) {
+        list = [{ at: due, kind: 'at_time', isFinal: true }];
+      }
+    } else {
+      const p = parseDueDate(input.dueDate);
+      if (p) {
+        const evening = atLocal(p.y, p.m, p.d, 19, 0);
+        if (evening.getTime() > now.getTime() && evening.getTime() < due.getTime()) {
+          list = [{ at: evening, kind: 'at_time', isFinal: true }];
+        }
+      }
+    }
+  }
+
+  return list;
 }
 
 export function formatAlertFireCopy(
@@ -481,7 +458,7 @@ export const CUSTOM_ALERT_PRESETS: {
   },
   {
     id: 'all_pm',
-    label: 'Afternoon · 5:00 PM',
+    label: 'Evening · 5:00 PM',
     spec: { kind: 'all_day_1700' },
     allDayOnly: true,
   },
@@ -555,7 +532,10 @@ export function defaultCustomAlertSeed(
   dueTime?: { hour: number; minute: number } | null
 ): UserAlertSpec[] {
   if (dueTime) {
-    return [{ kind: 'morning_of_0900' }, { kind: 'prev_day_1900' }];
+    return [
+      { kind: 'prev_day_1900' },
+      { kind: 'hours_before', minutesBefore: 60 },
+    ];
   }
-  return [{ kind: 'all_day_0900' }, { kind: 'all_day_1700' }];
+  return [{ kind: 'prev_day_1900' }, { kind: 'all_day_0900' }];
 }

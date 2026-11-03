@@ -13,7 +13,10 @@ import {
 } from '@/lib/notificationPrefs';
 import { planDatedReminderFires } from '@/lib/reminderAlerts';
 
-/** iOS keeps only 64 pending local notifications per app; leave room for others. */
+/** iOS keeps only 64 pending local notifications per app. */
+export const IOS_PENDING_NOTIFICATION_CAP = 64;
+
+/** Per weekday-series date expansion before the global cap trims. */
 const MAX_SERIES_OCCURRENCES = 14;
 
 const ID_PREFIX = 'lifeos-ld-';
@@ -101,6 +104,135 @@ export async function cancelLastDoneReminder(itemId: string): Promise<void> {
   }
 }
 
+type PlannedLocal = {
+  /** Soonest fire — used to pick the global soonest-64. */
+  sortAt: number;
+  identifier: string;
+  title: string;
+  body: string;
+  itemId: string;
+  /** DATE trigger instant, or null for WEEKLY. */
+  date: Date | null;
+  weekly?: { weekday: number; hour: number; minute: number };
+};
+
+/** Next local occurrence of a JS weekday (0=Sun) at hour:minute after `from`. */
+function nextWeeklyFire(
+  jsDay: number,
+  hour: number,
+  minute: number,
+  from: Date
+): Date {
+  for (let i = 0; i < 8; i++) {
+    const cand = new Date(from);
+    cand.setDate(from.getDate() + i);
+    cand.setHours(hour, minute, 0, 0);
+    if (cand.getDay() === jsDay && cand.getTime() > from.getTime()) return cand;
+  }
+  const fallback = new Date(from);
+  fallback.setDate(from.getDate() + 7);
+  fallback.setHours(hour, minute, 0, 0);
+  return fallback;
+}
+
+/**
+ * Build every pending last-done local notification (one-shot dated, finite
+ * weekday dates, and indefinite weekly triggers). Includes category "Other"
+ * / once-schedule items — same `lifeos-ld-*` namespace.
+ */
+export function planLastDoneLocals(
+  items: LastDoneItem[],
+  prefs: NotificationPrefs,
+  now = new Date()
+): PlannedLocal[] {
+  const out: PlannedLocal[] = [];
+
+  for (const item of items) {
+    if (item.onceDone && !item.remindInterval) continue;
+
+    if (
+      item.remindInterval?.unit === 'weekdays' &&
+      item.remindInterval.weekdays?.length
+    ) {
+      if (reminderSeriesEnded(item.remindInterval)) continue;
+
+      const hour = item.remindInterval.hour ?? 9;
+      const minute = item.remindInterval.minute ?? 0;
+      const body = formatInterval(item.remindInterval);
+
+      if (item.remindInterval.endsAt) {
+        const dates = listWeekdayOccurrences(
+          item.remindInterval.weekdays,
+          hour,
+          minute,
+          seriesAnchorDate(item.remindInterval.startsAt),
+          item.remindInterval.endsAt,
+          MAX_SERIES_OCCURRENCES
+        );
+        for (const when of dates) {
+          if (when.getTime() <= now.getTime()) continue;
+          out.push({
+            sortAt: when.getTime(),
+            identifier: `${reminderId(item.id)}-d-${localStamp(when)}`,
+            title: item.label,
+            body,
+            itemId: item.id,
+            date: when,
+          });
+        }
+        continue;
+      }
+
+      for (const jsDay of item.remindInterval.weekdays) {
+        const next = nextWeeklyFire(jsDay, hour, minute, now);
+        out.push({
+          sortAt: next.getTime(),
+          identifier: `${reminderId(item.id)}-wd-${jsDay}`,
+          title: item.label,
+          body,
+          itemId: item.id,
+          date: null,
+          weekly: { weekday: jsDay + 1, hour, minute },
+        });
+      }
+      continue;
+    }
+
+    if (!item.remindAt) continue;
+
+    const fires = planDatedReminderFires(item, prefs, now);
+    for (const fire of fires) {
+      out.push({
+        sortAt: fire.at.getTime(),
+        identifier: `${reminderId(item.id)}-a-${fire.at.getTime()}`,
+        title: fire.title,
+        body: fire.body,
+        itemId: item.id,
+        date: fire.at,
+      });
+    }
+  }
+
+  return out;
+}
+
+async function ensureAndroidChannel() {
+  if (Platform.OS !== 'android') return null;
+  const Notifications = await notifications();
+  await Notifications.setNotificationChannelAsync('lifeos-reminders', {
+    name: 'Saavi reminders',
+    importance: Notifications.AndroidImportance.DEFAULT,
+    vibrationPattern: [0, 250, 250, 250],
+    lightColor: '#5F7350',
+  });
+  return { channelId: 'lifeos-reminders' as const };
+}
+
+/**
+ * Schedule one item’s locals. Prefer `syncLastDoneReminders` so the global
+ * soonest-64 cap is applied; this path still cancels+rebuilds that item only
+ * (used when a full list isn’t handy).
+ */
 export async function scheduleLastDoneReminder(
   item: LastDoneItem
 ): Promise<void> {
@@ -130,123 +262,79 @@ export async function scheduleLastDoneReminder(
 
   try {
     const Notifications = await notifications();
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('lifeos-reminders', {
-        name: 'Saavi reminders',
-        importance: Notifications.AndroidImportance.DEFAULT,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#5F7350',
-      });
-    }
-
+    const channel = await ensureAndroidChannel();
     await cancelLastDoneReminder(item.id);
 
-    const channel =
-      Platform.OS === 'android' ? { channelId: 'lifeos-reminders' } : null;
-
-    if (
-      item.remindInterval?.unit === 'weekdays' &&
-      item.remindInterval.weekdays?.length
-    ) {
-      if (reminderSeriesEnded(item.remindInterval)) {
-        return;
-      }
-
-      const hour = item.remindInterval.hour ?? 9;
-      const minute = item.remindInterval.minute ?? 0;
-      const body = formatInterval(item.remindInterval);
-
-      // Finite series: schedule each remaining occurrence as a DATE trigger.
-      if (item.remindInterval.endsAt) {
-        const dates = listWeekdayOccurrences(
-          item.remindInterval.weekdays,
-          hour,
-          minute,
-          seriesAnchorDate(item.remindInterval.startsAt),
-          item.remindInterval.endsAt,
-          MAX_SERIES_OCCURRENCES
-        );
-        for (const when of dates) {
-          await Notifications.scheduleNotificationAsync({
-            identifier: `${reminderId(item.id)}-d-${localStamp(when)}`,
-            content: {
-              title: item.label,
-              body,
-              data: {
-                type: 'last_done',
-                itemId: item.id,
-                href: `/last-done/${item.id}`,
-              },
-              sound: true,
-              ...channel,
-            },
-            trigger: {
-              type: Notifications.SchedulableTriggerInputTypes.DATE,
-              date: when,
-              ...channel,
-            },
-          });
-        }
-        return;
-      }
-
-      // Indefinite: one weekly OS trigger per weekday.
-      for (const jsDay of item.remindInterval.weekdays) {
-        await Notifications.scheduleNotificationAsync({
-          identifier: `${reminderId(item.id)}-wd-${jsDay}`,
-          content: {
-            title: item.label,
-            body,
-            data: {
-              type: 'last_done',
-              itemId: item.id,
-              href: `/last-done/${item.id}`,
-            },
-            sound: true,
-            ...channel,
-          },
-          trigger: {
-            type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
-            weekday: jsDay + 1,
-            hour,
-            minute,
-            ...channel,
-          },
-        });
-      }
-      return;
-    }
-
-    if (!item.remindAt) return;
-
-    const fires = planDatedReminderFires(item, prefs);
-    for (const fire of fires) {
-      await Notifications.scheduleNotificationAsync({
-        identifier: `${reminderId(item.id)}-a-${fire.at.getTime()}`,
-        content: {
-          title: fire.title,
-          body: fire.body,
-          data: {
-            type: 'last_done',
-            itemId: item.id,
-            href: `/last-done/${item.id}`,
-          },
-          sound: true,
-          ...channel,
-        },
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.DATE,
-          date: fire.at,
-          ...channel,
-        },
-      });
+    const planned = planLastDoneLocals([item], prefs).sort(
+      (a, b) => a.sortAt - b.sortAt
+    );
+    for (const p of planned.slice(0, IOS_PENDING_NOTIFICATION_CAP)) {
+      await scheduleOne(Notifications, p, channel);
     }
   } catch {
     /* ignore, simulator / denied */
   }
 }
 
-/** Reschedule all Last Done reminders after load or bulk change. */
+async function scheduleOne(
+  Notifications: typeof import('expo-notifications'),
+  p: PlannedLocal,
+  channel: { channelId: string } | null
+) {
+  if (p.weekly) {
+    await Notifications.scheduleNotificationAsync({
+      identifier: p.identifier,
+      content: {
+        title: p.title,
+        body: p.body,
+        data: {
+          type: 'last_done',
+          itemId: p.itemId,
+          href: `/last-done/${p.itemId}`,
+        },
+        sound: true,
+        ...channel,
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
+        weekday: p.weekly.weekday,
+        hour: p.weekly.hour,
+        minute: p.weekly.minute,
+        ...channel,
+      },
+    });
+    return;
+  }
+  if (!p.date) return;
+  await Notifications.scheduleNotificationAsync({
+    identifier: p.identifier,
+    content: {
+      title: p.title,
+      body: p.body,
+      data: {
+        type: 'last_done',
+        itemId: p.itemId,
+        href: `/last-done/${p.itemId}`,
+      },
+      sound: true,
+      ...channel,
+    },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
+      date: p.date,
+      ...channel,
+    },
+  });
+}
+
+/**
+ * Cancel every `lifeos-ld-*` notification and rebuild from items, keeping only
+ * the soonest {@link IOS_PENDING_NOTIFICATION_CAP}. Call on load, foreground,
+ * and after bulk changes so later alerts fill in as earlier ones fire.
+ *
+ * Covers one-off / "Other" / once-schedule activities (dated `remindAt`) and
+ * weekday series — same namespace, same rebuild.
+ */
 export async function syncLastDoneReminders(
   items: LastDoneItem[]
 ): Promise<void> {
@@ -262,10 +350,16 @@ export async function syncLastDoneReminders(
       }
     }
     if (!prefs.push) return;
-    for (const item of items) {
-      if (item.remindAt || item.remindInterval?.unit === 'weekdays') {
-        await scheduleLastDoneReminder(item);
-      }
+
+    const granted = await ensureNotificationPermissions();
+    if (!granted) return;
+
+    const channel = await ensureAndroidChannel();
+    const planned = planLastDoneLocals(items, prefs).sort(
+      (a, b) => a.sortAt - b.sortAt
+    );
+    for (const p of planned.slice(0, IOS_PENDING_NOTIFICATION_CAP)) {
+      await scheduleOne(Notifications, p, channel);
     }
   } catch {
     /* ignore */

@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   appendLog,
@@ -29,7 +30,6 @@ import { finalizeReminderLabel } from '@/lib/dates';
 import {
   cancelLastDoneReminder,
   ensureNotificationHandler,
-  scheduleLastDoneReminder,
   syncLastDoneReminders,
 } from '@/lib/lastDoneNotifications';
 import {
@@ -224,6 +224,10 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
   /** Always-current list so rapid logDone / Talk turns don’t drop writes. */
   const itemsRef = useRef<LastDoneItem[]>([]);
 
+  const resyncReminders = useCallback(() => {
+    void syncLastDoneReminders(itemsRef.current);
+  }, []);
+
   useEffect(() => {
     let alive = true;
     void ensureNotificationHandler();
@@ -240,6 +244,15 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
       alive = false;
     };
   }, []);
+
+  // Rebuild soonest-64 when returning to foreground so later alerts fill in.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      resyncReminders();
+    });
+    return () => sub.remove();
+  }, [resyncReminders]);
 
   // Reload when the sync engine merges remote rows into the local store.
   useEffect(() => {
@@ -286,7 +299,10 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
         if (!existing) throw new Error('Item not found');
         const updated = touch(applyLog(existing, input));
         await persist(list.map((i) => (i.id === updated.id ? updated : i)));
-        void scheduleLastDoneReminder(updated);
+        // Drop this item's pending locals (incl. overdue nudge) immediately;
+        // full sync then rebuilds others / rolled series under the 64-cap.
+        void cancelLastDoneReminder(updated.id);
+        resyncReminders();
         void queueReminderUpsert(updated);
         return updated;
       }
@@ -327,18 +343,19 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
       if (match) {
         const updated = touch(applyLog(match, { ...input, id: match.id }));
         await persist(list.map((i) => (i.id === updated.id ? updated : i)));
-        void scheduleLastDoneReminder(updated);
+        void cancelLastDoneReminder(updated.id);
+        resyncReminders();
         void queueReminderUpsert(updated);
         return updated;
       }
 
       const created = touch(applyLog(null, { ...input, label }));
       await persist([created, ...list]);
-      void scheduleLastDoneReminder(created);
+      resyncReminders();
       void queueReminderUpsert(created);
       return created;
     },
-    [persist]
+    [persist, resyncReminders]
   );
 
   const setReminder = useCallback(
@@ -401,7 +418,7 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
         });
         if (!clock) delete updated.remindTime;
         await persist(list.map((i) => (i.id === updated.id ? updated : i)));
-        void scheduleLastDoneReminder(updated);
+        resyncReminders();
         void queueReminderUpsert(updated);
         return updated;
       }
@@ -419,11 +436,11 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
         })
       );
       await persist([created, ...list]);
-      void scheduleLastDoneReminder(created);
+      resyncReminders();
       void queueReminderUpsert(created);
       return created;
     },
-    [persist]
+    [persist, resyncReminders]
   );
 
   const updateActivity = useCallback(
@@ -547,21 +564,27 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
       }
       updated = touch(updated);
       await persist(list.map((i) => (i.id === id ? updated : i)));
-      if (updated.remindAt) void scheduleLastDoneReminder(updated);
-      else void cancelLastDoneReminder(id);
+      // Full rebuild so one-offs and series share the soonest-64 cap.
+      if (updated.remindAt || updated.remindInterval?.unit === 'weekdays') {
+        resyncReminders();
+      } else {
+        void cancelLastDoneReminder(id);
+      }
       void queueReminderUpsert(updated);
       return updated;
     },
-    [persist]
+    [persist, resyncReminders]
   );
 
   const remove = useCallback(
     async (id: string) => {
       await persist(itemsRef.current.filter((i) => i.id !== id));
       void cancelLastDoneReminder(id);
+      // Refill soonest-64 from remaining items.
+      resyncReminders();
       void queueReminderDelete(id);
     },
-    [persist]
+    [persist, resyncReminders]
   );
 
   const removeLog = useCallback(

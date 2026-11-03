@@ -44,24 +44,35 @@ describe('dated reminder fires', () => {
     assert.deepEqual(fires, []);
   });
 
-  it('all-day reminder due today after 5 PM only gets the morning-after overdue nudge', () => {
+  it('all-day reminder due today at 6 PM keeps 7pm fallback plus overdue nudge', () => {
     const now = new Date(2026, 9, 18, 18, 0);
     const fires = planDatedReminderFires({ ...base, remindAt: '2026-10-18' }, prefs, now);
-    assert.deepEqual(fires.map((f) => stamp(f.at)), ['2026-10-19 09:00']);
+    assert.deepEqual(fires.map((p) => stamp(p.at)), [
+      '2026-10-18 19:00',
+      '2026-10-19 09:00',
+    ]);
+    assert.match(fires[1]!.body, /overdue/);
+  });
+
+  it('all-day reminder due today after 7 PM has only the overdue nudge', () => {
+    const now = new Date(2026, 9, 18, 20, 0);
+    const fires = planDatedReminderFires({ ...base, remindAt: '2026-10-18' }, prefs, now);
+    assert.deepEqual(fires.map((p) => stamp(p.at)), ['2026-10-19 09:00']);
     assert.match(fires[0]!.body, /overdue/);
   });
+
 
   it('upcoming all-day reminder follows the preview schedule plus the overdue nudge', () => {
     const now = new Date(2026, 9, 18, 12, 0);
     const fires = planDatedReminderFires({ ...base, remindAt: '2026-10-20' }, prefs, now);
     assert.deepEqual(fires.map((f) => stamp(f.at)), [
+      '2026-10-19 19:00',
       '2026-10-20 09:00',
-      '2026-10-20 17:00',
       '2026-10-21 09:00',
     ]);
   });
 
-  it('respects custom quiet hours for non-final alerts', () => {
+  it('respects custom quiet hours for non-final all-day morning alert', () => {
     const now = new Date(2026, 9, 18, 12, 0);
     const fires = planDatedReminderFires(
       { ...base, remindAt: '2026-10-20' },
@@ -69,6 +80,7 @@ describe('dated reminder fires', () => {
       now
     );
     assert.ok(!fires.some((f) => stamp(f.at) === '2026-10-20 09:00'));
+    assert.ok(fires.some((f) => stamp(f.at) === '2026-10-19 19:00'));
   });
 });
 
