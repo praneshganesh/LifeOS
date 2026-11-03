@@ -133,12 +133,61 @@ export function nextWeekdayKey(weekday: string, from = new Date()): string | und
   return localDayKey(d);
 }
 
+/** Full names + common abbreviations; longer aliases first for regex alternation. */
 const MONTHS =
-  'january|february|march|april|may|june|july|august|september|october|november|december';
+  'january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sept|sep|october|oct|november|nov|december|dec';
 
 function monthIndex(name: string): number | undefined {
-  const i = MONTHS.split('|').indexOf(name.trim().toLowerCase());
-  return i >= 0 ? i : undefined;
+  const key = name.trim().toLowerCase();
+  const aliases: Record<string, number> = {
+    january: 0,
+    jan: 0,
+    february: 1,
+    feb: 1,
+    march: 2,
+    mar: 2,
+    april: 3,
+    apr: 3,
+    may: 4,
+    june: 5,
+    jun: 5,
+    july: 6,
+    jul: 6,
+    august: 7,
+    aug: 7,
+    september: 8,
+    sept: 8,
+    sep: 8,
+    october: 9,
+    oct: 9,
+    november: 10,
+    nov: 10,
+    december: 11,
+    dec: 11,
+  };
+  return aliases[key];
+}
+
+/**
+ * Local Date for a YYYY-MM-DD key (noon by default). Used so relative reminder
+ * math follows the user's calendar day, not the server's UTC clock.
+ */
+export function dateFromLocalDayKey(
+  day: string,
+  hour = 12,
+  minute = 0
+): Date {
+  const m = day.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return new Date();
+  return new Date(
+    Number(m[1]),
+    Number(m[2]) - 1,
+    Number(m[3]),
+    hour,
+    minute,
+    0,
+    0
+  );
 }
 
 /** Parse "10th November", "November 10", "on the 10th of November" relative to `from`. */
@@ -178,11 +227,72 @@ function calendarDayFromUtterance(text: string, from = new Date()): string | und
     return localDayKey(new Date(year, month, day));
   }
 
+  // DD/MM or DD/MM/YYYY (day-first — UAE / Ask locale). "12/11" → 12 Nov.
+  const slash = text.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
+  if (slash) {
+    const day = Number(slash[1]);
+    const month = Number(slash[2]) - 1;
+    if (day < 1 || day > 31 || month < 0 || month > 11) return undefined;
+    let year = from.getFullYear();
+    if (slash[3]) {
+      year = Number(slash[3]);
+      if (year < 100) year += 2000;
+    }
+    const candidate = new Date(year, month, day);
+    if (candidate.getMonth() !== month || candidate.getDate() !== day) return undefined;
+    if (!slash[3] && candidate < startOfLocalDay(from)) {
+      year += 1;
+    }
+    return localDayKey(new Date(year, month, day));
+  }
+
   return undefined;
 }
 
 function startOfLocalDay(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+/**
+ * True when the utterance appears to name a due day (so model remindAt may be
+ * consulted). Requires a day with a month — bare "may" (modal verb) does not count.
+ */
+export function utteranceNamesRemindDate(text?: string): boolean {
+  if (!text?.trim()) return false;
+  const t = text;
+  if (/\b(today|tomorrow|tonight)\b/i.test(t)) return true;
+  if (
+    /\bnext\s+(week|month|year|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/i.test(
+      t
+    )
+  ) {
+    return true;
+  }
+  if (
+    /\b(?:on|this)\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/i.test(
+      t
+    )
+  ) {
+    return true;
+  }
+  if (/\bin\s+\d{1,3}\s+days?\b/i.test(t)) return true;
+  if (/\b\d{4}-\d{2}-\d{2}\b/.test(t)) return true;
+  if (/\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/.test(t)) return true;
+  // Day + month (abbrev or full). Avoid matching modal "may" alone.
+  if (
+    new RegExp(
+      `\\b\\d{1,2}(?:st|nd|rd|th)?\\s+(?:of\\s+)?(?:${MONTHS})\\b`,
+      'i'
+    ).test(t)
+  ) {
+    return true;
+  }
+  if (
+    new RegExp(`\\b(?:${MONTHS})\\s+\\d{1,2}(?:st|nd|rd|th)?\\b`, 'i').test(t)
+  ) {
+    return true;
+  }
+  return false;
 }
 
 /** Absolute YYYY-MM-DD from speech: next Tuesday, tomorrow, in 3 days, ISO. */
@@ -477,15 +587,20 @@ export function looksLikeReminder(text?: string): boolean {
 
 function stripReminderDatePhrases(s: string): string {
   return s
+    // "on/by/for 12th Nov", bare "12th November", "the 12th of Nov"
     .replace(
       new RegExp(
-        `\\b(?:on|by)\\s+(?:the\\s+)?\\d{1,2}(?:st|nd|rd|th)?\\s+(?:of\\s+)?(?:${MONTHS})(?:\\s+\\d{4})?\\b`,
+        `\\b(?:(?:on|by|for)\\s+)?(?:the\\s+)?\\d{1,2}(?:st|nd|rd|th)?\\s+(?:of\\s+)?(?:${MONTHS})(?:\\s+\\d{4})?\\b`,
         'gi'
       ),
       ''
     )
+    // "on/by/for Nov 12", bare "November 12th"
     .replace(
-      new RegExp(`\\b(?:on|by)\\s+(?:${MONTHS})\\s+\\d{1,2}(?:st|nd|rd|th)?(?:\\s+\\d{4})?\\b`, 'gi'),
+      new RegExp(
+        `\\b(?:(?:on|by|for)\\s+)?(?:${MONTHS})\\s+\\d{1,2}(?:st|nd|rd|th)?(?:\\s+\\d{4})?\\b`,
+        'gi'
+      ),
       ''
     )
     .replace(
@@ -514,6 +629,10 @@ function stripReminderDatePhrases(s: string): string {
     .replace(/\b(tomorrow|today)\b/gi, '')
     .replace(/\bin\s+\d+\s+days?\b/gi, '')
     .replace(/\b\d{4}-\d{2}-\d{2}\b/g, '')
+    .replace(/\b(?:on|by|for)\s+\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/gi, '')
+    .replace(/\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/g, '')
+    // Drop orphaned prepositions left after a date was stripped ("payment on").
+    .replace(/\s+(?:on|by|for|at)\s*$/gi, '')
     .replace(/\s+/g, ' ')
     .replace(/[.,;:!?]+$/g, '')
     .trim();

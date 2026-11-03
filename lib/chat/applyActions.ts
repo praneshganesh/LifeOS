@@ -56,6 +56,7 @@ import {
   looksLikeReminder,
   looksLikeReminderQuery,
   localDayKey,
+  dateFromLocalDayKey,
   normalizeWarrantyExpiry,
   remindAtFromUtterance,
   parseReminderFromUtterance,
@@ -63,6 +64,7 @@ import {
   parseRecurringWeekdayReminder,
   finalizeReminderLabel,
   reminderLabelFromUtterance,
+  utteranceNamesRemindDate,
   warrantyExpiryFromUtterance,
 } from '@/lib/dates';
 
@@ -539,6 +541,8 @@ export async function applyChatActions(
   const today = isIsoDate(options?.localDate)
     ? (options!.localDate as string)
     : dayKey();
+  /** Anchor relative dates ("tomorrow", "12th Nov") to the user's local day. */
+  const fromDay = dateFromLocalDayKey(today);
   const defaultCurrency =
     options?.defaultCurrency?.trim().toUpperCase() ||
     getRuntimeDefaultCurrency();
@@ -1261,7 +1265,7 @@ export async function applyChatActions(
         continue;
       }
       // "every day" / "daily" beats a model weekdays Mon–Fri guess.
-      const daily = parseDailyReminder(lastUserText);
+      const daily = parseDailyReminder(lastUserText, fromDay);
       const recurring =
         daily ||
         (action.remindInterval?.unit === 'weekdays'
@@ -1269,8 +1273,8 @@ export async function applyChatActions(
               remindAt: action.remindAt,
               remindInterval: action.remindInterval,
             }
-          : parseRecurringWeekdayReminder(lastUserText));
-      const spokenAt = remindAtFromUtterance(lastUserText);
+          : parseRecurringWeekdayReminder(lastUserText, fromDay));
+      const spokenAt = remindAtFromUtterance(lastUserText, fromDay);
       const modelAt = action.remindAt ? normalizeDateField(action.remindAt) : undefined;
       // Prefer what the user said. If they named no day, ignore the model's
       // invented date (it often picks tomorrow) and due today.
@@ -1344,7 +1348,7 @@ export async function applyChatActions(
         console.log('[LifeOS chat] skip update_last_done: missing id', action);
         continue;
       }
-      const spokenAt = remindAtFromUtterance(lastUserText);
+      const spokenAt = remindAtFromUtterance(lastUserText, fromDay);
       const patchRemindAt =
         spokenAt ||
         (action.patch?.remindAt != null
@@ -2293,25 +2297,7 @@ function habitTitleFromCreateUtterance(text?: string): string | undefined {
   return word.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function utteranceNamesRemindDate(text?: string): boolean {
-  if (!text?.trim()) return false;
-  return (
-    /\b(today|tomorrow|tonight)\b/i.test(text) ||
-    /\bnext\s+(week|month|year|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/i.test(
-      text
-    ) ||
-    /\b(?:on|this)\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/i.test(
-      text
-    ) ||
-    /\bin\s+\d{1,3}\s+days?\b/i.test(text) ||
-    /\b\d{4}-\d{2}-\d{2}\b/.test(text) ||
-    /\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/i.test(
-      text
-    )
-  );
-}
-
-function looksLikeReminderDateUpdate(text?: string): boolean {
+function looksLikeReminderDateUpdate(text?: string, from?: Date): boolean {
   if (!text?.trim()) return false;
   if (looksLikeReminder(text)) return false;
   const t = text.trim();
@@ -2322,7 +2308,7 @@ function looksLikeReminderDateUpdate(text?: string): boolean {
     /\b(due\s+date|remind(?:er)?\s+(?:date|to|for))\b/i.test(t) ||
     /\b(due|date)\s+(to|for|on)\b/i.test(t) ||
     /\b(update|change|move|reschedule)\b/i.test(t);
-  return cue && (Boolean(remindAtFromUtterance(t)) || utteranceNamesRemindDate(t));
+  return cue && (Boolean(remindAtFromUtterance(t, from)) || utteranceNamesRemindDate(t));
 }
 
 /** "change the name to X" / "rename it to X" / "call it X" follow-ups. */
@@ -2514,11 +2500,14 @@ function ensureTalkActions(
   if (looksLikeReminderQuery(lastUserText)) {
     return list.length ? list.filter((a) => a.type !== 'set_reminder') : actions;
   }
-  if (looksLikeReminderDateUpdate(lastUserText)) {
+  const fromDay = isIsoDate(opts?.localDate)
+    ? dateFromLocalDayKey(opts!.localDate as string)
+    : new Date();
+  if (looksLikeReminderDateUpdate(lastUserText, fromDay)) {
     list = list.filter((a) => a.type !== 'set_reminder');
     const focusId =
       opts?.talkFocus?.kind === 'lastDone' ? opts.talkFocus.id : undefined;
-    const spokenAt = remindAtFromUtterance(lastUserText);
+    const spokenAt = remindAtFromUtterance(lastUserText, fromDay);
     const existing = list.find((a) => a.type === 'update_last_done');
     if (existing && existing.type === 'update_last_done') {
       if (spokenAt) existing.patch = { ...existing.patch, remindAt: spokenAt };
@@ -2538,10 +2527,13 @@ function ensureTalkActions(
   }
   if (looksLikeReminder(lastUserText) && !types.has('set_reminder')) {
     const recurring =
-      parseDailyReminder(lastUserText) ||
-      parseRecurringWeekdayReminder(lastUserText);
+      parseDailyReminder(lastUserText, fromDay) ||
+      parseRecurringWeekdayReminder(lastUserText, fromDay);
     // Default to today when the user didn't name a day, silent skip felt broken.
-    const remindAt = remindAtFromUtterance(lastUserText) || localDayKey();
+    const todayKey = isIsoDate(opts?.localDate)
+      ? (opts!.localDate as string)
+      : localDayKey(fromDay);
+    const remindAt = remindAtFromUtterance(lastUserText, fromDay) || todayKey;
     const label = reminderLabelFromUtterance(lastUserText) || 'Reminder';
     if (remindAt || recurring) {
       list.push({

@@ -5,6 +5,7 @@ import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
   displayWarrantyExpiry,
+  finalizeReminderLabel,
   localDayKey,
   looksLikeReminder,
   looksLikeReminderQuery,
@@ -153,6 +154,18 @@ describe('reminder speech', () => {
     const parsed = parseReminderFromUtterance(utterance);
     assert.equal(parsed?.label, "Mira's payment");
     assert.match(parsed?.notes ?? '', /off plan property/i);
+  });
+
+  it('parses abbreviated month and keeps the title free of the date', () => {
+    const today = new Date(2026, 10, 3, 12, 0, 0);
+    const utterance =
+      'Create a reminder for 12th Nov for Meraas Payment';
+    assert.equal(remindAtFromUtterance(utterance, today), '2026-11-12');
+    assert.equal(reminderLabelFromUtterance(utterance), 'Meraas Payment');
+    assert.equal(
+      finalizeReminderLabel('Meraas Payment for 12th November'),
+      'Meraas Payment'
+    );
   });
 
   it('parses every day at 6pm as a daily interval, not weekdays', () => {
