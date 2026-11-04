@@ -95,7 +95,9 @@ describe('chat-api reminder repair', () => {
       'Remind me for PE uniform in the morning every Tuesday and Friday',
       []
     );
-    assert.equal(next[0]?.label, 'PE uniform in the morning');
+    // "in the morning" is a time cue (→ 9 AM), stripped from the title.
+    assert.equal(next[0]?.label, 'PE uniform');
+    assert.equal(next[0]?.remindInterval?.hour, 9);
   });
 
   it('does not create a reminder for what-reminders questions', () => {

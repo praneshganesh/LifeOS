@@ -102,6 +102,8 @@ export type ChatSetReminderAction = {
   label: string;
   /** YYYY-MM-DD */
   remindAt: string;
+  /** One-shot clock HH:mm (never invent; omit for all-day). */
+  remindTime?: string;
   /** Extra detail split from the spoken label */
   note?: string;
   /** Recurring schedule, weekdays / days / months */
@@ -112,6 +114,7 @@ export type ChatSetReminderAction = {
     hour?: number;
     minute?: number;
     endsAt?: string;
+    startsAt?: string;
   };
   inventoryItemId?: string;
   assignedTo?: string;
@@ -127,6 +130,7 @@ export type ChatUpdateLastDoneAction = {
     label?: string;
     notes?: string | null;
     remindAt?: string | null;
+    remindTime?: string | null;
   };
 };
 

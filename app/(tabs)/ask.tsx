@@ -444,6 +444,7 @@ export default function ChatScreen() {
         reminderLabel: applied.reminderLabel,
         reminderAt: applied.reminderAt,
         updatedReminder: applied.updatedReminder,
+        reminderClarify: applied.reminderClarify,
         removedLastDoneLabel: applied.removedLastDoneLabel,
         updatedClassPack: applied.updatedClassPack,
         renamedPersonFrom: applied.renamedPersonFrom,

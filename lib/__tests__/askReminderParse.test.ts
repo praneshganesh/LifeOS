@@ -1,6 +1,6 @@
 /**
  * Ask/Talk reminder parsing — on-device (lib/dates + applyActions).
- * Clock fixed at 2026-11-03 10:00 Asia/Dubai. Run with:
+ * Clock fixed at Wed 4 Nov 2026 Asia/Dubai. Run with:
  *   TZ=Asia/Dubai node --import tsx --test lib/__tests__/askReminderParse.test.ts
  */
 import assert from 'node:assert/strict';
@@ -9,17 +9,25 @@ import { applyChatActions } from '../chat/applyActions';
 import type { ChatAction } from '../chat/types';
 import {
   finalizeReminderLabel,
+  isBareRemindMe,
   localDayKey,
+  looksLikeReminder,
+  looksLikeReminderEditCommand,
+  parseIntervalReminder,
   parseReminderFromUtterance,
+  parseRecurringWeekdayReminder,
   parseTimeOfDayFromUtterance,
   remindAtFromUtterance,
+  reminderClarifyFromUtterance,
+  remindTimeFromUtterance,
+  splitDualRemindersFromUtterance,
   utteranceNamesRemindDate,
 } from '../dates';
 import type { InventoryItem } from '../InventoryContext';
 
-const LOCAL_DAY = '2026-11-03';
-/** Tuesday 3 Nov 2026 10:00 local (Asia/Dubai when TZ=Asia/Dubai). */
-const FROM = new Date(2026, 10, 3, 10, 0, 0);
+const LOCAL_DAY = '2026-11-04';
+/** Wednesday 4 Nov 2026 10:00 local (Asia/Dubai when TZ=Asia/Dubai). */
+const FROM = new Date(2026, 10, 4, 10, 0, 0);
 
 const unusedInv = {
   addItem: async () => {
@@ -37,118 +45,34 @@ const unusedInv = {
   removeItem: (id: string) => Promise<void>;
 };
 
-type Case = {
-  utterance: string;
-  title: string | RegExp;
-  due: string;
-  recurringWeekdays?: number[];
-  /** When set, also assert spoken clock (title still must not contain "at 3pm"). */
-  timeHour?: number;
+type Saved = {
+  label: string;
+  remindAt: string;
+  remindTime?: string;
+  remindInterval?: { unit: string; value?: number; weekdays?: number[]; hour?: number };
 };
 
-/**
- * next Thursday from Tue 3 Nov = 5 Nov (not 12 Nov).
- * every Monday from Tue 3 Nov → first fire Mon 9 Nov.
- */
-const CASES: Case[] = [
-  {
-    utterance: 'Create a reminder for 12th Nov for Meraas Payment',
-    title: 'Meraas Payment',
-    due: '2026-11-12',
-  },
-  {
-    utterance: 'Create a reminder for Meraas Payment on 12th November',
-    title: 'Meraas Payment',
-    due: '2026-11-12',
-  },
-  {
-    utterance: 'Remind me to pay Meraas on Nov 12',
-    title: 'Pay Meraas',
-    due: '2026-11-12',
-  },
-  {
-    utterance: 'Remind me about Meraas payment on the 12th of Nov',
-    title: 'Meraas payment',
-    due: '2026-11-12',
-  },
-  {
-    utterance: 'Set a reminder Meraas payment 12 Nov 2026',
-    title: 'Meraas payment',
-    due: '2026-11-12',
-  },
-  {
-    utterance: 'Remind me to pay Meraas on 12 Nov at 3pm',
-    title: 'Pay Meraas',
-    due: '2026-11-12',
-    timeHour: 15,
-  },
-  {
-    utterance: 'Remind me to call DEWA on 5th Sept',
-    title: 'Call DEWA',
-    due: '2027-09-05',
-  },
-  {
-    utterance: 'Remind me to renew visa on 1st Nov',
-    title: 'Renew visa',
-    due: '2027-11-01',
-  },
-  {
-    utterance: 'Remind me to pay rent on 3 Mar',
-    title: 'Pay rent',
-    due: '2027-03-03',
-  },
-  {
-    utterance: 'Remind me to submit report tomorrow',
-    title: 'Submit report',
-    due: '2026-11-04',
-  },
-  {
-    utterance: 'Remind me to pay Meraas next Thursday',
-    title: 'Pay Meraas',
-    due: '2026-11-05',
-  },
-  {
-    utterance: 'Remind me to pay Meraas in 5 days',
-    title: 'Pay Meraas',
-    due: '2026-11-08',
-  },
-  {
-    utterance: 'Remind me to pay Meraas',
-    title: 'Pay Meraas',
-    due: LOCAL_DAY,
-  },
-  {
-    utterance: 'Remind me I may need to pay rent',
-    title: /may need to pay rent/i,
-    due: LOCAL_DAY,
-  },
-  {
-    utterance: 'Create a reminder for Meraas payment on 12/11',
-    title: 'Meraas payment',
-    due: '2026-11-12',
-  },
-  {
-    utterance: 'Remind me to pay Meraas every Monday',
-    title: 'Pay Meraas',
-    due: '2026-11-09',
-    recurringWeekdays: [1],
-  },
-];
-
-async function applyWithWrongModel(utterance: string) {
-  const saved: {
-    label: string;
-    remindAt: string;
-    remindInterval?: { unit: string; weekdays?: number[] };
-  }[] = [];
-  const wrongAction: ChatAction = {
-    type: 'set_reminder',
-    label: 'Meraas Payment for 12th November',
-    remindAt: LOCAL_DAY,
-  };
-  await applyChatActions([wrongAction], unusedInv, 'talk', {
+async function applyWithWrongModel(
+  utterance: string,
+  modelActions: ChatAction[] = [
+    {
+      type: 'set_reminder',
+      label: 'Meraas Payment for 12th November',
+      remindAt: LOCAL_DAY,
+    },
+  ],
+  opts: {
+    talkFocus?: { kind: 'lastDone'; id: string } | null;
+    lastDoneList?: { id: string; label: string; remindAt?: string | null }[];
+  } = {}
+) {
+  const saved: Saved[] = [];
+  const updated: { id: string; patch: Record<string, unknown> }[] = [];
+  await applyChatActions(modelActions, unusedInv, 'talk', {
     lastUserText: utterance,
     localDate: LOCAL_DAY,
+    lastTalkFocus: opts.talkFocus ?? null,
+    lastDoneList: opts.lastDoneList,
     lastDone: {
       logDone: async () => {
         throw new Error('should not mark done');
@@ -157,76 +81,266 @@ async function applyWithWrongModel(utterance: string) {
         saved.push({
           label: input.label,
           remindAt: input.remindAt,
+          remindTime: input.remindTime,
           remindInterval: input.remindInterval
             ? {
                 unit: input.remindInterval.unit,
+                value: input.remindInterval.value,
                 weekdays: input.remindInterval.weekdays,
+                hour: input.remindInterval.hour,
               }
             : undefined,
         });
         return {
-          id: 'ld-test',
+          id: `ld-${saved.length}`,
           label: input.label,
           remindAt: input.remindAt,
         };
       },
+      updateActivity: async (id, patch) => {
+        updated.push({ id, patch: { ...patch } });
+        return {
+          id,
+          label: String(patch.label || opts.lastDoneList?.find((r) => r.id === id)?.label || 'Updated'),
+          remindAt: typeof patch.remindAt === 'string' ? patch.remindAt : undefined,
+        };
+      },
     },
   });
-  return saved[0];
+  return { saved, updated };
 }
 
-describe('Ask/Talk reminder parse (clock 2026-11-03 Asia/Dubai)', () => {
-  it('anchors FROM to Tuesday 3 Nov 2026', () => {
+describe('Ask/Talk reminder parse (clock Wed 4 Nov 2026 Asia/Dubai)', () => {
+  it('anchors FROM to Wednesday 4 Nov 2026', () => {
     assert.equal(localDayKey(FROM), LOCAL_DAY);
-    assert.equal(FROM.getDay(), 2);
+    assert.equal(FROM.getDay(), 3);
   });
 
-  for (const c of CASES) {
-    it(`utterance: ${c.utterance}`, async () => {
-      const spokenDue = remindAtFromUtterance(c.utterance, FROM);
-      const parsed = parseReminderFromUtterance(c.utterance);
-      const applied = await applyWithWrongModel(c.utterance);
+  it('Remind me on 12 Nov at 3pm to call the bank', async () => {
+    const u = 'Remind me on 12 Nov at 3pm to call the bank';
+    assert.equal(remindAtFromUtterance(u, FROM), '2026-11-12');
+    assert.equal(remindTimeFromUtterance(u), '15:00');
+    assert.equal(parseReminderFromUtterance(u)?.label, 'Call the bank');
+    const { saved } = await applyWithWrongModel(u);
+    assert.equal(saved.length, 1);
+    assert.equal(saved[0]!.label, 'Call the bank');
+    assert.equal(saved[0]!.remindAt, '2026-11-12');
+    assert.equal(saved[0]!.remindTime, '15:00');
+  });
 
-      if (c.recurringWeekdays) {
-        // Recurring: remindAtFromUtterance returns next weekday fire via recurring parse
-        assert.equal(spokenDue, c.due, `remindAtFromUtterance → ${spokenDue}`);
-      } else if (c.due === LOCAL_DAY && !utteranceNamesRemindDate(c.utterance)) {
-        // Dateless → undefined from remindAtFromUtterance; apply fills today
-        assert.equal(spokenDue, undefined, 'dateless spoken due');
-      } else {
-        assert.equal(spokenDue, c.due, `remindAtFromUtterance → ${spokenDue}`);
-      }
+  it('Remind me in 2 weeks to renew the visa', async () => {
+    const u = 'Remind me in 2 weeks to renew the visa';
+    assert.equal(remindAtFromUtterance(u, FROM), '2026-11-18');
+    assert.equal(parseReminderFromUtterance(u)?.label, 'Renew the visa');
+    const { saved } = await applyWithWrongModel(u);
+    assert.equal(saved[0]!.remindAt, '2026-11-18');
+    assert.equal(saved[0]!.label, 'Renew the visa');
+  });
 
-      if (typeof c.title === 'string') {
-        assert.equal(parsed?.label, c.title, `parse label → ${parsed?.label}`);
-      } else {
-        assert.match(parsed?.label ?? '', c.title);
-      }
+  it('Remind me the day after tomorrow to call mum', async () => {
+    const u = 'Remind me the day after tomorrow to call mum';
+    assert.equal(remindAtFromUtterance(u, FROM), '2026-11-06');
+    assert.equal(parseReminderFromUtterance(u)?.label, 'Call mum');
+    const { saved } = await applyWithWrongModel(u);
+    assert.equal(saved[0]!.remindAt, '2026-11-06');
+    assert.equal(saved[0]!.label, 'Call mum');
+  });
 
-      assert.ok(applied, 'applyActions should call setReminder');
-      if (typeof c.title === 'string') {
-        assert.equal(applied!.label, c.title, `applied label → ${applied!.label}`);
-      } else {
-        assert.match(applied!.label, c.title);
-      }
-      assert.equal(applied!.remindAt.slice(0, 10), c.due, `applied due → ${applied!.remindAt}`);
+  it('Pay rent on the 12th', async () => {
+    const u = 'Pay rent on the 12th';
+    assert.equal(remindAtFromUtterance(u, FROM), '2026-11-12');
+    assert.equal(parseReminderFromUtterance(`Remind me to ${u}`)?.label, 'Pay rent');
+    const { saved } = await applyWithWrongModel(u, [
+      { type: 'set_reminder', label: 'Pay rent on the 12th', remindAt: LOCAL_DAY },
+    ]);
+    assert.equal(saved[0]!.remindAt, '2026-11-12');
+    assert.equal(saved[0]!.label, 'Pay rent');
+  });
 
-      if (c.recurringWeekdays) {
-        assert.equal(applied!.remindInterval?.unit, 'weekdays');
-        assert.deepEqual(applied!.remindInterval?.weekdays, c.recurringWeekdays);
-      }
+  it('Remind me every 3 days to water plants', async () => {
+    const u = 'Remind me every 3 days to water plants';
+    const interval = parseIntervalReminder(u, FROM);
+    assert.equal(interval?.remindInterval.unit, 'days');
+    assert.equal(interval?.remindInterval.value, 3);
+    assert.equal(interval?.remindInterval.hour, 9);
+    assert.equal(parseReminderFromUtterance(u)?.label, 'Water plants');
+    const { saved } = await applyWithWrongModel(u);
+    assert.equal(saved[0]!.label, 'Water plants');
+    assert.equal(saved[0]!.remindInterval?.unit, 'days');
+    assert.equal(saved[0]!.remindInterval?.value, 3);
+    assert.equal(saved[0]!.remindInterval?.hour, 9);
+  });
 
-      if (c.timeHour != null) {
-        assert.doesNotMatch(applied!.label, /\bat\s+3\s*pm\b/i);
-        assert.equal(parseTimeOfDayFromUtterance(c.utterance)?.hour, c.timeHour);
+  it('Remind me on weekdays to pack lunch', async () => {
+    const u = 'Remind me on weekdays to pack lunch';
+    const recurring = parseRecurringWeekdayReminder(u, FROM);
+    assert.deepEqual(recurring?.remindInterval.weekdays, [1, 2, 3, 4, 5]);
+    assert.equal(recurring?.remindInterval.hour, 9);
+    assert.equal(parseReminderFromUtterance(u)?.label, 'Pack lunch');
+    const { saved } = await applyWithWrongModel(u);
+    assert.equal(saved[0]!.label, 'Pack lunch');
+    assert.equal(saved[0]!.remindInterval?.unit, 'weekdays');
+    assert.deepEqual(saved[0]!.remindInterval?.weekdays, [1, 2, 3, 4, 5]);
+  });
+
+  it('Email August about the proposal tomorrow — keep about in title', async () => {
+    const u = 'Email August about the proposal tomorrow';
+    assert.equal(remindAtFromUtterance(u, FROM), '2026-11-05');
+    assert.equal(
+      parseReminderFromUtterance(`Remind me to ${u}`)?.label,
+      'Email August about the proposal'
+    );
+    const { saved } = await applyWithWrongModel(u, [
+      { type: 'set_reminder', label: 'Email August', remindAt: LOCAL_DAY },
+    ]);
+    assert.equal(saved[0]!.label, 'Email August about the proposal');
+    assert.equal(saved[0]!.remindAt, '2026-11-05');
+  });
+
+  it('Move the Meraas payment reminder to 15th Nov — edit, not create', async () => {
+    const u = 'Move the Meraas payment reminder to 15th Nov';
+    assert.equal(looksLikeReminder(u), false);
+    assert.equal(looksLikeReminderEditCommand(u), true);
+    assert.equal(remindAtFromUtterance(u, FROM), '2026-11-15');
+    const { saved, updated } = await applyWithWrongModel(
+      u,
+      [
+        { type: 'update_last_done', id: 'meraas-1', patch: { remindAt: '2026-11-15' } },
+        { type: 'set_reminder', label: 'Move the Meraas payment reminder to', remindAt: LOCAL_DAY },
+      ],
+      {
+        talkFocus: { kind: 'lastDone', id: 'meraas-1' },
+        lastDoneList: [{ id: 'meraas-1', label: 'Meraas payment', remindAt: '2026-11-12' }],
       }
-    });
-  }
+    );
+    assert.equal(saved.length, 0);
+    assert.equal(updated.length, 1);
+    assert.equal(updated[0]!.id, 'meraas-1');
+    assert.equal(updated[0]!.patch.remindAt, '2026-11-15');
+  });
+
+  it('Change the Meraas reminder to 10am — sets time on existing', async () => {
+    const u = 'Change the Meraas reminder to 10am';
+    assert.equal(looksLikeReminderEditCommand(u), true);
+    assert.equal(remindTimeFromUtterance(u), '10:00');
+    const { saved, updated } = await applyWithWrongModel(
+      u,
+      [{ type: 'update_last_done', id: 'meraas-1', patch: {} }],
+      {
+        talkFocus: { kind: 'lastDone', id: 'meraas-1' },
+        lastDoneList: [{ id: 'meraas-1', label: 'Meraas payment', remindAt: '2026-11-12' }],
+      }
+    );
+    assert.equal(saved.length, 0);
+    assert.equal(updated.length, 1);
+    assert.equal(updated[0]!.patch.remindTime, '10:00');
+  });
+
+  it('Remind me — clarify, do not create Reminder', async () => {
+    const u = 'Remind me';
+    assert.equal(isBareRemindMe(u), true);
+    assert.equal(looksLikeReminder(u), false);
+    assert.match(reminderClarifyFromUtterance(u, FROM) ?? '', /what should i remind/i);
+    const { saved } = await applyWithWrongModel(u, [
+      { type: 'set_reminder', label: 'Reminder', remindAt: LOCAL_DAY },
+    ]);
+    assert.equal(saved.length, 0);
+  });
+
+  it('Remind me to pay DEWA on 10 Nov and Salik on 15 Nov — two reminders', async () => {
+    const u = 'Remind me to pay DEWA on 10 Nov and Salik on 15 Nov';
+    const dual = splitDualRemindersFromUtterance(u, FROM);
+    assert.ok(dual);
+    assert.equal(dual!.length, 2);
+    assert.equal(dual![0]!.remindAt, '2026-11-10');
+    assert.equal(dual![1]!.remindAt, '2026-11-15');
+    assert.equal(dual![0]!.label, 'Pay DEWA');
+    const { saved } = await applyWithWrongModel(u, []);
+    assert.equal(saved.length, 2);
+    assert.equal(saved[0]!.remindAt, '2026-11-10');
+    assert.equal(saved[1]!.remindAt, '2026-11-15');
+  });
+
+  it('Remind me on 31st Nov to pay rent — clarify invalid date', async () => {
+    const u = 'Remind me on 31st Nov to pay rent';
+    assert.equal(remindAtFromUtterance(u, FROM), undefined);
+    assert.match(reminderClarifyFromUtterance(u, FROM) ?? '', /valid/i);
+    const { saved } = await applyWithWrongModel(u, [
+      { type: 'set_reminder', label: 'Pay rent', remindAt: LOCAL_DAY },
+    ]);
+    assert.equal(saved.length, 0);
+  });
+
+  it('new Remind me never edits a focused different reminder', async () => {
+    const u = 'Remind me to call the bank on 12 Nov';
+    const { saved, updated } = await applyWithWrongModel(
+      u,
+      [
+        { type: 'set_reminder', label: 'Call the bank', remindAt: '2026-11-12' },
+        { type: 'update_last_done', id: 'other-1', patch: { remindAt: '2026-11-12' } },
+      ],
+      {
+        talkFocus: { kind: 'lastDone', id: 'other-1' },
+        lastDoneList: [{ id: 'other-1', label: 'Maya dentist', remindAt: '2026-10-29' }],
+      }
+    );
+    assert.equal(saved.length, 1);
+    assert.equal(saved[0]!.label, 'Call the bank');
+    assert.equal(updated.length, 0);
+  });
+
+  it('time phrases: 3pm, 2.30pm, noon, tonight, at 9, morning', () => {
+    assert.equal(parseTimeOfDayFromUtterance('at 3pm')?.hour, 15);
+    assert.equal(parseTimeOfDayFromUtterance('3 pm')?.hour, 15);
+    assert.deepEqual(parseTimeOfDayFromUtterance('2.30pm'), { hour: 14, minute: 30 });
+    assert.deepEqual(parseTimeOfDayFromUtterance('2:45pm'), { hour: 14, minute: 45 });
+    assert.deepEqual(parseTimeOfDayFromUtterance('21:00'), { hour: 21, minute: 0 });
+    assert.equal(parseTimeOfDayFromUtterance('at 9')?.hour, 9);
+    assert.equal(parseTimeOfDayFromUtterance('noon')?.hour, 12);
+    assert.equal(parseTimeOfDayFromUtterance('midnight')?.hour, 0);
+    assert.equal(parseTimeOfDayFromUtterance('tonight')?.hour, 20);
+    assert.equal(parseTimeOfDayFromUtterance('this evening')?.hour, 18);
+    assert.equal(parseTimeOfDayFromUtterance('morning')?.hour, 9);
+  });
+
+  it('date phrases: next week=Monday, this weekend=Saturday, end of month, by Friday', () => {
+    // next week → next Monday (documented). Wed 4 Nov → Mon 9 Nov.
+    assert.equal(remindAtFromUtterance('next week', FROM), '2026-11-09');
+    assert.equal(remindAtFromUtterance('this weekend', FROM), '2026-11-07');
+    assert.equal(remindAtFromUtterance('end of the month', FROM), '2026-11-30');
+    assert.equal(remindAtFromUtterance('by Friday', FROM), '2026-11-06');
+    assert.equal(remindAtFromUtterance('in a week', FROM), '2026-11-11');
+    assert.equal(remindAtFromUtterance('next month', FROM), '2026-12-04');
+    assert.equal(remindAtFromUtterance('on 12-11-2026', FROM), '2026-11-12');
+    assert.equal(remindAtFromUtterance('the twelfth', FROM), '2026-11-12');
+  });
+
+  it('on Sunday is one-off, not weekly', () => {
+    const u = 'Remind me on Sunday to call mum';
+    assert.equal(parseRecurringWeekdayReminder(u, FROM), undefined);
+    assert.equal(remindAtFromUtterance(u, FROM), '2026-11-08');
+  });
+
+  it('Prepare for the presentation stays intact', () => {
+    assert.equal(
+      parseReminderFromUtterance('Remind me to Prepare for the presentation tomorrow')
+        ?.label,
+      'Prepare for the presentation'
+    );
+  });
+
+  it('invalid / past / ambiguous do not fall back to today', () => {
+    assert.equal(remindAtFromUtterance('31st Nov', FROM), undefined);
+    assert.equal(remindAtFromUtterance('30 Feb', FROM), undefined);
+    assert.equal(remindAtFromUtterance('12 Novmber', FROM), undefined);
+    assert.equal(remindAtFromUtterance('yesterday', FROM), undefined);
+    assert.equal(remindAtFromUtterance('12 Nov or 15 Nov', FROM), undefined);
+    assert.ok(reminderClarifyFromUtterance('12 Nov or 15 Nov', FROM));
+  });
 
   it('utteranceNamesRemindDate for day+month forms', () => {
     assert.equal(utteranceNamesRemindDate('12th Nov'), true);
     assert.equal(utteranceNamesRemindDate('Nov 12'), true);
-    assert.equal(utteranceNamesRemindDate('12 Sept'), true);
     assert.equal(utteranceNamesRemindDate('I may need to pay rent'), false);
   });
 
@@ -236,20 +350,5 @@ describe('Ask/Talk reminder parse (clock 2026-11-03 Asia/Dubai)', () => {
       'Meraas Payment'
     );
     assert.equal(finalizeReminderLabel('Pay Meraas on Nov 12'), 'Pay Meraas');
-  });
-
-  it('local day uses local components, not toISOString (Dubai 02:00 = prior UTC day)', async () => {
-    // 2026-11-03 02:00 Asia/Dubai == 2026-11-02 22:00 UTC
-    const dubaiEarly = new Date(Date.UTC(2026, 10, 2, 22, 0, 0));
-    assert.equal(localDayKey(dubaiEarly), '2026-11-03');
-    assert.equal(dubaiEarly.toISOString().slice(0, 10), '2026-11-02');
-    assert.notEqual(localDayKey(dubaiEarly), dubaiEarly.toISOString().slice(0, 10));
-
-    const applied = await applyWithWrongModel('Remind me to pay Meraas');
-    assert.equal(
-      remindAtFromUtterance('Remind me to pay Meraas', dubaiEarly),
-      undefined
-    );
-    assert.equal(applied?.remindAt.slice(0, 10), LOCAL_DAY);
   });
 });

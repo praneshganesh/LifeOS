@@ -44,31 +44,24 @@ describe('dated reminder fires', () => {
     assert.deepEqual(fires, []);
   });
 
-  it('all-day reminder due today at 6 PM keeps 7pm fallback plus overdue nudge', () => {
+  it('all-day reminder due today at 6 PM keeps 7pm fallback (no hidden overdue nudge)', () => {
     const now = new Date(2026, 9, 18, 18, 0);
     const fires = planDatedReminderFires({ ...base, remindAt: '2026-10-18' }, prefs, now);
-    assert.deepEqual(fires.map((p) => stamp(p.at)), [
-      '2026-10-18 19:00',
-      '2026-10-19 09:00',
-    ]);
-    assert.match(fires[1]!.body, /overdue/);
+    assert.deepEqual(fires.map((p) => stamp(p.at)), ['2026-10-18 19:00']);
   });
 
-  it('all-day reminder due today after 7 PM has only the overdue nudge', () => {
+  it('all-day reminder due today after 7 PM has no further fires', () => {
     const now = new Date(2026, 9, 18, 20, 0);
     const fires = planDatedReminderFires({ ...base, remindAt: '2026-10-18' }, prefs, now);
-    assert.deepEqual(fires.map((p) => stamp(p.at)), ['2026-10-19 09:00']);
-    assert.match(fires[0]!.body, /overdue/);
+    assert.deepEqual(fires, []);
   });
 
-
-  it('upcoming all-day reminder follows the preview schedule plus the overdue nudge', () => {
+  it('upcoming all-day reminder matches the Alerts preview schedule', () => {
     const now = new Date(2026, 9, 18, 12, 0);
     const fires = planDatedReminderFires({ ...base, remindAt: '2026-10-20' }, prefs, now);
     assert.deepEqual(fires.map((f) => stamp(f.at)), [
       '2026-10-19 19:00',
       '2026-10-20 09:00',
-      '2026-10-21 09:00',
     ]);
   });
 

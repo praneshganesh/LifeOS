@@ -479,7 +479,8 @@ export type DatedReminderInput = {
 
 /**
  * OS alerts for a dated (non-weekday) reminder: the same schedule the detail
- * screen previews, plus one overdue nudge the morning after the due day.
+ * screen previews (Alerts list). No hidden morning-after overdue nudge —
+ * Mark done cancels pending locals, and the preview matches what fires.
  * Only future times are returned, so re-running on every launch never
  * re-fires a reminder that has already passed.
  */
@@ -512,19 +513,10 @@ export function planDatedReminderFires(
     quietHoursEnd: prefs.quietHoursEnd,
     label: item.label,
   });
-  const out: PlannedFire[] = fires.map((f) => ({
+  return fires.map((f) => ({
     at: f.at,
     ...formatAlertFireCopy(f, item.label, dueDate, dueTime),
   }));
-  const morningAfter = atLocal(p.y, p.m, p.d + 1, 9, 0);
-  if (morningAfter.getTime() > now.getTime()) {
-    out.push({
-      at: morningAfter,
-      title: item.label.trim() || 'Reminder',
-      body: 'This is overdue. Mark it done when you can.',
-    });
-  }
-  return out;
 }
 
 /** Defaults when switching to Custom with no auto fires left. */

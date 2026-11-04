@@ -54,17 +54,24 @@ import {
 } from '@/lib/chat/focus';
 import {
   looksLikeReminder,
+  looksLikeReminderEditCommand,
   looksLikeReminderQuery,
   localDayKey,
   dateFromLocalDayKey,
   normalizeWarrantyExpiry,
   remindAtFromUtterance,
+  remindTimeFromUtterance,
+  parseRelativeDateTimeFromUtterance,
   parseReminderFromUtterance,
   parseDailyReminder,
+  parseIntervalReminder,
   parseRecurringWeekdayReminder,
   finalizeReminderLabel,
   reminderLabelFromUtterance,
   utteranceNamesRemindDate,
+  reminderClarifyFromUtterance,
+  splitDualRemindersFromUtterance,
+  isBareRemindMe,
   warrantyExpiryFromUtterance,
 } from '@/lib/dates';
 
@@ -93,6 +100,7 @@ type LastDoneApi = {
   setReminder?: (input: {
     label: string;
     remindAt: string;
+    remindTime?: string;
     notes?: string;
     remindInterval?: {
       value: number;
@@ -101,6 +109,7 @@ type LastDoneApi = {
       hour?: number;
       minute?: number;
       endsAt?: string;
+      startsAt?: string;
     };
     inventoryItemId?: string | null;
     personId?: string | null;
@@ -117,6 +126,7 @@ type LastDoneApi = {
       label?: string;
       notes?: string | null;
       remindAt?: string | null;
+      remindTime?: string | null;
     }
   ) => Promise<{
     id: string;
@@ -488,6 +498,8 @@ export type ApplyActionsResult = {
   updatedReminder: boolean;
   /** Asked to change a reminder to the date it already has. */
   reminderUnchanged: boolean;
+  /** Ask a clarifying question instead of creating/updating. */
+  reminderClarify: string | null;
   removedLastDoneLabel: string | null;
   updatedClassPack: boolean;
   renamedPersonFrom: string | null;
@@ -593,6 +605,7 @@ export async function applyChatActions(
   let reminderAt: string | null = null;
   let updatedReminder = false;
   let reminderUnchanged = false;
+  let reminderClarify: string | null = null;
   let removedLastDoneLabel: string | null = null;
   let updatedClassPack = false;
   let renamedPersonFrom: string | null = null;
@@ -1260,28 +1273,51 @@ export async function applyChatActions(
       continue;
     }
     if (action.type === 'set_reminder' && action.label?.trim() && options?.lastDone?.setReminder) {
-      if (looksLikeReminderQuery(lastUserText)) {
-        console.log('[LifeOS chat] skip set_reminder: query, not create', action.label);
+      if (looksLikeReminderQuery(lastUserText) || looksLikeReminderEditCommand(lastUserText)) {
+        console.log('[LifeOS chat] skip set_reminder: query/edit, not create', action.label);
         continue;
       }
-      // "every day" / "daily" beats a model weekdays Mon–Fri guess.
-      const daily = parseDailyReminder(lastUserText, fromDay);
+      const clarify = reminderClarifyFromUtterance(lastUserText, fromDay);
+      if (clarify) {
+        reminderClarify = clarify;
+        console.log('[LifeOS chat] skip set_reminder: clarify', clarify);
+        continue;
+      }
+      if (isBareRemindMe(lastUserText)) {
+        reminderClarify = 'What should I remind you about?';
+        continue;
+      }
+      // "every day" / interval / weekdays — prefer spoken over model.
       const recurring =
-        daily ||
-        (action.remindInterval?.unit === 'weekdays'
+        parseDailyReminder(lastUserText, fromDay) ||
+        parseIntervalReminder(lastUserText, fromDay) ||
+        parseRecurringWeekdayReminder(lastUserText, fromDay) ||
+        (action.remindInterval?.unit === 'weekdays' ||
+        action.remindInterval?.unit === 'days' ||
+        action.remindInterval?.unit === 'months'
           ? {
               remindAt: action.remindAt,
               remindInterval: action.remindInterval,
             }
-          : parseRecurringWeekdayReminder(lastUserText, fromDay));
+          : undefined);
+      const relativeDt = parseRelativeDateTimeFromUtterance(lastUserText, fromDay);
       const spokenAt = remindAtFromUtterance(lastUserText, fromDay);
       const modelAt = action.remindAt ? normalizeDateField(action.remindAt) : undefined;
+      const dualParts = splitDualRemindersFromUtterance(lastUserText, fromDay);
+      // Dual "X on A and Y on B": each action already carries its own day —
+      // don't collapse both onto the first spoken date.
+      const dualAt =
+        dualParts && modelAt && dualParts.some((d) => d.remindAt === modelAt)
+          ? modelAt
+          : undefined;
       // Prefer what the user said. If they named no day, ignore the model's
       // invented date (it often picks tomorrow) and due today.
       const remindAt =
+        dualAt ||
         (recurring?.remindAt
           ? normalizeDateField(recurring.remindAt)
           : undefined) ||
+        relativeDt?.day ||
         spokenAt ||
         (utteranceNamesRemindDate(lastUserText) ? modelAt : undefined) ||
         today;
@@ -1299,15 +1335,32 @@ export async function applyChatActions(
         parsedReminder?.label && parsedReminder.label !== 'Reminder'
           ? parsedReminder.label
           : null;
+      // Prefer spoken label; only use model label when speech has no subject.
       const label = finalizeReminderLabel(
-        parsedLabel || spokenLabel || action.label
+        parsedLabel || spokenLabel || (action.label !== 'Reminder' ? action.label : 'Reminder')
       );
+      if (/^reminder$/i.test(label)) {
+        reminderClarify = 'What should I remind you about?';
+        continue;
+      }
       const notes = parsedReminder?.notes?.trim() || action.note?.trim();
       const remindInterval =
         recurring?.remindInterval ||
-        (action.remindInterval?.unit === 'weekdays'
+        (action.remindInterval?.unit === 'weekdays' ||
+        action.remindInterval?.unit === 'days' ||
+        action.remindInterval?.unit === 'months'
           ? action.remindInterval
           : undefined);
+      const spokenClock =
+        remindTimeFromUtterance(lastUserText) ||
+        (relativeDt
+          ? `${String(relativeDt.hour).padStart(2, '0')}:${String(relativeDt.minute).padStart(2, '0')}`
+          : undefined);
+      const modelClock =
+        typeof action.remindTime === 'string' && /^\d{1,2}:\d{2}$/.test(action.remindTime.trim())
+          ? action.remindTime.trim()
+          : undefined;
+      const remindTime = !remindInterval ? spokenClock || modelClock : undefined;
       const inventoryItemId =
         action.inventoryItemId?.trim() ||
         inventoryIdFromUtterance(lastUserText, options.inventoryList);
@@ -1321,6 +1374,7 @@ export async function applyChatActions(
       const saved = await options.lastDone.setReminder({
         label,
         remindAt,
+        remindTime,
         notes,
         remindInterval,
         inventoryItemId: inventoryItemId ?? null,
@@ -1331,7 +1385,7 @@ export async function applyChatActions(
       reminderAt = saved.remindAt || remindAt;
       remember('lastDone', saved.id);
       if (inventoryItemId) focusItemId = inventoryItemId;
-      console.log('[LifeOS chat] applied set_reminder', saved.label, remindAt);
+      console.log('[LifeOS chat] applied set_reminder', saved.label, remindAt, remindTime);
       continue;
     }
     if (action.type === 'update_last_done' && options?.lastDone?.updateActivity) {
@@ -1348,7 +1402,13 @@ export async function applyChatActions(
         console.log('[LifeOS chat] skip update_last_done: missing id', action);
         continue;
       }
+      // A fresh "Remind me to X" must never edit a different focused reminder.
+      if (looksLikeReminder(lastUserText) && !looksLikeReminderEditCommand(lastUserText)) {
+        console.log('[LifeOS chat] skip update_last_done: create utterance, not edit');
+        continue;
+      }
       const spokenAt = remindAtFromUtterance(lastUserText, fromDay);
+      const spokenClock = remindTimeFromUtterance(lastUserText);
       const patchRemindAt =
         spokenAt ||
         (action.patch?.remindAt != null
@@ -1356,14 +1416,19 @@ export async function applyChatActions(
             ? null
             : normalizeDateField(action.patch.remindAt)
           : undefined);
+      const patchRemindTime =
+        spokenClock ||
+        (action.patch?.remindTime !== undefined ? action.patch.remindTime : undefined);
       const patch: {
         label?: string;
         notes?: string | null;
         remindAt?: string | null;
+        remindTime?: string | null;
       } = {};
       if (action.patch?.label?.trim()) patch.label = action.patch.label.trim();
       if (action.patch?.notes !== undefined) patch.notes = action.patch.notes;
       if (patchRemindAt !== undefined) patch.remindAt = patchRemindAt;
+      if (patchRemindTime !== undefined) patch.remindTime = patchRemindTime;
       if (!Object.keys(patch).length) {
         console.log('[LifeOS chat] skip update_last_done: empty patch');
         continue;
@@ -1372,10 +1437,13 @@ export async function applyChatActions(
         typeof patch.remindAt === 'string' &&
         Boolean(row?.remindAt) &&
         patch.remindAt.slice(0, 10) === String(row?.remindAt).slice(0, 10);
+      const sameClock =
+        patch.remindTime === undefined ||
+        patch.remindTime === (row as { remindTime?: string } | undefined)?.remindTime;
       const labelSame = !patch.label || patch.label === row?.label;
       const notesSame =
         patch.notes === undefined || (patch.notes || '') === (row?.notes || '');
-      if (sameDay && labelSame && notesSame) {
+      if (sameDay && sameClock && labelSame && notesSame && patch.remindAt !== undefined) {
         reminderLabel = row?.label || null;
         reminderAt = row?.remindAt || patch.remindAt || null;
         reminderUnchanged = true;
@@ -2081,6 +2149,7 @@ export async function applyChatActions(
     reminderAt,
     updatedReminder,
     reminderUnchanged,
+    reminderClarify,
     removedLastDoneLabel,
     updatedClassPack,
     renamedPersonFrom,
@@ -2299,16 +2368,24 @@ function habitTitleFromCreateUtterance(text?: string): string | undefined {
 
 function looksLikeReminderDateUpdate(text?: string, from?: Date): boolean {
   if (!text?.trim()) return false;
-  if (looksLikeReminder(text)) return false;
+  if (looksLikeReminder(text) && !looksLikeReminderEditCommand(text)) return false;
   const t = text.trim();
   const cue =
-    /\b(update|change|move|set|reschedule|push|make)\b.{0,48}\b(due|date|remind(?:er)?)\b/i.test(
+    looksLikeReminderEditCommand(t) ||
+    /\b(update|change|move|set|reschedule|push|make)\b.{0,48}\b(due|date|remind(?:er)?|time)\b/i.test(
       t
     ) ||
-    /\b(due\s+date|remind(?:er)?\s+(?:date|to|for))\b/i.test(t) ||
+    /\b(due\s+date|remind(?:er)?\s+(?:date|to|for|at))\b/i.test(t) ||
     /\b(due|date)\s+(to|for|on)\b/i.test(t) ||
     /\b(update|change|move|reschedule)\b/i.test(t);
-  return cue && (Boolean(remindAtFromUtterance(t, from)) || utteranceNamesRemindDate(t));
+  const hasDate = Boolean(remindAtFromUtterance(t, from)) || utteranceNamesRemindDate(t);
+  // Soft words like "morning" alone are not enough (collide with "Morning stretch").
+  const hasTime =
+    /\b(?:at\s+)?\d{1,2}([.:]\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)\b/i.test(t) ||
+    /\bat\s+\d{1,2}(:\d{2})?\b/i.test(t) ||
+    /\b\d{1,2}:\d{2}\b/.test(t) ||
+    /\b(noon|midnight|midday)\b/i.test(t);
+  return cue && (hasDate || hasTime);
 }
 
 /** "change the name to X" / "rename it to X" / "call it X" follow-ups. */
@@ -2503,20 +2580,44 @@ function ensureTalkActions(
   const fromDay = isIsoDate(opts?.localDate)
     ? dateFromLocalDayKey(opts!.localDate as string)
     : new Date();
+
+  // Model returned update/delete → never also invent set_reminder.
+  const hasReminderMutate = list.some(
+    (a) => a.type === 'update_last_done' || a.type === 'remove_last_done'
+  );
+  if (hasReminderMutate && looksLikeReminderEditCommand(lastUserText)) {
+    list = list.filter((a) => a.type !== 'set_reminder');
+  }
+
   if (looksLikeReminderDateUpdate(lastUserText, fromDay)) {
     list = list.filter((a) => a.type !== 'set_reminder');
     const focusId =
       opts?.talkFocus?.kind === 'lastDone' ? opts.talkFocus.id : undefined;
     const spokenAt = remindAtFromUtterance(lastUserText, fromDay);
+    const spokenClock = remindTimeFromUtterance(lastUserText);
+    const clarify = reminderClarifyFromUtterance(lastUserText, fromDay);
+    if (clarify) {
+      // Drop create/update — applyChatActions will surface clarify if set_reminder remains;
+      // strip mutating actions so nothing is written.
+      return list.filter(
+        (a) => a.type !== 'set_reminder' && a.type !== 'update_last_done'
+      );
+    }
     const existing = list.find((a) => a.type === 'update_last_done');
+    const patch: {
+      remindAt?: string;
+      remindTime?: string;
+    } = {};
+    if (spokenAt) patch.remindAt = spokenAt;
+    if (spokenClock) patch.remindTime = spokenClock;
     if (existing && existing.type === 'update_last_done') {
-      if (spokenAt) existing.patch = { ...existing.patch, remindAt: spokenAt };
+      existing.patch = { ...existing.patch, ...patch };
       if (!existing.id && focusId) existing.id = focusId;
-    } else if (focusId || spokenAt) {
+    } else if (focusId || spokenAt || spokenClock) {
       list.push({
         type: 'update_last_done',
         id: focusId,
-        patch: { remindAt: spokenAt },
+        patch,
       });
     }
     return list.length ? list : actions;
@@ -2525,9 +2626,34 @@ function ensureTalkActions(
     list = injectFocusedRename(list, lastUserText, opts.talkFocus);
     return list.length ? list : actions;
   }
+
+  // Fresh create must not also edit a focused reminder.
+  if (looksLikeReminder(lastUserText)) {
+    list = list.filter((a) => a.type !== 'update_last_done');
+  }
+
+  if (reminderClarifyFromUtterance(lastUserText, fromDay) || isBareRemindMe(lastUserText)) {
+    return list.filter((a) => a.type !== 'set_reminder');
+  }
+
+  const dual = splitDualRemindersFromUtterance(lastUserText, fromDay);
+  if (dual?.length === 2) {
+    list = list.filter((a) => a.type !== 'set_reminder');
+    for (const d of dual) {
+      list.push({
+        type: 'set_reminder',
+        label: d.label,
+        remindAt: d.remindAt,
+        ...(d.remindTime ? { remindTime: d.remindTime } : {}),
+      });
+    }
+    return list.length ? list : actions;
+  }
+
   if (looksLikeReminder(lastUserText) && !types.has('set_reminder')) {
     const recurring =
       parseDailyReminder(lastUserText, fromDay) ||
+      parseIntervalReminder(lastUserText, fromDay) ||
       parseRecurringWeekdayReminder(lastUserText, fromDay);
     // Default to today when the user didn't name a day, silent skip felt broken.
     const todayKey = isIsoDate(opts?.localDate)
@@ -2535,16 +2661,36 @@ function ensureTalkActions(
       : localDayKey(fromDay);
     const remindAt = remindAtFromUtterance(lastUserText, fromDay) || todayKey;
     const label = reminderLabelFromUtterance(lastUserText) || 'Reminder';
-    if (remindAt || recurring) {
+    const remindTime = !recurring ? remindTimeFromUtterance(lastUserText) : undefined;
+    if ((remindAt || recurring) && !/^reminder$/i.test(label)) {
       list.push({
         type: 'set_reminder',
         label,
         remindAt: recurring?.remindAt || remindAt!,
         remindInterval: recurring?.remindInterval,
+        ...(remindTime ? { remindTime } : {}),
       });
     }
   }
-  return list.length ? list : actions;
+  // When repairing an existing set_reminder from the model, persist spoken time
+  // and prefer spoken label over a weaker model label.
+  const repaired = list.map((a) => {
+    if (a.type !== 'set_reminder') return a;
+    const next = { ...a };
+    const spokenClock = remindTimeFromUtterance(lastUserText);
+    if (spokenClock && !next.remindInterval) {
+      next.remindTime = next.remindTime || spokenClock;
+    }
+    const parsedLabel = reminderLabelFromUtterance(lastUserText);
+    if (parsedLabel && parsedLabel !== 'Reminder') {
+      // Don't let a weaker model label override a better spoken one.
+      next.label = parsedLabel;
+    } else if (next.label) {
+      next.label = finalizeReminderLabel(next.label);
+    }
+    return next;
+  });
+  return repaired.length ? repaired : actions;
 }
 
 /** Replace em dashes the model still writes with plain punctuation. */

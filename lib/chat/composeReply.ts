@@ -93,6 +93,7 @@ export function composeAppliedReply(params: {
   reminderAt?: string | null;
   updatedReminder?: boolean;
   reminderUnchanged?: boolean;
+  reminderClarify?: string | null;
   removedLastDoneLabel?: string | null;
   updatedClassPack?: boolean;
   renamedPersonFrom?: string | null;
@@ -232,6 +233,10 @@ export function composeAppliedReply(params: {
   }
   if (actions.some((a) => a?.type === 'habit_check_in')) {
     return 'Couldn’t check that in. Try naming the habit.';
+  }
+
+  if (params.reminderClarify?.trim()) {
+    return params.reminderClarify.trim();
   }
 
   if (params.reminderLabel) {

@@ -218,7 +218,8 @@ describe('reminder speech', () => {
       reminderLabelFromUtterance(
         'Remind me for PE uniform in the morning every Tuesday and Friday'
       ),
-      'PE uniform in the morning'
+      // "in the morning" is a time cue (→ 9 AM), stripped from the title.
+      'PE uniform'
     );
     assert.equal(
       reminderLabelFromUtterance('Can you set a reminder for school bag'),
