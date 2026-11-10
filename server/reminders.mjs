@@ -42,6 +42,7 @@ import {
   parseIntervalReminder,
   parseReminderFromUtterance,
   finalizeReminderLabel,
+  isRelativeReminderPing,
 } from './dates-lib.mjs';
 
 function passportId(inventorySummary, text) {
@@ -127,17 +128,16 @@ export function ensureReminderActions(
       ? parsed.label
       : finalizeReminderLabel(parsed?.label || 'Reminder');
   const inventoryItemId = passportId(inventorySummary, lastUserText);
-  const spokenClock =
-    remindTimeFromUtterance(lastUserText) ||
-    (relativeDt
-      ? `${String(relativeDt.hour).padStart(2, '0')}:${String(relativeDt.minute).padStart(2, '0')}`
-      : undefined);
+  const relativeClock = relativeDt
+    ? `${String(relativeDt.hour).padStart(2, '0')}:${String(relativeDt.minute).padStart(2, '0')}`
+    : undefined;
+  const spokenClock = relativeClock || remindTimeFromUtterance(lastUserText);
 
   if (
-    looksLikeReminder(lastUserText) &&
+    (looksLikeReminder(lastUserText) || isRelativeReminderPing(lastUserText)) &&
     !types.has('set_reminder') &&
     (remindAt || recurring) &&
-    label !== 'Reminder'
+    (relativeDt || label !== 'Reminder')
   ) {
     list.push({
       type: 'set_reminder',
@@ -165,7 +165,7 @@ export function ensureReminderActions(
         typeof next.remindTime === 'string' && /^\d{1,2}:\d{2}$/.test(next.remindTime.trim())
           ? next.remindTime.trim()
           : undefined;
-      const clock = spokenClock || modelClock;
+      const clock = relativeClock || modelClock || spokenClock;
       if (clock) next.remindTime = clock;
     }
     // Prefer spoken label; don't let a weaker model label override.

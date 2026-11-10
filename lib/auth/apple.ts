@@ -12,6 +12,7 @@ export type AuthAccountState = {
   userId: string | null;
   isAnonymous: boolean;
   hasAppleIdentity: boolean;
+  hasGoogleIdentity: boolean;
   email: string | null;
   displayHint: string | null;
 };
@@ -49,6 +50,11 @@ export function userHasAppleIdentity(user: User | null | undefined): boolean {
   return user.identities.some((i) => i.provider === 'apple');
 }
 
+export function userHasGoogleIdentity(user: User | null | undefined): boolean {
+  if (!user?.identities?.length) return false;
+  return user.identities.some((i) => i.provider === 'google');
+}
+
 export async function getAuthAccountState(): Promise<AuthAccountState> {
   const configured = isSupabaseConfigured() && Boolean(supabase);
   if (!configured || !supabase) {
@@ -58,6 +64,7 @@ export async function getAuthAccountState(): Promise<AuthAccountState> {
       userId: null,
       isAnonymous: true,
       hasAppleIdentity: false,
+      hasGoogleIdentity: false,
       email: null,
       displayHint: null,
     };
@@ -66,18 +73,22 @@ export async function getAuthAccountState(): Promise<AuthAccountState> {
     const { data } = await supabase.auth.getSession();
     const user = data.session?.user ?? null;
     const hasApple = userHasAppleIdentity(user);
+    const hasGoogle = userHasGoogleIdentity(user);
     return {
       ready: true,
       configured: true,
       userId: user?.id ?? null,
-      isAnonymous: Boolean(user?.is_anonymous ?? !hasApple),
+      isAnonymous: Boolean(user?.is_anonymous ?? !(hasApple || hasGoogle)),
       hasAppleIdentity: hasApple,
+      hasGoogleIdentity: hasGoogle,
       email: user?.email ?? null,
       displayHint: hasApple
         ? user?.email || 'Signed in with Apple'
-        : user
-          ? 'Temporary account on this device'
-          : null,
+        : hasGoogle
+          ? user?.email || 'Signed in with Google'
+          : user
+            ? 'Temporary account on this device'
+            : null,
     };
   } catch {
     return {
@@ -86,6 +97,7 @@ export async function getAuthAccountState(): Promise<AuthAccountState> {
       userId: null,
       isAnonymous: true,
       hasAppleIdentity: false,
+      hasGoogleIdentity: false,
       email: null,
       displayHint: null,
     };

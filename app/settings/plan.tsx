@@ -28,7 +28,18 @@ import {
   subscriptionDetailLine,
   type SubscriptionSnapshot,
 } from '@/lib/billing/revenueCat';
+import {
+  billingUnavailableBody,
+  billingUnavailableTitle,
+  cancelRenewalLine,
+  chargeFinePrint,
+  manageSubscriptionLabel,
+  manageSubscriptionUrl,
+  restoreUnavailableBody,
+  trialSubscribeLine,
+} from '@/lib/billing/storeCopy';
 import { promptSaveWithApple } from '@/lib/auth/appleNudge';
+import { promptSaveWithGoogle } from '@/lib/auth/googleNudge';
 import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { fonts, radius, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
@@ -120,7 +131,7 @@ export default function PlanSettingsScreen() {
 
   const subline =
     entitlement.status === 'trial_active'
-      ? 'Full access while you try Saavi. Subscribe anytime with Apple.'
+      ? trialSubscribeLine()
       : entitlement.status === 'trial_expired'
         ? 'Pick a plan to keep Things, Talk, and sync going.'
         : entitlement.status === 'lapsed'
@@ -129,7 +140,7 @@ export default function PlanSettingsScreen() {
               renewalSentence,
               switchLine,
               'One login on your devices.',
-              'Cancel in Apple Settings to stop the next renewal. The period you already paid for stays active until it ends.',
+              cancelRenewalLine(),
             ]
               .filter(Boolean)
               .join(' ');
@@ -138,10 +149,10 @@ export default function PlanSettingsScreen() {
     if (busy) return;
     if (!billingReady) {
       showUserAlert(
-        'Apple billing',
+        billingUnavailableTitle(),
         __DEV__
           ? 'RevenueCat isn’t available here. Unlocks locally in development only.'
-          : 'Subscriptions need a TestFlight or App Store build with billing connected.'
+          : billingUnavailableBody()
       );
       if (__DEV__) {
         await subscribe('pro', cadence);
@@ -178,6 +189,11 @@ export default function PlanSettingsScreen() {
           message:
             'Your plan is active. Link Apple so the next phone can restore your subscription and data. You can skip and do this later in Settings → Account.',
         });
+        await promptSaveWithGoogle({
+          title: 'Save with Google',
+          message:
+            'Your plan is active. Link Google so the next phone can restore your subscription and data. You can skip and do this later in Settings → Account.',
+        });
         return;
       }
       if (!result.cancelled) {
@@ -198,7 +214,7 @@ export default function PlanSettingsScreen() {
     if (!billingReady) {
       showUserAlert(
         'Restore',
-        'Restore works on TestFlight or App Store builds once billing is connected.'
+        restoreUnavailableBody()
       );
       return;
     }
@@ -212,6 +228,11 @@ export default function PlanSettingsScreen() {
           title: 'Save with Apple',
           message:
             'Your subscription is restored. Link Apple so household data stays with you on a new phone.',
+        });
+        await promptSaveWithGoogle({
+          title: 'Save with Google',
+          message:
+            'Your subscription is restored. Link Google so household data stays with you on a new phone.',
         });
         return;
       }
@@ -296,22 +317,20 @@ export default function PlanSettingsScreen() {
           />
 
           <Text style={[styles.fine, { color: colors.mute }]}>
-            Charged to your Apple ID. Renews automatically until you cancel in
-            Apple Settings. Cancel stops the next charge. It does not refund the
-            current period.
+            {chargeFinePrint()}
           </Text>
       </>
 
       {planId === 'pro' ? (
         <Pressable
           onPress={() => {
-            void Linking.openURL('https://apps.apple.com/account/subscriptions');
+            void Linking.openURL(manageSubscriptionUrl());
           }}
           hitSlop={8}
           style={styles.restore}
         >
           <Text style={[styles.restoreText, { color: colors.ink }]}>
-            Manage subscription in Apple Settings
+            {manageSubscriptionLabel()}
           </Text>
         </Pressable>
       ) : null}

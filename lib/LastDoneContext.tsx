@@ -299,10 +299,7 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
         if (!existing) throw new Error('Item not found');
         const updated = touch(applyLog(existing, input));
         await persist(list.map((i) => (i.id === updated.id ? updated : i)));
-        // Drop this item's pending locals (incl. overdue nudge) immediately;
-        // full sync then rebuilds others / rolled series under the 64-cap.
-        void cancelLastDoneReminder(updated.id);
-        resyncReminders();
+        await syncLastDoneReminders(itemsRef.current);
         void queueReminderUpsert(updated);
         return updated;
       }
@@ -343,8 +340,7 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
       if (match) {
         const updated = touch(applyLog(match, { ...input, id: match.id }));
         await persist(list.map((i) => (i.id === updated.id ? updated : i)));
-        void cancelLastDoneReminder(updated.id);
-        resyncReminders();
+        await syncLastDoneReminders(itemsRef.current);
         void queueReminderUpsert(updated);
         return updated;
       }

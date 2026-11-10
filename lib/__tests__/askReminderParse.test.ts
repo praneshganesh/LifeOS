@@ -15,7 +15,10 @@ import {
   looksLikeReminderEditCommand,
   parseIntervalReminder,
   parseReminderFromUtterance,
+  parseRelativeDateTimeFromUtterance,
   parseRecurringWeekdayReminder,
+  dateFromLocalDayKey,
+  isRelativeReminderPing,
   parseTimeOfDayFromUtterance,
   remindAtFromUtterance,
   reminderClarifyFromUtterance,
@@ -64,6 +67,7 @@ async function applyWithWrongModel(
   opts: {
     talkFocus?: { kind: 'lastDone'; id: string } | null;
     lastDoneList?: { id: string; label: string; remindAt?: string | null }[];
+    now?: Date;
   } = {}
 ) {
   const saved: Saved[] = [];
@@ -71,6 +75,7 @@ async function applyWithWrongModel(
   await applyChatActions(modelActions, unusedInv, 'talk', {
     lastUserText: utterance,
     localDate: LOCAL_DAY,
+    now: opts.now,
     lastTalkFocus: opts.talkFocus ?? null,
     lastDoneList: opts.lastDoneList,
     lastDone: {
@@ -350,5 +355,53 @@ describe('Ask/Talk reminder parse (clock Wed 4 Nov 2026 Asia/Dubai)', () => {
       'Meraas Payment'
     );
     assert.equal(finalizeReminderLabel('Pay Meraas on Nov 12'), 'Pay Meraas');
+    assert.equal(finalizeReminderLabel('Of November to pay Meraas'), 'Pay Meraas');
+    assert.equal(finalizeReminderLabel('Pay rent at the'), 'Pay rent');
+    assert.equal(finalizeReminderLabel(': Meraas payment'), 'Meraas payment');
+    assert.equal(
+      parseReminderFromUtterance('Remind me on the 12th of November to pay Meraas')?.label,
+      'Pay Meraas'
+    );
+    assert.equal(
+      parseReminderFromUtterance('Remind me to pay rent at the 12th')?.label,
+      'Pay rent'
+    );
+    assert.equal(
+      parseReminderFromUtterance('Remind me at 3: Meraas payment')?.label,
+      'Meraas payment'
+    );
+  });
+
+  it('in 2 hours counts from now, not noon', async () => {
+    const now = new Date(2026, 10, 4, 7, 52, 0);
+    const u = 'Remind me in 2 hours to call the bank';
+    const rel = parseRelativeDateTimeFromUtterance(u, dateFromLocalDayKey(LOCAL_DAY), now);
+    assert.equal(rel?.day, LOCAL_DAY);
+    assert.equal(rel?.hour, 9);
+    assert.equal(rel?.minute, 52);
+    const { saved } = await applyWithWrongModel(
+      u,
+      [{ type: 'set_reminder', label: 'Call the bank', remindAt: LOCAL_DAY, remindTime: '14:00' }],
+      { now }
+    );
+    assert.equal(saved.length, 1);
+    assert.equal(saved[0]!.label, 'Call the bank');
+    assert.equal(saved[0]!.remindTime, '09:52');
+    assert.equal(saved[0]!.remindAt, LOCAL_DAY);
+  });
+
+  it('in 30 minutes saves a reminder even with no subject', async () => {
+    const now = new Date(2026, 10, 4, 7, 52, 0);
+    const u = 'In 30 minutes';
+    assert.equal(isRelativeReminderPing(u), true);
+    const { saved } = await applyWithWrongModel(u, [], { now });
+    assert.equal(saved.length, 1);
+    assert.equal(saved[0]!.label, 'Reminder');
+    assert.equal(saved[0]!.remindTime, '08:22');
+    assert.equal(saved[0]!.remindAt, LOCAL_DAY);
+  });
+
+  it('a sentence that only mentions an offset is not a reminder', () => {
+    assert.equal(isRelativeReminderPing('The meeting is in 30 minutes'), false);
   });
 });

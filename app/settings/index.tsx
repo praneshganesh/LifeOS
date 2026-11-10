@@ -37,9 +37,11 @@ export default function SettingsScreen() {
         setAccountLine(
           s.hasAppleIdentity
             ? s.displayHint || 'Signed in with Apple'
-            : s.userId
-              ? 'Temporary account'
-              : 'Not signed in'
+            : s.hasGoogleIdentity
+              ? s.displayHint || 'Signed in with Google'
+              : s.userId
+                ? 'Temporary account'
+                : 'Not signed in'
         );
       });
       void Promise.all([loadPlanPrefs(), fetchSubscriptionSnapshot()]).then(
@@ -124,6 +126,18 @@ export default function SettingsScreen() {
             title="Home & currency"
             subtitle={homesMeta}
             onPress={() => router.push('/settings/homes' as Href)}
+            last
+          />
+        </ListCard>
+      </ModuleSection>
+
+      <ModuleSection label="Help">
+        <ListCard>
+          <ListRow
+            icon="headphones"
+            title="Contact"
+            subtitle="hello@ibp-labs.com"
+            onPress={() => router.push(moduleHref('/settings/contact', 'settings'))}
             last
           />
         </ListCard>

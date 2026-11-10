@@ -10,7 +10,7 @@ const SUPPORT_EMAIL = 'hello@ibp-labs.com';
 const HOW_WE_COLLECT =
   Platform.OS === 'ios'
     ? 'You type it, use the camera, or choose a photo or PDF. Sign in with Apple can include an email if you allow it. Camera, photos, and the microphone are used only when you capture or talk. You can turn them off in iOS Settings. Speech recognition, Face ID, and on-device text reading stay on the phone. Reminders are scheduled on the device. We use this to keep your record, sync it, answer Talk, Ask, and Identify, and apply your subscription.'
-    : 'You type it, use the camera, or choose a photo or PDF. Camera, photos, and the microphone are used only when you capture or talk. You can turn them off in system Settings. Speech recognition, biometrics, and on-device text reading stay on the phone. Reminders are scheduled on the device. We use this to keep your record, sync it, answer Talk, Ask, and Identify, and apply your subscription.';
+    : 'You type it, use the camera, or choose a photo or PDF. Sign in with Google can include the email on that Google account. Camera, photos, and the microphone are used only when you capture or talk. You can turn them off in system Settings. Speech recognition, biometrics, and on-device text reading stay on the phone. Reminders are scheduled on the device. We use this to keep your record, sync it, answer Talk, Ask, and Identify, and apply your subscription.';
 
 const DELETE_ACCOUNT_BODY =
   Platform.OS === 'ios'
@@ -71,7 +71,7 @@ export default function PrivacyPolicyScreen() {
         body={
           Platform.OS === 'ios'
             ? 'The first time you start Saavi we create a temporary account so the app can sync. Sign in with Apple replaces that with an Apple identity, including a private relay email if you choose Hide My Email. We store that identity to restore your data and subscription on another phone. We do not ask you to create a password.'
-            : 'The first time you start Saavi we create a temporary account so the app can sync. Linking a store identity (when available) replaces that temporary account so you can restore your data and subscription on another phone. We do not ask you to create a password.'
+            : 'The first time you start Saavi we create a temporary account so the app can sync. Sign in with Google replaces that with the Google account you choose. We store that identity to restore your data and subscription on another phone. We do not ask you to create a password.'
         }
       />
       <Block
@@ -96,7 +96,7 @@ export default function PrivacyPolicyScreen() {
         body={
           Platform.OS === 'ios'
             ? 'Supabase stores the account, the synced record, and attached files. Our server and OpenAI answer Talk, Ask, and Identify. Apple handles Sign in with Apple and payment. RevenueCat reports whether Pro is active. They receive data only for that purpose and protect it to the same standard as this policy. We don’t sell your record, connect Gmail or your bank, or track you across other companies’ apps.'
-            : 'Supabase stores the account, the synced record, and attached files. Our server and OpenAI answer Talk, Ask, and Identify. The store handles payment. RevenueCat reports whether Pro is active. They receive data only for that purpose and protect it to the same standard as this policy. We don’t sell your record, connect Gmail or your bank, or track you across other companies’ apps.'
+            : 'Supabase stores the account, the synced record, and attached files. Our server and OpenAI answer Talk, Ask, and Identify. Google handles Sign in with Google. Google Play handles payment. RevenueCat reports whether Pro is active. They receive data only for that purpose and protect it to the same standard as this policy. We don’t sell your record, connect Gmail or your bank, or track you across other companies’ apps.'
         }
       />
       <Block

@@ -179,42 +179,66 @@ export async function runChatAgent(params: {
     );
   }
 
-  let res: Response;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      const err = new Error('timeout');
+      err.name = 'AbortError';
+      reject(err);
+    }, FETCH_TIMEOUT_MS);
+  });
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   const proxyToken = process.env.EXPO_PUBLIC_CHAT_API_TOKEN?.trim();
-  const accessToken = await getSupabaseAccessToken();
-  if (accessToken) {
-    headers.Authorization = `Bearer ${accessToken}`;
-    if (proxyToken) headers['X-Saavi-Proxy-Token'] = proxyToken;
-  } else if (proxyToken) {
-    // Local chat-api without Supabase: legacy shared token.
-    headers.Authorization = `Bearer ${proxyToken}`;
-  }
+
+  let res: Response;
+  let data: { error?: string; reply?: string; actions?: unknown };
   try {
-    res = await fetch(url, {
-      method: 'POST',
-      headers,
-      signal: controller.signal,
-      body: JSON.stringify({
-        messages,
-        inventorySummary,
-        lastDoneSummary,
-        expensesSummary,
-        habitsSummary,
-        classPacksSummary,
-        subscriptionsSummary,
-        session: params.session ?? {},
-        household: params.household ?? [],
-        defaultCurrency: params.defaultCurrency ?? '',
-        localDate: params.localDate || localDayKey(),
-        timezone:
-          typeof Intl !== 'undefined' && Intl.DateTimeFormat
-            ? Intl.DateTimeFormat().resolvedOptions().timeZone
-            : undefined,
-      }),
-    });
+    const result = await Promise.race([
+      (async () => {
+        // Token refresh sits outside fetch. A hang here used to leave Ask on Thinking…
+        const accessToken = await getSupabaseAccessToken();
+        if (accessToken) {
+          headers.Authorization = `Bearer ${accessToken}`;
+          if (proxyToken) headers['X-Saavi-Proxy-Token'] = proxyToken;
+        } else if (proxyToken) {
+          // Local chat-api without Supabase: legacy shared token.
+          headers.Authorization = `Bearer ${proxyToken}`;
+        }
+        const response = await fetch(url, {
+          method: 'POST',
+          headers,
+          signal: controller.signal,
+          body: JSON.stringify({
+            messages,
+            inventorySummary,
+            lastDoneSummary,
+            expensesSummary,
+            habitsSummary,
+            classPacksSummary,
+            subscriptionsSummary,
+            session: params.session ?? {},
+            household: params.household ?? [],
+            defaultCurrency: params.defaultCurrency ?? '',
+            localDate: params.localDate || localDayKey(),
+            timezone:
+              typeof Intl !== 'undefined' && Intl.DateTimeFormat
+                ? Intl.DateTimeFormat().resolvedOptions().timeZone
+                : undefined,
+          }),
+        });
+        const body = (await response.json().catch(() => ({}))) as {
+          error?: string;
+          reply?: string;
+          actions?: unknown;
+        };
+        return { response, body };
+      })(),
+      deadline,
+    ]);
+    res = result.response;
+    data = result.body;
   } catch (err) {
     if (__DEV__) {
       console.warn('[Saavi chat] request failed', err);
@@ -235,14 +259,8 @@ export async function runChatAgent(params: {
           : 'Talk can’t reach the chat service right now. Check your connection, or start the local chat API.'
     );
   } finally {
-    clearTimeout(timer);
+    if (timer) clearTimeout(timer);
   }
-
-  const data = (await res.json().catch(() => ({}))) as {
-    error?: string;
-    reply?: string;
-    actions?: unknown;
-  };
 
   if (!res.ok) {
     const raw = (data.error || '').trim();

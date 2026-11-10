@@ -17,12 +17,22 @@ import { fonts, radius, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
 import { pickOffer, type OfferSummary } from '@/lib/billing/revenueCat';
 import { PRO_TALK_DAILY } from '@/lib/planLimits';
+import {
+  paywallLegal,
+  paywallNotReadyBody,
+  paywallNotReadyTitle,
+  paywallProductsBody,
+  paywallPurchaseAlertBody,
+  paywallPurchaseAlertTitle,
+  paywallRestoreBody,
+} from '@/lib/billing/storeCopy';
 import { promptSaveWithApple } from '@/lib/auth/appleNudge';
+import { promptSaveWithGoogle } from '@/lib/auth/googleNudge';
 
 type Cadence = 'monthly' | 'yearly';
 
 /**
- * Hard gate when trial ends, Pro via Apple (RevenueCat → StoreKit).
+ * Hard gate when trial ends. iOS bills through Apple; Android through Google Play.
  */
 export default function PaywallScreen() {
   const { colors } = useTheme();
@@ -61,6 +71,11 @@ export default function PaywallScreen() {
       message:
         'Your plan is active. Link Apple so the next phone can restore your subscription, household, and synced data. You can skip and do this later in Settings → Account.',
     });
+    await promptSaveWithGoogle({
+      title: 'Save with Google',
+      message:
+        'Your plan is active. Link Google so the next phone can restore your subscription, household, and synced data. You can skip and do this later in Settings → Account.',
+    });
     const done = await isOnboardingDone();
     router.replace((done ? '/(tabs)' : '/onboarding') as Href);
   }
@@ -68,16 +83,13 @@ export default function PaywallScreen() {
   async function pickPro() {
     if (busy) return;
     if (!billingReady) {
-      Alert.alert(
-        'App Store billing',
-        'Subscriptions are purchased through Apple on a TestFlight or App Store build with RevenueCat connected. This preview can’t charge your Apple ID.'
-      );
+      Alert.alert(paywallPurchaseAlertTitle(), paywallPurchaseAlertBody());
       return;
     }
     if (!proOffer) {
       Alert.alert(
         'Plans unavailable',
-        'Store products aren’t loaded yet. Check RevenueCat offerings and App Store Connect subscriptions, then try again.'
+        paywallProductsBody()
       );
       return;
     }
@@ -125,7 +137,7 @@ export default function PaywallScreen() {
     if (!billingReady) {
       Alert.alert(
         'Restore',
-        'Restore works on TestFlight / App Store builds once RevenueCat is connected.'
+        paywallRestoreBody()
       );
       return;
     }
@@ -216,11 +228,10 @@ export default function PaywallScreen() {
             ]}
           >
             <Text style={[styles.bannerTitle, { color: colors.ink }]}>
-              Apple billing not connected on this build
+              {paywallNotReadyTitle()}
             </Text>
             <Text style={[styles.bannerBody, { color: colors.mute }]}>
-              Prices and payment use App Store subscriptions via RevenueCat.
-              Open a TestFlight build that includes your RevenueCat iOS key.
+              {paywallNotReadyBody()}
             </Text>
           </View>
         ) : null}
@@ -232,10 +243,7 @@ export default function PaywallScreen() {
         </Pressable>
 
         <Text style={[styles.legal, { color: colors.mute }]}>
-          Payment is charged to your Apple ID. Renews automatically until you
-          cancel in Apple Settings (at least 24 hours before the period ends).
-          Cancel stops the next renewal. It does not refund the period already
-          paid.{' '}
+          {paywallLegal()}{' '}
           <Text
             style={[styles.legalLink, { color: colors.ink }]}
             onPress={() => router.push('/settings/terms' as Href)}

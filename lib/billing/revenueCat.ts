@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { noSubscriptionRestoreError } from '@/lib/billing/storeCopy';
 import type { CustomerInfo, PurchasesPackage } from 'react-native-purchases';
 import type { PlanId } from '@/lib/planLimits';
 import {
@@ -233,7 +234,7 @@ export async function restorePurchases(): Promise<PurchaseResult> {
     const info = await Purchases.restorePurchases();
     const planId = planIdFromCustomerInfo(info);
     if (!planId) {
-      return { ok: false, error: 'No active subscription found for this Apple ID.' };
+      return { ok: false, error: noSubscriptionRestoreError() };
     }
     const snap = subscriptionFromCustomerInfo(info);
     return {

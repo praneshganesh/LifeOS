@@ -1,3 +1,4 @@
+import { notificationDeniedLine } from '@/lib/billing/storeCopy';
 import { useTheme } from '@/lib/ThemeContext';
 import { useMemo, useEffect, useState } from 'react';
 import { Platform, StyleSheet, Switch, View } from 'react-native';
@@ -68,7 +69,7 @@ function permissionSubtitle(
   if (!ready) return undefined;
   if (Platform.OS === 'web' || status === 'unavailable') return undefined;
   if (status === 'granted') return undefined;
-  if (status === 'denied') return 'Off in iPhone Settings';
+  if (status === 'denied') return notificationDeniedLine();
   return undefined;
 }
 

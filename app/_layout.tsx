@@ -108,6 +108,7 @@ function RootNavigation({
         <Stack.Screen name="settings/homes" options={{ headerShown: false }} />
         <Stack.Screen name="settings/data" options={{ headerShown: false }} />
         <Stack.Screen name="settings/about" options={{ headerShown: false }} />
+        <Stack.Screen name="settings/contact" options={{ headerShown: false }} />
         <Stack.Screen name="warranties/index" options={{ headerShown: false }} />
         <Stack.Screen name="subscriptions" options={{ headerShown: false }} />
         <Stack.Screen name="insurance/index" options={{ headerShown: false }} />

@@ -72,6 +72,7 @@ import {
   reminderClarifyFromUtterance,
   splitDualRemindersFromUtterance,
   isBareRemindMe,
+  isRelativeReminderPing,
   warrantyExpiryFromUtterance,
 } from '@/lib/dates';
 
@@ -548,6 +549,8 @@ export async function applyChatActions(
     defaultCurrency?: string;
     /** User's local calendar date (YYYY-MM-DD). */
     localDate?: string;
+    /** Wall clock for "in 2 hours". Defaults to now. Tests pass a frozen instant. */
+    now?: Date;
   }
 ): Promise<ApplyActionsResult> {
   const today = isIsoDate(options?.localDate)
@@ -555,6 +558,7 @@ export async function applyChatActions(
     : dayKey();
   /** Anchor relative dates ("tomorrow", "12th Nov") to the user's local day. */
   const fromDay = dateFromLocalDayKey(today);
+  const clockNow = options?.now ?? new Date();
   const defaultCurrency =
     options?.defaultCurrency?.trim().toUpperCase() ||
     getRuntimeDefaultCurrency();
@@ -623,6 +627,7 @@ export async function applyChatActions(
   const list = ensureTalkActions(Array.isArray(actions) ? actions : [], lastUserText, {
     talkFocus,
     localDate: today,
+    now: clockNow,
   });
 
   const remember = (kind: TalkFocus['kind'], id?: string | null) => {
@@ -1300,8 +1305,8 @@ export async function applyChatActions(
               remindInterval: action.remindInterval,
             }
           : undefined);
-      const relativeDt = parseRelativeDateTimeFromUtterance(lastUserText, fromDay);
-      const spokenAt = remindAtFromUtterance(lastUserText, fromDay);
+      const relativeDt = parseRelativeDateTimeFromUtterance(lastUserText, fromDay, clockNow);
+      const spokenAt = remindAtFromUtterance(lastUserText, fromDay, clockNow);
       const modelAt = action.remindAt ? normalizeDateField(action.remindAt) : undefined;
       const dualParts = splitDualRemindersFromUtterance(lastUserText, fromDay);
       // Dual "X on A and Y on B": each action already carries its own day —
@@ -1339,7 +1344,7 @@ export async function applyChatActions(
       const label = finalizeReminderLabel(
         parsedLabel || spokenLabel || (action.label !== 'Reminder' ? action.label : 'Reminder')
       );
-      if (/^reminder$/i.test(label)) {
+      if (/^reminder$/i.test(label) && !relativeDt) {
         reminderClarify = 'What should I remind you about?';
         continue;
       }
@@ -1351,11 +1356,10 @@ export async function applyChatActions(
         action.remindInterval?.unit === 'months'
           ? action.remindInterval
           : undefined);
-      const spokenClock =
-        remindTimeFromUtterance(lastUserText) ||
-        (relativeDt
-          ? `${String(relativeDt.hour).padStart(2, '0')}:${String(relativeDt.minute).padStart(2, '0')}`
-          : undefined);
+      const relativeClock = relativeDt
+        ? `${String(relativeDt.hour).padStart(2, '0')}:${String(relativeDt.minute).padStart(2, '0')}`
+        : undefined;
+      const spokenClock = relativeClock || remindTimeFromUtterance(lastUserText);
       const modelClock =
         typeof action.remindTime === 'string' && /^\d{1,2}:\d{2}$/.test(action.remindTime.trim())
           ? action.remindTime.trim()
@@ -2529,7 +2533,7 @@ function injectFocusedRename(
 function ensureTalkActions(
   actions: ChatAction[],
   lastUserText?: string,
-  opts?: { talkFocus?: TalkFocus | null; localDate?: string }
+  opts?: { talkFocus?: TalkFocus | null; localDate?: string; now?: Date }
 ): ChatAction[] {
   let list: ChatAction[] = coerceDurablePurchases(
     actions.filter((a) => a && a.type !== 'none'),
@@ -2580,6 +2584,7 @@ function ensureTalkActions(
   const fromDay = isIsoDate(opts?.localDate)
     ? dateFromLocalDayKey(opts!.localDate as string)
     : new Date();
+  const clockNow = opts?.now ?? new Date();
 
   // Model returned update/delete → never also invent set_reminder.
   const hasReminderMutate = list.some(
@@ -2650,7 +2655,10 @@ function ensureTalkActions(
     return list.length ? list : actions;
   }
 
-  if (looksLikeReminder(lastUserText) && !types.has('set_reminder')) {
+  if (
+    (looksLikeReminder(lastUserText) || isRelativeReminderPing(lastUserText)) &&
+    !types.has('set_reminder')
+  ) {
     const recurring =
       parseDailyReminder(lastUserText, fromDay) ||
       parseIntervalReminder(lastUserText, fromDay) ||
@@ -2659,10 +2667,19 @@ function ensureTalkActions(
     const todayKey = isIsoDate(opts?.localDate)
       ? (opts!.localDate as string)
       : localDayKey(fromDay);
-    const remindAt = remindAtFromUtterance(lastUserText, fromDay) || todayKey;
+    const relativeDt = parseRelativeDateTimeFromUtterance(lastUserText, fromDay, clockNow);
+    const remindAt =
+      remindAtFromUtterance(lastUserText, fromDay, clockNow) ||
+      relativeDt?.day ||
+      todayKey;
     const label = reminderLabelFromUtterance(lastUserText) || 'Reminder';
-    const remindTime = !recurring ? remindTimeFromUtterance(lastUserText) : undefined;
-    if ((remindAt || recurring) && !/^reminder$/i.test(label)) {
+    const relativeClock = relativeDt
+      ? `${String(relativeDt.hour).padStart(2, '0')}:${String(relativeDt.minute).padStart(2, '0')}`
+      : undefined;
+    const remindTime = !recurring
+      ? relativeClock || remindTimeFromUtterance(lastUserText)
+      : undefined;
+    if ((remindAt || recurring) && (relativeDt || !/^reminder$/i.test(label))) {
       list.push({
         type: 'set_reminder',
         label,
@@ -2677,9 +2694,19 @@ function ensureTalkActions(
   const repaired = list.map((a) => {
     if (a.type !== 'set_reminder') return a;
     const next = { ...a };
-    const spokenClock = remindTimeFromUtterance(lastUserText);
+    const relativeDt = parseRelativeDateTimeFromUtterance(lastUserText, fromDay, clockNow);
+    const relativeClock = relativeDt
+      ? `${String(relativeDt.hour).padStart(2, '0')}:${String(relativeDt.minute).padStart(2, '0')}`
+      : undefined;
+    const spokenClock = relativeClock || remindTimeFromUtterance(lastUserText);
     if (spokenClock && !next.remindInterval) {
-      next.remindTime = next.remindTime || spokenClock;
+      next.remindTime = relativeClock || next.remindTime || spokenClock;
+    }
+    if (
+      relativeDt &&
+      (!next.label?.trim() || /^reminder$/i.test(next.label.trim()))
+    ) {
+      next.label = 'Reminder';
     }
     const parsedLabel = reminderLabelFromUtterance(lastUserText);
     if (parsedLabel && parsedLabel !== 'Reminder') {

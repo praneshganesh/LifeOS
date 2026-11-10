@@ -118,6 +118,8 @@ async function writeLocalStores(stores: Record<string, unknown>): Promise<void> 
  * first-launch hydration must not leave orphan auth users or recovery rows.
  * Pass `{ create: true }` from "Let's get started", restore, or Apple link.
  */
+let anonymousSignIn: Promise<string | null> | null = null;
+
 export async function ensureCloudSession(opts?: {
   create?: boolean;
 }): Promise<string | null> {
@@ -128,9 +130,19 @@ export async function ensureCloudSession(opts?: {
     const done = await isOnboardingDone().catch(() => false);
     if (!done) return null;
   }
-  const { data, error } = await supabase.auth.signInAnonymously();
-  if (error) throw error;
-  return data.user?.id ?? null;
+  // One in-flight sign-in. A second tap must not create a second auth user.
+  if (!anonymousSignIn) {
+    anonymousSignIn = supabase.auth
+      .signInAnonymously()
+      .then(({ data, error }) => {
+        if (error) throw error;
+        return data.user?.id ?? null;
+      })
+      .finally(() => {
+        anonymousSignIn = null;
+      });
+  }
+  return anonymousSignIn;
 }
 
 /**

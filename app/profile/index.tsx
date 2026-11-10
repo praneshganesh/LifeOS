@@ -173,6 +173,12 @@ export default function ProfileScreen() {
             onPress={() => router.push('/(tabs)/spaces' as Href)}
           />
           <ListRow
+            icon="headphones"
+            title="Contact"
+            subtitle="hello@ibp-labs.com"
+            onPress={() => router.push(moduleHref('/settings/contact', 'profile'))}
+          />
+          <ListRow
             icon="tools"
             title="Settings"
             onPress={() => router.push(moduleHref('/settings', 'profile'))}

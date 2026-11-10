@@ -477,13 +477,17 @@ export function utteranceNamesRemindDate(text?: string): boolean {
  * Does not invent today for invalid/past/ambiguous — callers should check
  * remindDateIsInvalid / remindDateIsPast / remindDateIsAmbiguous first.
  */
-export function remindAtFromUtterance(text?: string, from = new Date()): string | undefined {
+export function remindAtFromUtterance(
+  text?: string,
+  from = new Date(),
+  now?: Date
+): string | undefined {
   if (!text?.trim()) return undefined;
   if (remindDateIsInvalid(text, from) || remindDateIsPast(text, from) || remindDateIsAmbiguous(text)) {
     return undefined;
   }
 
-  const relativeDt = parseRelativeDateTimeFromUtterance(text, from);
+  const relativeDt = parseRelativeDateTimeFromUtterance(text, from, now);
   if (relativeDt?.day) return relativeDt.day;
 
   const recurring =
@@ -578,23 +582,61 @@ export function remindAtFromUtterance(text?: string, from = new Date()): string 
   return undefined;
 }
 
-/** "in 30 minutes" / "in 2 hours" → day + clock. */
+/** True for `dateFromLocalDayKey`, which anchors a calendar day at noon. */
+export function isLocalNoonAnchor(d: Date): boolean {
+  return (
+    d.getHours() === 12 &&
+    d.getMinutes() === 0 &&
+    d.getSeconds() === 0 &&
+    d.getMilliseconds() === 0
+  );
+}
+
+/**
+ * Relative "in 2 hours" must use a wall clock. A noon day-anchor would make
+ * 7:52 AM + 2 hours land at 2:00 PM.
+ */
+export function instantOnAnchor(from: Date, now = new Date()): Date {
+  if (!isLocalNoonAnchor(from)) return from;
+  return new Date(
+    from.getFullYear(),
+    from.getMonth(),
+    from.getDate(),
+    now.getHours(),
+    now.getMinutes(),
+    now.getSeconds(),
+    now.getMilliseconds()
+  );
+}
+
+/** "in 30 minutes" / "in 2 hours" / "in half an hour" → day + clock. */
 export function parseRelativeDateTimeFromUtterance(
   text?: string,
-  from = new Date()
+  from = new Date(),
+  now?: Date
 ): { day: string; hour: number; minute: number } | undefined {
   if (!text?.trim()) return undefined;
-  const mins = text.match(/\bin\s+(\d{1,4})\s+minutes?\b/i);
-  if (mins) {
-    const d = new Date(from.getTime() + Number(mins[1]) * 60_000);
-    return { day: localDayKey(d), hour: d.getHours(), minute: d.getMinutes() };
+  const base = instantOnAnchor(from, now ?? new Date());
+  let addMs: number | undefined;
+  const mins = text.match(/\bin\s+(\d{1,4})\s+(?:minutes?|mins?)\b/i);
+  if (mins) addMs = Number(mins[1]) * 60_000;
+  else if (/\bin\s+(?:a\s+)?half(?:\s+an)?\s+hour\b/i.test(text)) addMs = 30 * 60_000;
+  else if (/\bin\s+(?:an|a|one)\s+hour\b/i.test(text)) addMs = 3_600_000;
+  else {
+    const hours = text.match(/\bin\s+(\d{1,3})\s+hours?\b/i);
+    if (hours) addMs = Number(hours[1]) * 3_600_000;
+    else {
+      const fromNowMin = text.match(/\b(\d{1,4})\s+(?:minutes?|mins?)\s+from\s+now\b/i);
+      if (fromNowMin) addMs = Number(fromNowMin[1]) * 60_000;
+      else {
+        const fromNowHr = text.match(/\b(\d{1,3})\s+hours?\s+from\s+now\b/i);
+        if (fromNowHr) addMs = Number(fromNowHr[1]) * 3_600_000;
+      }
+    }
   }
-  const hours = text.match(/\bin\s+(\d{1,3})\s+hours?\b/i);
-  if (hours) {
-    const d = new Date(from.getTime() + Number(hours[1]) * 3_600_000);
-    return { day: localDayKey(d), hour: d.getHours(), minute: d.getMinutes() };
-  }
-  return undefined;
+  if (addMs == null || addMs <= 0) return undefined;
+  const d = new Date(base.getTime() + addMs);
+  return { day: localDayKey(d), hour: d.getHours(), minute: d.getMinutes() };
 }
 
 const WEEKDAY_PATTERNS: { day: number; re: RegExp }[] = [
@@ -913,6 +955,22 @@ export function looksLikeReminderEditCommand(text?: string): boolean {
   );
 }
 
+/**
+ * "In 30 minutes" / "in an hour" with no other subject.
+ * A longer sentence that merely mentions an offset is not a reminder.
+ */
+export function isRelativeReminderPing(text?: string): boolean {
+  if (!parseRelativeDateTimeFromUtterance(text)) return false;
+  const rest = String(text || '')
+    .replace(/\bin\s+(?:a|\d+|an|one|half(?:\s+an)?)\s+(?:hours?|minutes?|mins?)\b/gi, ' ')
+    .replace(/\b\d+\s+(?:minutes?|mins?|hours?)\s+from\s+now\b/gi, ' ')
+    .replace(/\b(please|a|an|the|me|now|in)\b/gi, ' ')
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return rest.length < 3;
+}
+
 /** Create / schedule a reminder, not a list/query/edit question. */
 export function looksLikeReminder(text?: string): boolean {
   if (!text?.trim()) return false;
@@ -1032,6 +1090,7 @@ function stripReminderDatePhrases(s: string): string {
     .replace(/\b(?:at\s+)?\d{1,2}[.:]\d{2}\s*(?:a\.?m\.?|p\.?m\.?)\b/gi, '')
     .replace(/\b(?:at\s+)?\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)\b/gi, '')
     .replace(/\bat\s+\d{1,2}:\d{2}\b/gi, '')
+    .replace(/\bat\s+\d{1,2}\s*:\s*(?!\d)/gi, '')
     .replace(/\bat\s+\d{1,2}\b(?!\s*(?:a\.?m\.?|p\.?m\.?|:|\d))/gi, '')
     .replace(
       /\b(?:at\s+)?(?:noon|midnight|midday|(?:this\s+)?evening|tonight|(?:in\s+the\s+)?(?:this\s+)?morning)\b/gi,
@@ -1053,7 +1112,9 @@ function stripReminderDatePhrases(s: string): string {
     .replace(/\bthis\s+weekend\b/gi, '')
     .replace(/\bend\s+of\s+(?:the\s+)?month\b/gi, '')
     .replace(/\bnext\s+(?:week|month|year)\b/gi, '')
-    .replace(/\bin\s+(?:a|\d+)\s+(?:days?|weeks?|months?|hours?|minutes?)\b/gi, '')
+    .replace(/\bin\s+(?:a|\d+|an|one|half(?:\s+an)?)\s+(?:days?|weeks?|months?|hours?|minutes?|mins?)\b/gi, '')
+    .replace(/\b\d+\s+(?:minutes?|mins?|hours?)\s+from\s+now\b/gi, '')
+    .replace(new RegExp(`(?<!\\bend\\s)(?<!\\bstart\\s)\\bof\\s+(?:${MONTHS})\\b`, 'gi'), '')
     .replace(/\b\d{4}-\d{2}-\d{2}\b/g, '')
     .replace(/\b(?:on|by|for)\s+\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/gi, '')
     .replace(/\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/g, '')
@@ -1065,7 +1126,8 @@ function stripReminderDatePhrases(s: string): string {
       /\b(?:on\s+)?(?:the\s+)?(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|thirteenth|fourteenth|fifteenth|sixteenth|seventeenth|eighteenth|nineteenth|twentieth|twenty[- ]?(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth)|thirtieth|thirty[- ]?first)\b/gi,
       ''
     )
-    // Drop orphaned prepositions left after a date was stripped ("payment on").
+    // Drop orphaned prepositions left after a date was stripped ("pay rent at the").
+    .replace(/\s+(?:on|by|for|at)\s+the\s*$/gi, '')
     .replace(/\s+(?:on|by|for|at)\s*$/gi, '')
     .replace(/\s+/g, ' ')
     .replace(/[.,;:!?]+$/g, '')
@@ -1301,7 +1363,8 @@ export function finalizeReminderLabel(raw: string): string {
   s = s.replace(/^(?:please\s+)?(?:remind\s+me(?:\s+to)?|set\s+(?:a\s+)?reminder(?:\s+to)?|reminder)\s*/i, '');
   s = stripReminderFillers(s);
   s = stripReminderDatePhrases(s);
-  s = s.replace(/^(?:for|to|about|regarding)\s+/i, '');
+  s = s.replace(/^[:\s,.-]+/, '');
+  s = s.replace(/^(?:of|for|to|about|regarding)\s+/i, '');
   s = s.replace(/[.,;:!?]+$/g, '').trim();
   if (!s || /^remind(?:\s+me)?$/i.test(s)) return 'Reminder';
   return s.charAt(0).toUpperCase() + s.slice(1);

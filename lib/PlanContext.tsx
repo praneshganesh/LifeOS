@@ -33,6 +33,7 @@ import {
   restorePurchases,
   type OfferSummary,
 } from '@/lib/billing/revenueCat';
+import { storeIsApple, storeProductsUnavailableError } from '@/lib/billing/storeCopy';
 import { supabase } from '@/lib/supabase';
 
 type PlanContextValue = {
@@ -244,7 +245,9 @@ export function PlanProvider({ children }: { children: ReactNode }) {
             return {
               ok: false as const,
               cancelled: true as const,
-              error: 'Purchase cancelled or Apple closed the sheet before finishing.',
+              error: storeIsApple()
+                ? 'Purchase cancelled or Apple closed the sheet before finishing.'
+                : 'Purchase cancelled or Google Play closed the sheet before finishing.',
             };
           }
           return { ok: false as const, error: result.error };
@@ -272,7 +275,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
       return {
         ok: false as const,
         error:
-          'Store products unavailable. Use a TestFlight / dev build with StoreKit, or Restore.',
+          storeProductsUnavailableError(),
       };
     },
     [billingReady, offers, applyPlanId, prefs.trialStartedAt]

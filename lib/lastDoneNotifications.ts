@@ -88,17 +88,52 @@ export async function ensureNotificationPermissions(): Promise<boolean> {
   }
 }
 
+type NoteRef = {
+  identifier: string;
+  content?: { data?: Record<string, unknown> | null };
+};
+
+function noteData(n: NoteRef): { type?: string; itemId?: string } {
+  const data = n.content?.data;
+  if (!data || typeof data !== 'object') return {};
+  const type = typeof data.type === 'string' ? data.type : undefined;
+  const itemId = typeof data.itemId === 'string' ? data.itemId : undefined;
+  return { type, itemId };
+}
+
+function isLastDoneNote(n: NoteRef): boolean {
+  if (n.identifier.startsWith(ID_PREFIX)) return true;
+  return noteData(n).type === 'last_done';
+}
+
+function isItemNote(n: NoteRef, itemId: string): boolean {
+  const prefix = reminderId(itemId);
+  if (n.identifier === prefix || n.identifier.startsWith(`${prefix}-`)) return true;
+  return noteData(n).itemId === itemId;
+}
+
+async function cancelNotes(
+  Notifications: typeof import('expo-notifications'),
+  match: (n: NoteRef) => boolean
+): Promise<void> {
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  for (const n of scheduled) {
+    if (!match(n)) continue;
+    await Notifications.cancelScheduledNotificationAsync(n.identifier);
+  }
+  const presented = await Notifications.getPresentedNotificationsAsync();
+  for (const n of presented) {
+    const req = n.request;
+    if (!req || !match(req)) continue;
+    await Notifications.dismissNotificationAsync(req.identifier);
+  }
+}
+
 export async function cancelLastDoneReminder(itemId: string): Promise<void> {
   if (!isNative()) return;
   try {
     const Notifications = await notifications();
-    const prefix = reminderId(itemId);
-    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
-    for (const n of scheduled) {
-      if (n.identifier === prefix || n.identifier.startsWith(`${prefix}-`)) {
-        await Notifications.cancelScheduledNotificationAsync(n.identifier);
-      }
-    }
+    await cancelNotes(Notifications, (n) => isItemNote(n, itemId));
   } catch {
     /* ignore */
   }
@@ -335,20 +370,22 @@ async function scheduleOne(
  * Covers one-off / "Other" / once-schedule activities (dated `remindAt`) and
  * weekday series — same namespace, same rebuild.
  */
-export async function syncLastDoneReminders(
-  items: LastDoneItem[]
-): Promise<void> {
+let reminderSyncChain: Promise<void> = Promise.resolve();
+
+export function syncLastDoneReminders(items: LastDoneItem[]): Promise<void> {
+  const snapshot = items.slice();
+  const run = reminderSyncChain.then(() => rebuildLastDoneReminders(snapshot));
+  reminderSyncChain = run.catch(() => undefined);
+  return run;
+}
+
+async function rebuildLastDoneReminders(items: LastDoneItem[]): Promise<void> {
   if (!isNative()) return;
   try {
     await ensureNotificationHandler();
     const prefs = await loadNotificationPrefs();
     const Notifications = await notifications();
-    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
-    for (const n of scheduled) {
-      if (n.identifier.startsWith(ID_PREFIX)) {
-        await Notifications.cancelScheduledNotificationAsync(n.identifier);
-      }
-    }
+    await cancelNotes(Notifications, isLastDoneNote);
     if (!prefs.push) return;
 
     const granted = await ensureNotificationPermissions();

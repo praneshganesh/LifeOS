@@ -12,6 +12,7 @@ import {
   signOutCloud,
   type AuthAccountState,
 } from '@/lib/auth/apple';
+import { connectWithGoogle, isGoogleAuthConfigured } from '@/lib/auth/google';
 import { deleteMyAccount } from '@/lib/auth/deleteAccount';
 import { fonts, spacing } from '@/constants/theme';
 import { useTheme } from '@/lib/ThemeContext';
@@ -22,6 +23,7 @@ const EMPTY: AuthAccountState = {
   userId: null,
   isAnonymous: true,
   hasAppleIdentity: false,
+  hasGoogleIdentity: false,
   email: null,
   displayHint: null,
 };
@@ -69,6 +71,29 @@ export default function AccountSettingsScreen() {
       }
       if (!result.cancelled) {
         Alert.alert('Sign in with Apple', result.error);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onConnectGoogle() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const result = await connectWithGoogle({ preferLink: true });
+      if (result.ok) {
+        await getAuthAccountState().then(setState);
+        Alert.alert(
+          result.linked ? 'Google linked' : 'Signed in',
+          result.linked
+            ? 'This device’s data and subscription stay on the same account. Sign in with Google on a new phone to restore them.'
+            : 'Your Google account is connected. Cloud data and plan will sync to this device.'
+        );
+        return;
+      }
+      if (!result.cancelled) {
+        Alert.alert('Sign in with Google', result.error);
       }
     } finally {
       setBusy(false);
@@ -128,7 +153,9 @@ export default function AccountSettingsScreen() {
   function onSignOut() {
     Alert.alert(
       'Sign out of cloud?',
-      'This device will leave your saved Apple identity. Local data stays on the phone until you wipe it, but a new install won’t reclaim the same cloud account until you Sign in with Apple again.',
+      Platform.OS === 'ios'
+        ? 'This device will leave your saved Apple identity. Local data stays on the phone until you wipe it, but a new install won’t reclaim the same cloud account until you Sign in with Apple again.'
+        : 'This device will leave your saved Google identity. Local data stays on the phone until you wipe it, but a new install won’t reclaim the same cloud account until you Sign in with Google again.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -158,9 +185,11 @@ export default function AccountSettingsScreen() {
     ? 'Cloud not configured in this build'
     : state.hasAppleIdentity
       ? state.displayHint || 'Signed in with Apple'
-      : state.userId
-        ? 'Temporary account on this device'
-        : 'Not signed in';
+      : state.hasGoogleIdentity
+        ? state.displayHint || 'Signed in with Google'
+        : state.userId
+          ? 'Temporary account on this device'
+          : 'Not signed in';
 
   return (
     <ModuleScreen
@@ -174,7 +203,9 @@ export default function AccountSettingsScreen() {
         <ListCard>
           <ListRow
             icon="id"
-            title={state.hasAppleIdentity ? 'Apple' : 'This device'}
+            title={
+              state.hasAppleIdentity ? 'Apple' : state.hasGoogleIdentity ? 'Google' : 'This device'
+            }
             subtitle={statusSubtitle}
             last
           />
@@ -185,8 +216,9 @@ export default function AccountSettingsScreen() {
           </Text>
         ) : (
           <Text style={[styles.hint, { color: colors.mute }]}>
-            Restore with your recovery code on a new Android phone. Apple Sign In
-            is available on iPhone.
+            {isGoogleAuthConfigured()
+              ? 'Sign in with Google so a new phone can restore your household and plan. A recovery code still works if you skip this.'
+              : 'Restore with your recovery code on a new Android phone.'}
           </Text>
         )}
       </ModuleSection>
@@ -219,11 +251,40 @@ export default function AccountSettingsScreen() {
               last
             />
           ) : null}
-          {Platform.OS !== 'ios' && !state.hasAppleIdentity ? (
+          {Platform.OS === 'android' &&
+          isGoogleAuthConfigured() &&
+          !state.hasGoogleIdentity ? (
+            <ListRow
+              icon="key"
+              title={busy ? 'Connecting…' : 'Sign in with Google'}
+              subtitle="Keeps your data if you change phones"
+              onPress={() => void onConnectGoogle()}
+            />
+          ) : null}
+          {Platform.OS === 'android' &&
+          isGoogleAuthConfigured() &&
+          state.hasGoogleIdentity ? (
+            <ListRow
+              icon="key"
+              title="Google is linked"
+              subtitle="You’re set for restore on another device"
+              last={!state.userId}
+            />
+          ) : null}
+          {state.hasGoogleIdentity && !state.hasAppleIdentity ? (
+            <ListRow
+              icon="shield"
+              title="Sign out"
+              subtitle="Stays on this phone until you delete the account"
+              onPress={onSignOut}
+              last
+            />
+          ) : null}
+          {Platform.OS !== 'ios' && !state.hasAppleIdentity && !state.hasGoogleIdentity ? (
             <ListRow
               icon="folder"
               title="Recovery code"
-              subtitle="Settings → Export or wipe — restore without Apple"
+              subtitle="Settings → Export or wipe — restore with a recovery code"
               onPress={() => router.push('/settings/data' as Href)}
               last
             />

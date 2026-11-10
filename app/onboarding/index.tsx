@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Image, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -38,6 +38,7 @@ export default function OnboardingWelcome() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const [starting, setStarting] = useState(false);
   const { width } = useWindowDimensions();
   const heroW = Math.min(width, 480) - spacing.xl * 2;
   const heroH = heroW * 0.78;
@@ -110,15 +111,24 @@ export default function OnboardingWelcome() {
           </Text>
         </View>
         <OnboardingPrimaryButton
-          label="Let’s get started"
+          label={starting ? 'Starting…' : 'Let’s get started'}
+          disabled={starting}
           onPress={() => {
-            // First intentional start: open cloud session / household now.
-            if (isSupabaseConfigured()) {
-              void bootstrapCloud()
-                .then(() => syncRowsNow())
-                .catch(() => undefined);
-            }
-            router.push('/onboarding/name');
+            if (starting) return;
+            setStarting(true);
+            void (async () => {
+              // Wait until the anonymous session is on disk. Closing the app
+              // in the next screen used to drop that user and mint a new one.
+              if (isSupabaseConfigured()) {
+                try {
+                  await bootstrapCloud();
+                  await syncRowsNow();
+                } catch {
+                  /* Local onboarding still continues. */
+                }
+              }
+              router.push('/onboarding/name');
+            })();
           }}
         />
         <Pressable
