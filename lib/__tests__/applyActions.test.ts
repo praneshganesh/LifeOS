@@ -1438,6 +1438,326 @@ describe('talk focus across modules', () => {
     assert.equal(reply, 'Logged walk for today.');
   });
 
+  it('keeps both reminders when Last Done matches on label', async () => {
+    const { labelsMatch } = await import('../lastDone');
+    const items: {
+      id: string;
+      label: string;
+      remindAt: string;
+      remindTime?: string;
+    }[] = [];
+    const utterance = 'Remind me to pay DEWA on 10 Nov and Salik on 15 Nov';
+    const applied = await applyChatActions(
+      [
+        { type: 'set_reminder', label: 'Pay DEWA and Salik', remindAt: '2026-11-10' },
+        { type: 'set_reminder', label: 'Pay DEWA and Salik', remindAt: '2026-11-15' },
+      ] as ChatAction[],
+      unusedInv,
+      'talk',
+      {
+        lastUserText: utterance,
+        localDate: '2026-11-04',
+        now: new Date(2026, 10, 4, 10, 0, 0),
+        lastDone: {
+          logDone: async () => {
+            throw new Error('unused');
+          },
+          setReminder: async (input) => {
+            const existing = items.find((item) => labelsMatch(item.label, input.label));
+            if (existing) {
+              existing.remindAt = input.remindAt;
+              existing.remindTime = input.remindTime;
+              return existing;
+            }
+            const created = {
+              id: `ld-${items.length + 1}`,
+              label: input.label,
+              remindAt: input.remindAt,
+              remindTime: input.remindTime,
+            };
+            items.push(created);
+            return created;
+          },
+        },
+      }
+    );
+    assert.equal(items.length, 2);
+    assert.notEqual(items[0].label.toLowerCase(), items[1].label.toLowerCase());
+    assert.deepEqual(
+      items.map((item) => item.remindAt).sort(),
+      ['2026-11-10', '2026-11-15']
+    );
+    const reply = composeAppliedReply({
+      actions: [{ type: 'set_reminder', label: 'Pay DEWA' }],
+      modelReply: 'Set both.',
+      reminderSaves: applied.reminderSaves,
+      reminderFailures: applied.reminderFailures,
+    });
+    assert.match(reply, /Pay DEWA/);
+    assert.match(reply, /Salik/);
+    assert.match(reply, /Reminders set/);
+  });
+
+  it('reports which reminder failed when the second write throws', async () => {
+    const utterance = 'Remind me to pay DEWA on 10 Nov and Salik on 15 Nov';
+    const applied = await applyChatActions([] as ChatAction[], unusedInv, 'talk', {
+      lastUserText: utterance,
+      localDate: '2026-11-04',
+      now: new Date(2026, 10, 4, 10, 0, 0),
+      lastDone: {
+        logDone: async () => {
+          throw new Error('unused');
+        },
+        setReminder: async (input) => {
+          if (/salik/i.test(input.label)) throw new Error('disk');
+          return {
+            id: 'ld-1',
+            label: input.label,
+            remindAt: input.remindAt,
+            remindTime: input.remindTime ?? null,
+          };
+        },
+      },
+    });
+    assert.equal(applied.reminderSaves.length, 1);
+    assert.equal(applied.reminderFailures.length, 1);
+    const reply = composeAppliedReply({
+      actions: [{ type: 'set_reminder', label: 'Pay DEWA' }],
+      modelReply: 'Done.',
+      reminderSaves: applied.reminderSaves,
+      reminderFailures: applied.reminderFailures,
+    });
+    assert.match(reply, /Saved/);
+    assert.match(reply, /Pay DEWA/);
+    assert.match(reply, /Couldn’t save Salik/);
+  });
+
+  it('confirms a reminder with the saved clock and leaves date-only reminders date-only', async () => {
+    const timed = await applyChatActions(
+      [{ type: 'set_reminder', label: 'Reminder', remindAt: '2026-11-04' }] as ChatAction[],
+      unusedInv,
+      'talk',
+      {
+        lastUserText: 'Remind me to call the dentist tomorrow at 3 PM',
+        localDate: '2026-11-19',
+        now: new Date(2026, 10, 19, 9, 0, 0),
+        lastDone: {
+          logDone: async () => {
+            throw new Error('unused');
+          },
+          setReminder: async (input) => ({
+            id: 'ld-dentist',
+            label: input.label,
+            remindAt: input.remindAt,
+            remindTime: '15:00',
+          }),
+        },
+      }
+    );
+    const timedReply = composeAppliedReply({
+      actions: [{ type: 'set_reminder', label: 'Call the dentist' }],
+      modelReply: 'Set.',
+      reminderLabel: timed.reminderLabel,
+      reminderAt: timed.reminderAt,
+      reminderTime: timed.reminderTime,
+      reminderSaves: timed.reminderSaves,
+    });
+    assert.match(timedReply, /Call the dentist/);
+    assert.match(timedReply, /3:00 PM/);
+    assert.equal(timed.reminderTime, '15:00');
+
+    const dateOnly = await applyChatActions(
+      [{ type: 'set_reminder', label: 'Reminder', remindAt: '2026-11-04' }] as ChatAction[],
+      unusedInv,
+      'talk',
+      {
+        lastUserText: 'Remind me to pay rent on 12 Nov',
+        localDate: '2026-11-04',
+        now: new Date(2026, 10, 4, 10, 0, 0),
+        lastDone: {
+          logDone: async () => {
+            throw new Error('unused');
+          },
+          setReminder: async (input) => ({
+            id: 'ld-rent',
+            label: input.label,
+            remindAt: input.remindAt,
+            remindTime: input.remindTime ?? null,
+          }),
+        },
+      }
+    );
+    const dateReply = composeAppliedReply({
+      actions: [{ type: 'set_reminder', label: 'Pay rent' }],
+      modelReply: 'Set.',
+      reminderLabel: dateOnly.reminderLabel,
+      reminderAt: dateOnly.reminderAt,
+      reminderTime: dateOnly.reminderTime,
+      reminderSaves: dateOnly.reminderSaves,
+    });
+    assert.match(dateReply, /Pay rent/);
+    assert.doesNotMatch(dateReply, /\bAM\b|\bPM\b/);
+
+    const edited = await applyChatActions(
+      [{ type: 'update_last_done', id: 'ld-dentist', patch: {} }] as ChatAction[],
+      unusedInv,
+      'talk',
+      {
+        lastUserText: 'Change the dentist reminder to 3 PM',
+        localDate: '2026-11-19',
+        now: new Date(2026, 10, 19, 9, 0, 0),
+        lastTalkFocus: { kind: 'lastDone', id: 'ld-dentist' },
+        lastDoneList: [
+          { id: 'ld-dentist', label: 'Call the dentist', remindAt: '2026-11-20' },
+        ],
+        lastDone: {
+          logDone: async () => {
+            throw new Error('unused');
+          },
+          setReminder: async () => {
+            throw new Error('should edit');
+          },
+          updateActivity: async (id, patch) => ({
+            id,
+            label: 'Call the dentist',
+            remindAt: '2026-11-20',
+            remindTime: typeof patch.remindTime === 'string' ? patch.remindTime : '15:00',
+          }),
+        },
+      }
+    );
+    const editedReply = composeAppliedReply({
+      actions: [{ type: 'update_last_done', id: 'ld-dentist', patch: {} }],
+      modelReply: 'Updated.',
+      reminderLabel: edited.reminderLabel,
+      reminderAt: edited.reminderAt,
+      reminderTime: edited.reminderTime,
+      updatedReminder: edited.updatedReminder,
+    });
+    assert.equal(edited.updatedReminder, true);
+    assert.match(editedReply, /Updated/);
+    assert.match(editedReply, /3:00 PM/);
+  });
+
+  it('logs class attendance once and keeps a spoken afternoon time', async () => {
+    const { api, packs } = memoryClasses();
+    await api.addPack({ title: 'Chess', total: 8, startsOn: '2026-11-01' });
+    const id = packs[0].id;
+    const utterance = 'Log chess attendance today';
+    const action = [
+      { type: 'log_class', id, title: 'Chess', date: '2026-11-19' },
+    ] as ChatAction[];
+    const first = await applyChatActions(action, unusedInv, 'talk', {
+      lastUserText: utterance,
+      localDate: '2026-11-19',
+      classes: api,
+    });
+    assert.equal(packs[0].logs.length, 1);
+    const firstReply = composeAppliedReply({
+      actions: action,
+      modelReply: 'Logged Chess.',
+      classLoggedTitle: first.classLoggedTitle,
+      classPackRemaining: first.classPackRemaining,
+      classPackTotal: first.classPackTotal,
+    });
+    assert.match(firstReply, /Logged Chess/);
+    const second = await applyChatActions(action, unusedInv, 'talk', {
+      lastUserText: utterance,
+      localDate: '2026-11-19',
+      classes: api,
+    });
+    assert.equal(packs[0].logs.length, 1);
+    assert.equal(second.classLoggedAlready, true);
+    const secondReply = composeAppliedReply({
+      actions: action,
+      modelReply: 'Logged Chess.',
+      classLoggedTitle: second.classLoggedTitle,
+      classLoggedAlready: second.classLoggedAlready,
+      classLogFull: second.classLogFull,
+      classPackRemaining: second.classPackRemaining,
+      classPackTotal: second.classPackTotal,
+    });
+    assert.match(secondReply, /already logged/i);
+    assert.doesNotMatch(secondReply, /^Logged/);
+
+    const full = memoryClasses();
+    await full.api.addPack({ title: 'Chess', total: 1, startsOn: '2026-11-01' });
+    await full.api.logClass(full.packs[0].id, '2026-11-18');
+    const blocked = await applyChatActions(
+      [{ type: 'log_class', id: full.packs[0].id, title: 'Chess', date: '2026-11-19' }] as ChatAction[],
+      unusedInv,
+      'talk',
+      {
+        lastUserText: 'Log chess attendance today',
+        localDate: '2026-11-19',
+        classes: full.api,
+      }
+    );
+    assert.equal(full.packs[0].logs.length, 1);
+    assert.equal(blocked.classLogFull, true);
+    const blockedReply = composeAppliedReply({
+      actions: [{ type: 'log_class', title: 'Chess' }],
+      modelReply: 'Logged Chess.',
+      classLoggedTitle: blocked.classLoggedTitle,
+      classLogFull: blocked.classLogFull,
+      classPackTotal: blocked.classPackTotal,
+    });
+    assert.match(blockedReply, /No sessions left/);
+
+    const enrolled = memoryClasses();
+    const enrolledApplied = await applyChatActions(
+      [
+        {
+          type: 'add_class_pack',
+          title: 'Chess',
+          scheduleDays: ['friday'],
+          scheduleTime: '9:00 AM',
+        },
+      ] as ChatAction[],
+      unusedInv,
+      'talk',
+      {
+        lastUserText: 'I enrolled for chess on Fridays at four in the afternoon.',
+        localDate: '2026-11-19',
+        classes: enrolled.api,
+      }
+    );
+    assert.equal(enrolled.packs[0].scheduleTime, '4:00 PM');
+    assert.equal(enrolled.packs[0].scheduleTimeInferred, false);
+    const enrolledReply = composeAppliedReply({
+      actions: [{ type: 'add_class_pack', title: 'Chess' }],
+      modelReply: 'Added Chess at 9.',
+      classPackTitle: enrolledApplied.classPackTitle,
+      classPackScheduleTimeInferred: enrolledApplied.classPackScheduleTimeInferred,
+      classPackScheduleDays: enrolledApplied.classPackScheduleDays,
+    });
+    assert.doesNotMatch(enrolledReply, /assumed 9:00 AM/i);
+
+    await enrolled.api.updatePack(enrolled.packs[0].id, {
+      scheduleTime: '10:00 AM',
+      scheduleTimeInferred: false,
+    });
+    await applyChatActions(
+      [
+        {
+          type: 'update_class_pack',
+          id: enrolled.packs[0].id,
+          title: 'Chess',
+          patch: { scheduleTime: '6:30 PM' },
+        },
+      ] as ChatAction[],
+      unusedInv,
+      'talk',
+      {
+        lastUserText: 'Change chess to Fridays at four in the afternoon',
+        localDate: '2026-11-19',
+        classes: enrolled.api,
+      }
+    );
+    assert.equal(enrolled.packs[0].scheduleTime, '4:00 PM');
+    assert.equal(enrolled.packs[0].scheduleTimeInferred, false);
+  });
+
   it('updates class pack completed count from Talk', async () => {
     const { api, packs } = memoryClasses();
     const created = await api.addPack({

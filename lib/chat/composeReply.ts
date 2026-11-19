@@ -16,6 +16,24 @@ function formatRemindDay(iso?: string | null): string | undefined {
   });
 }
 
+function formatRemindClock(hhmm?: string | null): string | undefined {
+  const m = hhmm?.trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return undefined;
+  const hour = Number(m[1]);
+  const minute = Number(m[2]);
+  if (hour > 23 || minute > 59) return undefined;
+  const pm = hour >= 12;
+  const h12 = hour % 12 || 12;
+  return `${h12}:${String(minute).padStart(2, '0')} ${pm ? 'PM' : 'AM'}`;
+}
+
+function reminderWhen(date?: string | null, time?: string | null): string | undefined {
+  const day = formatRemindDay(date);
+  const clock = formatRemindClock(time);
+  if (day && clock) return `${day} at ${clock}`;
+  return day;
+}
+
 /** "today" / "tomorrow" when that is the day, otherwise a short calendar date. */
 function formatRemindWhen(iso?: string | null, now = new Date()): string | undefined {
   const d = iso ? parseDateInput(iso) : null;
@@ -104,9 +122,14 @@ export function composeAppliedReply(params: {
   classPackEndsOn?: string | null;
   classPackScheduleTimeInferred?: boolean | null;
   classLoggedTitle?: string | null;
+  classLoggedAlready?: boolean;
+  classLogFull?: boolean;
   classLogAttemptFor?: string | null;
   reminderLabel?: string | null;
   reminderAt?: string | null;
+  reminderTime?: string | null;
+  reminderSaves?: { label: string; remindAt?: string | null; remindTime?: string | null }[];
+  reminderFailures?: { label: string }[];
   updatedReminder?: boolean;
   reminderUnchanged?: boolean;
   reminderClarify?: string | null;
@@ -255,10 +278,29 @@ export function composeAppliedReply(params: {
     return params.reminderClarify.trim();
   }
 
+  const saves = params.reminderSaves ?? [];
+  const failures = params.reminderFailures ?? [];
+  if (saves.length + failures.length > 1) {
+    const savedLine = saves
+      .map((item) => {
+        const when = reminderWhen(item.remindAt, item.remindTime);
+        return when ? `${item.label} · ${when}` : item.label;
+      })
+      .join('. ');
+    const failedLine = failures.map((item) => item.label).join(' and ');
+    if (saves.length && failures.length) {
+      return `Saved ${savedLine}. Couldn’t save ${failedLine}.`;
+    }
+    if (failures.length) return `Couldn’t save ${failedLine}.`;
+    return `Reminders set: ${savedLine}.`;
+  }
+
   if (params.reminderLabel) {
-    const when = formatRemindDay(params.reminderAt);
+    const when = reminderWhen(params.reminderAt, params.reminderTime);
     if (params.reminderUnchanged) {
-      const already = formatRemindWhen(params.reminderAt);
+      const day = formatRemindWhen(params.reminderAt);
+      const clock = formatRemindClock(params.reminderTime);
+      const already = day && clock ? `${day} at ${clock}` : day;
       return already
         ? `${params.reminderLabel} is already set for ${already}.`
         : `${params.reminderLabel} is already set.`;
@@ -279,6 +321,16 @@ export function composeAppliedReply(params: {
 
   if (actions.some((a) => a?.type === 'set_reminder')) {
     return 'When should I remind you?';
+  }
+
+  if (params.classLoggedAlready && params.classLoggedTitle) {
+    return `${params.classLoggedTitle} was already logged for that day.`;
+  }
+  if (params.classLogFull && params.classLoggedTitle) {
+    const total = params.classPackTotal;
+    return total && total > 0
+      ? `No sessions left on ${params.classLoggedTitle}. All ${total} are used.`
+      : `No sessions left on ${params.classLoggedTitle}.`;
   }
 
   if (params.classLoggedTitle) {

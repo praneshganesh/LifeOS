@@ -150,17 +150,18 @@ export function ensureReminderActions(
     });
   }
 
+  const reminderCount = list.filter((a) => a.type === 'set_reminder').length;
   return list.map((a) => {
     if (a.type !== 'set_reminder') return a;
     const next = { ...a };
-    if (!next.remindAt && (recurring?.remindAt || remindAt)) {
+    if (!next.remindAt && (recurring?.remindAt || remindAt) && reminderCount < 2) {
       next.remindAt = recurring?.remindAt || remindAt;
     }
     if (!next.remindInterval && recurring?.remindInterval) {
       next.remindInterval = recurring.remindInterval;
     }
-    // Persist spoken (or model) clock on one-offs.
-    if (!next.remindInterval) {
+    // Persist spoken (or model) clock on one-offs. A split pair keeps its own clocks.
+    if (!next.remindInterval && reminderCount < 2) {
       const modelClock =
         typeof next.remindTime === 'string' && /^\d{1,2}:\d{2}$/.test(next.remindTime.trim())
           ? next.remindTime.trim()
@@ -169,8 +170,11 @@ export function ensureReminderActions(
       if (clock) next.remindTime = clock;
     }
     // Prefer spoken label; don't let a weaker model label override.
+    // The whole sentence is not the title of both reminders in a pair.
     const parsedLabel =
-      parsed?.label && parsed.label !== 'Reminder' ? parsed.label : null;
+      reminderCount < 2 && parsed?.label && parsed.label !== 'Reminder'
+        ? parsed.label
+        : null;
     if (parsedLabel) {
       next.label = finalizeReminderLabel(parsedLabel);
     } else {

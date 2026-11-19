@@ -544,8 +544,90 @@ export function classScheduleDaysFromUtterance(
   return set.size ? Array.from(set) : undefined;
 }
 
+const CLASS_HOUR_WORDS: Record<string, number> = {
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+  eleven: 11,
+  twelve: 12,
+};
+
+const CLASS_HOUR =
+  'one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\\d{1,2}';
+
+function formatClassClock(hour24: number, minute: number): string | undefined {
+  if (hour24 < 0 || hour24 > 23 || minute < 0 || minute > 59) return undefined;
+  const pm = hour24 >= 12;
+  const h12 = hour24 % 12 || 12;
+  return `${h12}:${String(minute).padStart(2, '0')} ${pm ? 'PM' : 'AM'}`;
+}
+
+function classHourFromToken(raw: string): number | undefined {
+  const key = raw.trim().toLowerCase();
+  if (CLASS_HOUR_WORDS[key] != null) return CLASS_HOUR_WORDS[key];
+  const n = Number(key);
+  if (!Number.isFinite(n) || n < 0 || n > 24) return undefined;
+  return n;
+}
+
+/** "4:00 PM" / "16:00" → the store's "h:mm AM/PM" form. */
+export function normalizeClassClock(raw?: string | null): string | undefined {
+  if (!raw?.trim()) return undefined;
+  const ampm = raw.trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/i);
+  if (ampm) {
+    let hour = Number(ampm[1]);
+    const minute = ampm[2] ? Number(ampm[2]) : 0;
+    if (hour < 1 || hour > 12 || minute > 59) return undefined;
+    const pm = /^p/i.test(ampm[3]);
+    if (pm && hour < 12) hour += 12;
+    if (!pm && hour === 12) hour = 0;
+    return formatClassClock(hour, minute);
+  }
+  const hhmm = raw.trim().match(/^([01]?\d|2[0-3]):([0-5]\d)$/);
+  if (!hhmm) return undefined;
+  return formatClassClock(Number(hhmm[1]), Number(hhmm[2]));
+}
+
 export function classScheduleTimeFromUtterance(text?: string): string | undefined {
   if (!text?.trim()) return undefined;
+  const wordPeriod = text.match(
+    new RegExp(
+      `\\b(?:at\\s+)?(${CLASS_HOUR})(?:\\s*:\\s*(\\d{2}))?\\s+in\\s+the\\s+(morning|afternoon|evening)\\b`,
+      'i'
+    )
+  );
+  if (wordPeriod) {
+    let hour = classHourFromToken(wordPeriod[1]);
+    const minute = wordPeriod[2] ? Number(wordPeriod[2]) : 0;
+    const period = wordPeriod[3].toLowerCase();
+    if (hour != null && hour >= 1 && hour <= 12 && minute <= 59) {
+      if ((period === 'afternoon' || period === 'evening') && hour < 12) hour += 12;
+      else if (period === 'morning' && hour === 12) hour = 0;
+      return formatClassClock(hour, minute);
+    }
+  }
+  const wordMeridiem = text.match(
+    new RegExp(
+      `\\b(?:at\\s+)?(${CLASS_HOUR})(?:\\s*:\\s*(\\d{2}))?\\s*(am|pm)\\b`,
+      'i'
+    )
+  );
+  if (wordMeridiem && !/^\d/.test(wordMeridiem[1])) {
+    let hour = classHourFromToken(wordMeridiem[1]);
+    const minute = wordMeridiem[2] ? Number(wordMeridiem[2]) : 0;
+    if (hour != null && hour >= 1 && hour <= 12 && minute <= 59) {
+      if (/^p/i.test(wordMeridiem[3]) && hour < 12) hour += 12;
+      if (/^a/i.test(wordMeridiem[3]) && hour === 12) hour = 0;
+      return formatClassClock(hour, minute);
+    }
+  }
   const m =
     text.match(/\b(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i) ||
     text.match(/\bat\s+(\d{1,2})(?::(\d{2}))\b/i);
@@ -560,6 +642,30 @@ export function classScheduleTimeFromUtterance(text?: string): string | undefine
       : 'AM';
   const formattedHours = m[3] ? hours : hours % 12 || 12;
   return `${formattedHours}:${mins} ${ampm}`;
+}
+
+/** True when the sentence names a time, even if the numeric parser missed the wording. */
+export function utteranceSuppliesClassTime(text?: string): boolean {
+  if (!text?.trim()) return false;
+  if (classScheduleTimeFromUtterance(text)) return true;
+  return new RegExp(
+    `\\b(?:at\\s+(?:${CLASS_HOUR})|o['’]?clock|half past|quarter past|quarter to)\\b`,
+    'i'
+  ).test(text);
+}
+
+/**
+ * Spoken clock wins. A model time is kept only when the sentence shows a time
+ * was said. Omitted times stay undefined so the pack can default to 9:00 AM.
+ */
+export function resolveClassScheduleTime(
+  text?: string,
+  actionTime?: string | null
+): string | undefined {
+  const spoken = classScheduleTimeFromUtterance(text);
+  if (spoken) return spoken;
+  if (!utteranceSuppliesClassTime(text)) return undefined;
+  return normalizeClassClock(actionTime);
 }
 
 export function classCompletedCountFromUtterance(

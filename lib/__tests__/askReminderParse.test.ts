@@ -260,8 +260,12 @@ describe('Ask/Talk reminder parse (clock Wed 4 Nov 2026 Asia/Dubai)', () => {
     assert.equal(dual![0]!.remindAt, '2026-11-10');
     assert.equal(dual![1]!.remindAt, '2026-11-15');
     assert.equal(dual![0]!.label, 'Pay DEWA');
+    assert.equal(dual![1]!.label, 'Salik');
     const { saved } = await applyWithWrongModel(u, []);
     assert.equal(saved.length, 2);
+    assert.equal(saved[0]!.label, 'Pay DEWA');
+    assert.equal(saved[1]!.label, 'Salik');
+    assert.notEqual(saved[0]!.label.toLowerCase(), saved[1]!.label.toLowerCase());
     assert.equal(saved[0]!.remindAt, '2026-11-10');
     assert.equal(saved[1]!.remindAt, '2026-11-15');
   });

@@ -130,6 +130,26 @@ export function classScheduleDaysFromUtterance(text) {
 
 export function classScheduleTimeFromUtterance(text) {
   if (!text?.trim()) return undefined;
+  const hourWords = {
+    one: 1, two: 2, three: 3, four: 4, five: 5, six: 6,
+    seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
+  };
+  const wordPeriod = text.match(
+    /\b(?:at\s+)?(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\d{1,2})(?:\s*:\s*(\d{2}))?\s+in\s+the\s+(morning|afternoon|evening)\b/i
+  );
+  if (wordPeriod) {
+    const token = wordPeriod[1].toLowerCase();
+    let hour = hourWords[token] ?? Number(token);
+    const minute = wordPeriod[2] ? Number(wordPeriod[2]) : 0;
+    const period = wordPeriod[3].toLowerCase();
+    if (hour >= 1 && hour <= 12 && minute <= 59) {
+      if ((period === 'afternoon' || period === 'evening') && hour < 12) hour += 12;
+      else if (period === 'morning' && hour === 12) hour = 0;
+      const pm = hour >= 12;
+      const h12 = hour % 12 || 12;
+      return `${h12}:${String(minute).padStart(2, '0')} ${pm ? 'PM' : 'AM'}`;
+    }
+  }
   const m =
     text.match(/\b(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i) ||
     text.match(/\bat\s+(\d{1,2})(?::(\d{2}))\b/i);
@@ -242,7 +262,7 @@ export function ensureClassActions(actions, lastUserText, classPacksSummary) {
         if (spoken.months && !next.months) next.months = spoken.months;
         if (!next.title) next.title = classTitleFromUtterance(lastUserText) || 'Class';
         if (spokenDays) next.scheduleDays = spokenDays;
-        if (spokenTime && !next.scheduleTime) next.scheduleTime = spokenTime;
+        if (spokenTime) next.scheduleTime = spokenTime;
         if (spokenCompleted != null && next.completed == null) next.completed = spokenCompleted;
         return next;
       }
@@ -251,7 +271,7 @@ export function ensureClassActions(actions, lastUserText, classPacksSummary) {
         const patch = { ...(next.patch || {}) };
         if (spokenCompleted != null && patch.completed == null) patch.completed = spokenCompleted;
         if (spokenDays && !patch.scheduleDays) patch.scheduleDays = spokenDays;
-        if (spokenTime && !patch.scheduleTime) patch.scheduleTime = spokenTime;
+        if (spokenTime) patch.scheduleTime = spokenTime;
         next.patch = patch;
         return next;
       }

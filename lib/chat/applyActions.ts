@@ -21,13 +21,14 @@ import {
   classDeadlineFromUtterance,
   classPackFromUtterance,
   classScheduleDaysFromUtterance,
-  classScheduleTimeFromUtterance,
   classTitleFromUtterance,
   looksLikeClassAttendance,
   looksLikeClassEnrollment,
+  loggedOn as classLoggedOn,
   normalizeScheduleDays,
   pickAttendancePack,
   remainingCount,
+  resolveClassScheduleTime,
   usedCount,
   type ClassPack,
   type NewClassPackInput,
@@ -119,6 +120,7 @@ type LastDoneApi = {
     id: string;
     label: string;
     remindAt?: string;
+    remindTime?: string | null;
     inventoryItemId?: string;
   }>;
   updateActivity?: (
@@ -133,6 +135,7 @@ type LastDoneApi = {
     id: string;
     label: string;
     remindAt?: string;
+    remindTime?: string | null;
   }>;
   remove?: (id: string) => Promise<void>;
 };
@@ -494,9 +497,18 @@ export type ApplyActionsResult = {
   classPackEndsOn: string | null;
   classPackScheduleTimeInferred?: boolean;
   classLoggedTitle: string | null;
+  /** Talk asked to log a day that is already on the pack. */
+  classLoggedAlready: boolean;
+  /** Talk asked to log when the purchased sessions are used up. */
+  classLogFull: boolean;
   classLogAttemptFor: string | null;
   reminderLabel: string | null;
   reminderAt: string | null;
+  reminderTime: string | null;
+  /** Each reminder this turn actually stored. */
+  reminderSaves: { label: string; remindAt?: string | null; remindTime?: string | null }[];
+  /** Split reminders whose write failed after another one succeeded or was attempted. */
+  reminderFailures: { label: string }[];
   /** Existing reminder due date / label was patched this turn. */
   updatedReminder: boolean;
   /** Asked to change a reminder to the date it already has. */
@@ -541,6 +553,7 @@ export async function applyChatActions(
       id: string;
       label: string;
       remindAt?: string | null;
+      remindTime?: string | null;
       notes?: string | null;
     }[];
     /** Prior-turn expense so “show it” opens juice, not the old TV. */
@@ -608,9 +621,19 @@ export async function applyChatActions(
   let classPackEndsOn: string | null = null;
   let classPackScheduleTimeInferred = false;
   let classLoggedTitle: string | null = null;
+  let classLoggedAlready = false;
+  let classLogFull = false;
   let classLogAttemptFor: string | null = null;
   let reminderLabel: string | null = null;
   let reminderAt: string | null = null;
+  let reminderTime: string | null = null;
+  const reminderSaves: {
+    label: string;
+    remindAt?: string | null;
+    remindTime?: string | null;
+  }[] = [];
+  const reminderFailures: { label: string }[] = [];
+  const usedDual = new Set<number>();
   let updatedReminder = false;
   let reminderUnchanged = false;
   let reminderClarify: string | null = null;
@@ -1313,21 +1336,37 @@ export async function applyChatActions(
       const spokenAt = remindAtFromUtterance(lastUserText, fromDay, clockNow);
       const modelAt = action.remindAt ? normalizeDateField(action.remindAt) : undefined;
       const dualParts = splitDualRemindersFromUtterance(lastUserText, fromDay);
-      // Dual "X on A and Y on B": each action already carries its own day —
-      // don't collapse both onto the first spoken date.
-      const dualAt =
-        dualParts && modelAt && dualParts.some((d) => d.remindAt === modelAt)
-          ? modelAt
-          : undefined;
+      const dualByDate = dualParts?.findIndex(
+        (part, index) => !usedDual.has(index) && Boolean(modelAt) && part.remindAt === modelAt
+      );
+      const dualIndex =
+        dualByDate != null && dualByDate >= 0
+          ? dualByDate
+          : (dualParts?.findIndex(
+              (part, index) =>
+                !usedDual.has(index) &&
+                action.label.trim().toLowerCase() === part.label.trim().toLowerCase()
+            ) ?? -1);
+      if (dualIndex >= 0) usedDual.add(dualIndex);
+      const dualPart = dualIndex >= 0 ? dualParts?.[dualIndex] : undefined;
+      // A split pair already has its own label, day, and time. An extra action
+      // would reuse the whole sentence and overwrite the first reminder.
+      if (dualParts?.length === 2 && !dualPart) {
+        console.log(
+          '[LifeOS chat] skip set_reminder: extra action beside a split pair',
+          action.label
+        );
+        continue;
+      }
       // Prefer what the user said. If they named no day, ignore the model's
       // invented date (it often picks tomorrow) and due today.
       const remindAt =
-        dualAt ||
+        dualPart?.remindAt ||
         (recurring?.remindAt
           ? normalizeDateField(recurring.remindAt)
           : undefined) ||
         relativeDt?.day ||
-        spokenAt ||
+        (dualPart ? undefined : spokenAt) ||
         (utteranceNamesRemindDate(lastUserText) ? modelAt : undefined) ||
         today;
       if (!remindAt && !recurring?.remindInterval) {
@@ -1338,15 +1377,21 @@ export async function applyChatActions(
         console.log('[LifeOS chat] skip set_reminder: no date', action.label);
         continue;
       }
-      const spokenLabel = reminderLabelFromUtterance(lastUserText);
-      const parsedReminder = parseReminderFromUtterance(lastUserText);
+      const spokenLabel = dualPart ? undefined : reminderLabelFromUtterance(lastUserText);
+      const parsedReminder = dualPart
+        ? undefined
+        : parseReminderFromUtterance(lastUserText);
       const parsedLabel =
         parsedReminder?.label && parsedReminder.label !== 'Reminder'
           ? parsedReminder.label
           : null;
-      // Prefer spoken label; only use model label when speech has no subject.
+      // A split reminder keeps its own label. The full sentence is one title
+      // and Last Done matches on that title, so the second write would replace the first.
       const label = finalizeReminderLabel(
-        parsedLabel || spokenLabel || (action.label !== 'Reminder' ? action.label : 'Reminder')
+        dualPart?.label ||
+          parsedLabel ||
+          spokenLabel ||
+          (action.label !== 'Reminder' ? action.label : 'Reminder')
       );
       if (/^reminder$/i.test(label) && !relativeDt) {
         reminderClarify = 'What should I remind you about?';
@@ -1363,9 +1408,13 @@ export async function applyChatActions(
       const relativeClock = relativeDt
         ? `${String(relativeDt.hour).padStart(2, '0')}:${String(relativeDt.minute).padStart(2, '0')}`
         : undefined;
-      const spokenClock = relativeClock || remindTimeFromUtterance(lastUserText);
+      const spokenClock = dualPart
+        ? dualPart.remindTime
+        : relativeClock || remindTimeFromUtterance(lastUserText);
       const modelClock =
-        typeof action.remindTime === 'string' && /^\d{1,2}:\d{2}$/.test(action.remindTime.trim())
+        !dualPart &&
+        typeof action.remindTime === 'string' &&
+        /^\d{1,2}:\d{2}$/.test(action.remindTime.trim())
           ? action.remindTime.trim()
           : undefined;
       const remindTime = !remindInterval ? spokenClock || modelClock : undefined;
@@ -1379,18 +1428,41 @@ export async function applyChatActions(
         members: household,
         preferSelf: true,
       });
-      const saved = await options.lastDone.setReminder({
-        label,
-        remindAt,
-        remindTime,
-        notes,
-        remindInterval,
-        inventoryItemId: inventoryItemId ?? null,
-        personId: person?.personId ?? null,
-        assignedTo: person?.assignedTo ?? null,
+      let saved: {
+        id: string;
+        label: string;
+        remindAt?: string;
+        remindTime?: string | null;
+      };
+      try {
+        saved = await options.lastDone.setReminder({
+          label,
+          remindAt,
+          remindTime,
+          notes,
+          remindInterval,
+          inventoryItemId: inventoryItemId ?? null,
+          personId: person?.personId ?? null,
+          assignedTo: person?.assignedTo ?? null,
+        });
+      } catch (err) {
+        if (dualParts && dualParts.length === 2) {
+          reminderFailures.push({ label });
+          console.log('[LifeOS chat] set_reminder failed', label, err);
+          continue;
+        }
+        throw err;
+      }
+      const savedTime =
+        saved.remindTime !== undefined ? saved.remindTime || null : remindTime || null;
+      reminderSaves.push({
+        label: saved.label,
+        remindAt: saved.remindAt || remindAt,
+        remindTime: savedTime,
       });
       reminderLabel = saved.label;
       reminderAt = saved.remindAt || remindAt;
+      reminderTime = savedTime;
       remember('lastDone', saved.id);
       if (inventoryItemId) focusItemId = inventoryItemId;
       console.log('[LifeOS chat] applied set_reminder', saved.label, remindAt, remindTime);
@@ -1454,6 +1526,9 @@ export async function applyChatActions(
       if (sameDay && sameClock && labelSame && notesSame && patch.remindAt !== undefined) {
         reminderLabel = row?.label || null;
         reminderAt = row?.remindAt || patch.remindAt || null;
+        reminderTime =
+          row?.remindTime ||
+          (typeof patch.remindTime === 'string' ? patch.remindTime : null);
         reminderUnchanged = true;
         console.log('[LifeOS chat] skip update_last_done: already that day', id);
         continue;
@@ -1461,6 +1536,12 @@ export async function applyChatActions(
       const saved = await options.lastDone.updateActivity(id, patch);
       reminderLabel = saved.label || row?.label || null;
       reminderAt = saved.remindAt || (typeof patch.remindAt === 'string' ? patch.remindAt : null);
+      reminderTime =
+        saved.remindTime !== undefined
+          ? saved.remindTime || null
+          : typeof patch.remindTime === 'string'
+            ? patch.remindTime
+            : row?.remindTime || null;
       updatedReminder = true;
       remember('lastDone', saved.id || id);
       console.log('[LifeOS chat] applied update_last_done', id, patch);
@@ -1823,7 +1904,7 @@ export async function applyChatActions(
       const months = monthsRaw != null ? Math.round(Number(monthsRaw)) : undefined;
       const spokenDays = classScheduleDaysFromUtterance(lastUserText);
       const scheduleDays = spokenDays || normalizeScheduleDays(action.scheduleDays);
-      const scheduleTime = classScheduleTimeFromUtterance(lastUserText);
+      const scheduleTime = resolveClassScheduleTime(lastUserText, action.scheduleTime);
       const completedRaw = action.completed ?? classCompletedCountFromUtterance(lastUserText);
       const completed =
         completedRaw != null && Number.isFinite(Number(completedRaw))
@@ -1922,6 +2003,27 @@ export async function applyChatActions(
         console.log('[LifeOS chat] skip log_class: invalid date', action.date);
         continue;
       }
+      // Talk adds attendance. The class screen still toggles the same day off.
+      if (classLoggedOn(pack, date)) {
+        classLoggedAlready = true;
+        classLoggedTitle = pack.title;
+        classPackRemaining = remainingCount(pack);
+        classPackTotal = pack.total;
+        lastAssignedTo = pack.assignedTo ?? lastAssignedTo;
+        remember('class', pack.id);
+        console.log('[LifeOS chat] log_class already logged', pack.id, date);
+        continue;
+      }
+      if (remainingCount(pack) === 0) {
+        classLogFull = true;
+        classLoggedTitle = pack.title;
+        classPackRemaining = 0;
+        classPackTotal = pack.total;
+        lastAssignedTo = pack.assignedTo ?? lastAssignedTo;
+        remember('class', pack.id);
+        console.log('[LifeOS chat] log_class no sessions left', pack.id, date);
+        continue;
+      }
       const updated = await options.classes.logClass(pack.id, date);
       if (updated) {
         classLoggedTitle = updated.title;
@@ -2013,15 +2115,13 @@ export async function applyChatActions(
         const spokenDays = classScheduleDaysFromUtterance(lastUserText);
         if (spokenDays) patch.scheduleDays = spokenDays;
       }
-      if (action.patch?.scheduleTime !== undefined) {
-        patch.scheduleTime = action.patch.scheduleTime?.trim() || undefined;
+      const resolvedTime = resolveClassScheduleTime(
+        lastUserText,
+        action.patch?.scheduleTime
+      );
+      if (resolvedTime) {
+        patch.scheduleTime = resolvedTime;
         patch.scheduleTimeInferred = false;
-      } else {
-        const spokenTime = classScheduleTimeFromUtterance(lastUserText);
-        if (spokenTime) {
-          patch.scheduleTime = spokenTime;
-          patch.scheduleTimeInferred = false;
-        }
       }
       const completedRaw =
         action.patch?.completed ?? classCompletedCountFromUtterance(lastUserText);
@@ -2154,9 +2254,14 @@ export async function applyChatActions(
     classPackEndsOn,
     classPackScheduleTimeInferred,
     classLoggedTitle,
+    classLoggedAlready,
+    classLogFull,
     classLogAttemptFor,
     reminderLabel,
     reminderAt,
+    reminderTime,
+    reminderSaves,
+    reminderFailures,
     updatedReminder,
     reminderUnchanged,
     reminderClarify,
@@ -2692,7 +2797,9 @@ function ensureTalkActions(
     }
   }
   // When repairing an existing set_reminder from the model, persist spoken time
-  // and prefer spoken label over a weaker model label.
+  // and prefer spoken label over a weaker model label. A pair already has
+  // one label each; the whole sentence is not a title for both.
+  const reminderCount = list.filter((a) => a.type === 'set_reminder').length;
   const repaired = list.map((a) => {
     if (a.type !== 'set_reminder') return a;
     const next = { ...a };
@@ -2701,7 +2808,7 @@ function ensureTalkActions(
       ? `${String(relativeDt.hour).padStart(2, '0')}:${String(relativeDt.minute).padStart(2, '0')}`
       : undefined;
     const spokenClock = relativeClock || remindTimeFromUtterance(lastUserText);
-    if (spokenClock && !next.remindInterval) {
+    if (reminderCount < 2 && spokenClock && !next.remindInterval) {
       next.remindTime = relativeClock || next.remindTime || spokenClock;
     }
     if (
@@ -2710,7 +2817,8 @@ function ensureTalkActions(
     ) {
       next.label = 'Reminder';
     }
-    const parsedLabel = reminderLabelFromUtterance(lastUserText);
+    const parsedLabel =
+      reminderCount < 2 ? reminderLabelFromUtterance(lastUserText) : undefined;
     if (parsedLabel && parsedLabel !== 'Reminder') {
       // Don't let a weaker model label override a better spoken one.
       next.label = parsedLabel;

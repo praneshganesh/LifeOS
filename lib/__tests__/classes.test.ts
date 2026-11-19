@@ -184,6 +184,15 @@ describe('class packs', () => {
     );
   });
 
+  it('parses "four in the afternoon" as 4:00 PM', () => {
+    assert.equal(
+      classScheduleTimeFromUtterance(
+        'I enrolled for chess on Fridays at four in the afternoon'
+      ),
+      '4:00 PM'
+    );
+  });
+
   it('parses schedule time from utterance', () => {
     assert.equal(
       classScheduleTimeFromUtterance('Ishaan has skating class at 10 AM on saturdays'),
