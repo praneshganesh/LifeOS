@@ -28,14 +28,23 @@ export function classPackFromUtterance(text) {
     text.match(
       /\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+months?\b/i
     );
-  const total = totalM ? Number(totalM[1]) : undefined;
+  const after = totalM
+    ? text.slice((totalM.index ?? 0) + totalM[0].length)
+    : '';
+  const weeklyCadence = Boolean(
+    totalM &&
+      (/^\s*,?\s*(?:every|each|a|per)\b/i.test(after) ||
+        /^\s*,?\s*on\s+(?:mon|tue|wed|thu|fri|sat|sun)/i.test(after))
+  );
+  const total = !weeklyCadence && totalM ? Number(totalM[1]) : undefined;
   let months;
   if (monthsM) {
     months = MONTH_WORDS[monthsM[1].toLowerCase()] ?? Number(monthsM[1]);
   }
   return {
-    total: total && total > 0 ? total : undefined,
-    months: months && months > 0 ? months : undefined,
+    ...(total && total > 0 ? { total } : {}),
+    ...(months && months > 0 ? { months } : {}),
+    ...(weeklyCadence ? { weeklyCadence: true } : {}),
   };
 }
 
@@ -228,10 +237,11 @@ export function ensureClassActions(actions, lastUserText, classPacksSummary) {
       if (a.type === 'add_class_pack') {
         const spoken = classPackFromUtterance(lastUserText);
         const next = { ...a };
-        if (spoken.total && !next.total) next.total = spoken.total;
+        if (spoken.weeklyCadence) next.total = undefined;
+        else if (spoken.total && !next.total) next.total = spoken.total;
         if (spoken.months && !next.months) next.months = spoken.months;
         if (!next.title) next.title = classTitleFromUtterance(lastUserText) || 'Class';
-        if (spokenDays && !next.scheduleDays) next.scheduleDays = spokenDays;
+        if (spokenDays) next.scheduleDays = spokenDays;
         if (spokenTime && !next.scheduleTime) next.scheduleTime = spokenTime;
         if (spokenCompleted != null && next.completed == null) next.completed = spokenCompleted;
         return next;

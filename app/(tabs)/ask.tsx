@@ -438,6 +438,8 @@ export default function ChatScreen() {
         classPackTitle: applied.classPackTitle,
         classPackRemaining: applied.classPackRemaining,
         classPackTotal: applied.classPackTotal,
+        classPackScheduleDays: applied.classPackScheduleDays,
+        classPackEndsOn: applied.classPackEndsOn,
         classPackScheduleTimeInferred: applied.classPackScheduleTimeInferred,
         classLoggedTitle: applied.classLoggedTitle,
         classLogAttemptFor: applied.classLogAttemptFor,

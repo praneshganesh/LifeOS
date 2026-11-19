@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, Platform, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import Constants from 'expo-constants';
 import { DETAIL_DOCK_PAD } from '@/components/ui/DetailKit';
@@ -128,6 +128,22 @@ export default function DataSettingsScreen() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function onCopyCode() {
+    if (!recovery) {
+      showUserAlert('No recovery code yet', 'Back up once. Saavi creates the code then.');
+      return;
+    }
+    const clipboard = (
+      require('react-native') as { Clipboard?: { setString: (value: string) => void } }
+    ).Clipboard;
+    if (!clipboard) {
+      showUserAlert('Copy failed', 'Select the code and copy it.');
+      return;
+    }
+    clipboard.setString(recovery);
+    showUserAlert('Copied', 'The recovery code is on the clipboard.');
   }
 
   async function onRestore() {
@@ -265,25 +281,42 @@ export default function DataSettingsScreen() {
           <ListRow
             icon="key"
             title={showCode ? 'Hide recovery code' : 'Show recovery code'}
-            subtitle="Needed to restore on a new phone. Treat it like a password"
+            subtitle="Needed to restore on a new phone. Copy it once it is shown"
             onPress={() => setShowCode((v) => !v)}
             last
           />
         </ListCard>
         {showCode ? (
-          <Text
-            selectable
-            style={[
-              styles.code,
-              {
-                color: colors.ink,
-                backgroundColor: colors.surface,
-                borderColor: colors.lineStrong,
-              },
-            ]}
-          >
-            {recovery || 'Backup once to create a code.'}
-          </Text>
+          <>
+            <Pressable
+              onPress={onCopyCode}
+              accessibilityRole="button"
+              accessibilityLabel="Copy recovery code"
+            >
+              <Text
+                selectable
+                style={[
+                  styles.code,
+                  {
+                    color: colors.ink,
+                    backgroundColor: colors.surface,
+                    borderColor: colors.lineStrong,
+                  },
+                ]}
+              >
+                {recovery || 'Backup once to create a code.'}
+              </Text>
+            </Pressable>
+            <ListCard>
+              <ListRow
+                icon="memo"
+                title="Copy recovery code"
+                subtitle="Puts the code on the clipboard"
+                onPress={onCopyCode}
+                last
+              />
+            </ListCard>
+          </>
         ) : null}
         <Text variant="caption" style={{ marginTop: spacing.md, color: colors.mute }}>
           Restore on another phone

@@ -61,8 +61,18 @@ export function targetUserIds(event) {
 /** Users who *lost* entitlements in a TRANSFER event. */
 export function transferredFromUserIds(event) {
   if (event?.type !== 'TRANSFER') return [];
+  return supabaseIds(event?.transferred_from);
+}
+
+/** Users who *received* entitlements in a TRANSFER event. */
+export function transferredToUserIds(event) {
+  if (event?.type !== 'TRANSFER') return [];
+  return supabaseIds(event?.transferred_to);
+}
+
+function supabaseIds(values) {
   const out = new Set();
-  for (const v of Array.isArray(event?.transferred_from) ? event.transferred_from : []) {
+  for (const v of Array.isArray(values) ? values : []) {
     if (typeof v === 'string' && UUID_RE.test(v)) out.add(v.toLowerCase());
   }
   return [...out];
@@ -160,7 +170,45 @@ export function planFromSubscriber(payload, now = Date.now()) {
   return sawAny ? 'lapsed' : null;
 }
 
-async function fetchSubscriberPlan(cfg, appUserId) {
+/**
+ * Store product and renewal time for an active Pro entitlement.
+ * admin_set_plan_id only keeps renews_at when a product id is present, and the
+ * client cannot overwrite Pro while that time is still in the future.
+ */
+export function billingFromSubscriber(payload, now = Date.now()) {
+  const ents = payload?.subscriber?.entitlements;
+  if (!ents || typeof ents !== 'object') return null;
+  const ranked = Object.entries(ents).sort((a, b) => {
+    const ak = String(a[0] || '').toLowerCase();
+    const bk = String(b[0] || '').toLowerCase();
+    if (ak === bk) return 0;
+    if (ak === 'pro') return -1;
+    if (bk === 'pro') return 1;
+    return 0;
+  });
+  for (const [id, ent] of ranked) {
+    const key = String(id || '').toLowerCase();
+    if (key !== 'pro' && key !== 'family') continue;
+    const expRaw = ent?.expires_date;
+    const exp = expRaw ? Date.parse(expRaw) : NaN;
+    const active = !expRaw || (Number.isFinite(exp) && exp > now);
+    if (!active) continue;
+    const productId =
+      typeof ent?.product_identifier === 'string' && ent.product_identifier.trim()
+        ? ent.product_identifier.trim()
+        : null;
+    return {
+      productId,
+      cadence: cadenceFromProductId(productId),
+      renewsAt: Number.isFinite(exp) && exp > now ? new Date(exp).toISOString() : null,
+      pendingProductId: null,
+      updatePending: true,
+    };
+  }
+  return null;
+}
+
+async function fetchSubscriberPayload(cfg, appUserId) {
   if (!cfg.restKey) return null;
   try {
     const res = await fetch(
@@ -168,21 +216,48 @@ async function fetchSubscriberPlan(cfg, appUserId) {
       { headers: { Authorization: `Bearer ${cfg.restKey}`, Accept: 'application/json' } }
     );
     if (!res.ok) return null;
-    const data = await res.json().catch(() => null);
-    return data ? planFromSubscriber(data) : null;
+    return await res.json().catch(() => null);
   } catch {
     return null;
   }
 }
 
+async function fetchSubscriberPlan(cfg, appUserId) {
+  const data = await fetchSubscriberPayload(cfg, appUserId);
+  return data ? planFromSubscriber(data) : null;
+}
+
+/** Plan plus the store period, from one RevenueCat subscriber read. */
+async function fetchSubscriberSnapshot(cfg, appUserId, now = Date.now()) {
+  const data = await fetchSubscriberPayload(cfg, appUserId);
+  if (!data) return null;
+  const plan = planFromSubscriber(data, now);
+  if (!plan) return null;
+  return {
+    plan,
+    billing: plan === 'pro' ? billingFromSubscriber(data, now) : null,
+  };
+}
+
+/**
+ * Legacy service_role keys are JWTs and belong on both headers. The new
+ * `sb_secret_` keys are not JWTs: the gateway rejects them on Authorization
+ * ("Invalid API key") and accepts them on `apikey` only.
+ */
+export function serviceRoleHeaders(serviceRole) {
+  const key = String(serviceRole || '').trim();
+  const headers = {
+    apikey: key,
+    'Content-Type': 'application/json',
+  };
+  if (!key.startsWith('sb_')) headers.Authorization = `Bearer ${key}`;
+  return headers;
+}
+
 export async function adminSetPlan(sb, cfg, userId, plan, billing = null) {
   const res = await fetch(`${sb.url}/rest/v1/rpc/admin_set_plan_id`, {
     method: 'POST',
-    headers: {
-      apikey: cfg.serviceRole,
-      Authorization: `Bearer ${cfg.serviceRole}`,
-      'Content-Type': 'application/json',
-    },
+    headers: serviceRoleHeaders(cfg.serviceRole),
     body: JSON.stringify({
       p_user: userId,
       p_plan: plan,
@@ -211,22 +286,44 @@ export async function handleRevenueCatEvent(body, { sb, cfg, log = () => {} }) {
   if (!event) return { status: 400, body: { error: 'event missing' } };
 
   const updates = [];
-  const users = targetUserIds(event);
-  if (users.length) {
-    let plan = await fetchSubscriberPlan(cfg, users[0]);
-    let via = 'rest';
-    if (!plan) {
-      plan = planFromEvent(event);
-      via = 'event';
+  if (event.type === 'TRANSFER') {
+    const toIds = new Set(transferredToUserIds(event));
+    for (const uid of transferredFromUserIds(event)) {
+      if (toIds.has(uid)) continue;
+      const snap = await fetchSubscriberSnapshot(cfg, uid);
+      const plan = snap?.plan || 'trial';
+      updates.push({
+        uid,
+        plan,
+        via: 'transfer-from',
+        billing: plan === 'pro' ? snap?.billing ?? null : null,
+      });
     }
-    if (plan) {
-      const billing = plan === 'trial' || plan === 'lapsed' ? null : billingFromEvent(event);
-      for (const uid of users) updates.push({ uid, plan, via, billing });
+    for (const uid of toIds) {
+      const snap = await fetchSubscriberSnapshot(cfg, uid);
+      // A transfer with no REST read still grants Pro. The event is the receipt moving.
+      const plan = snap?.plan || 'pro';
+      updates.push({
+        uid,
+        plan,
+        via: 'transfer-to',
+        billing: plan === 'pro' ? snap?.billing ?? null : null,
+      });
     }
-  }
-  for (const uid of transferredFromUserIds(event)) {
-    const plan = (await fetchSubscriberPlan(cfg, uid)) || 'trial';
-    updates.push({ uid, plan, via: 'transfer', billing: null });
+  } else {
+    const users = targetUserIds(event);
+    if (users.length) {
+      let plan = await fetchSubscriberPlan(cfg, users[0]);
+      let via = 'rest';
+      if (!plan) {
+        plan = planFromEvent(event);
+        via = 'event';
+      }
+      if (plan) {
+        const billing = plan === 'trial' || plan === 'lapsed' ? null : billingFromEvent(event);
+        for (const uid of users) updates.push({ uid, plan, via, billing });
+      }
+    }
   }
 
   if (!updates.length) {

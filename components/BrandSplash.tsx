@@ -1,7 +1,5 @@
-import { useTheme } from '@/lib/ThemeContext';
-import { useMemo, useEffect, useRef } from 'react';
-import { Animated, Easing, Image, Platform, StyleSheet, Text, View } from 'react-native';
-import { fonts, type ThemeColors } from '@/constants/theme';
+import { useEffect, useRef } from 'react';
+import { Animated, Easing, Image, Platform, StyleSheet, View } from 'react-native';
 
 type Props = {
   /** Called after the brand moment finishes (native splash already hidden). */
@@ -10,10 +8,8 @@ type Props = {
 
 const NATIVE_DRIVER = Platform.OS !== 'web';
 
-/** In-app brand beat: Saavi mark + wordmark (not the old LifeOS lockup). */
+/** In-app brand beat. Matches the native splash: gold wordmark on black. */
 export function BrandSplash({ onFinished }: Props) {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
   const opacity = useRef(new Animated.Value(0)).current;
   const lift = useRef(new Animated.Value(8)).current;
   const scale = useRef(new Animated.Value(0.96)).current;
@@ -80,21 +76,20 @@ export function BrandSplash({ onFinished }: Props) {
         ]}
       >
         <Image
-          source={require('@/assets/images/splash-icon.png')}
-          style={styles.mark}
+          source={require('@/assets/images/saavi-wordmark.png')}
+          style={styles.wordmark}
           resizeMode="contain"
+          accessibilityLabel="Saavi"
         />
-        <Text style={styles.wordmark}>Saavi</Text>
       </Animated.View>
     </View>
   );
 }
 
-function makeStyles(colors: ThemeColors) {
-  return StyleSheet.create({
+const styles = StyleSheet.create({
     root: {
       ...StyleSheet.absoluteFill,
-      backgroundColor: colors.bg,
+      backgroundColor: '#0C0D11',
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 100,
@@ -102,16 +97,8 @@ function makeStyles(colors: ThemeColors) {
     center: {
       alignItems: 'center',
     },
-    mark: {
-      width: 96,
-      height: 96,
-    },
     wordmark: {
-      marginTop: 18,
-      fontFamily: fonts.sansSemi,
-      fontSize: 34,
-      letterSpacing: -0.8,
-      color: colors.ink,
+      width: 280,
+      height: 90,
     },
   });
-}

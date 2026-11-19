@@ -51,6 +51,26 @@ export function manageSubscriptionUrl(): string {
     : 'https://play.google.com/store/account/subscriptions';
 }
 
+/** Short line under Settings → Account → Delete account. */
+export function deleteAccountSubtitle(): string {
+  return storeIsApple()
+    ? 'Deletes your login, the saved home record, and this phone. Does not cancel Apple billing.'
+    : 'Deletes your login, the saved home record, and this phone. Does not cancel Google Play billing.';
+}
+
+/** First confirm. Says the cloud record is deleted, and billing is not. */
+export function deleteAccountConfirm(): string {
+  return storeIsApple()
+    ? 'This deletes your Saavi login, the home record and files saved to your account, and the copy on this phone. Apple keeps charging until you cancel. Open Manage subscription to cancel first, or delete now and cancel there yourself.'
+    : 'This deletes your Saavi login, the home record and files saved to your account, and the copy on this phone. Google Play keeps charging until you cancel. Open Manage subscription to cancel in Google Play first, or delete now and cancel there yourself.';
+}
+
+export function deleteAccountFinalConfirm(): string {
+  return storeIsApple()
+    ? 'This deletes the login, the home record saved to your account, and this phone. It cannot be undone. Apple billing is not cancelled.'
+    : 'This deletes the login, the home record saved to your account, and this phone. It cannot be undone. Google Play billing is not cancelled.';
+}
+
 export function noSubscriptionRestoreError(): string {
   return storeIsApple()
     ? 'No active subscription found for this Apple ID.'

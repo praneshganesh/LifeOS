@@ -2,7 +2,7 @@ import type { ChatAction } from '@/lib/chat/types';
 import { openingLineForFocus, type TalkFocus } from '@/lib/chat/focus';
 import { formatMoney } from '@/lib/chat/prompt';
 import { getRuntimeDefaultCurrency } from '@/lib/currency';
-import { displayWarrantyExpiry } from '@/lib/dates';
+import { displayWarrantyExpiry, formatDisplayDate } from '@/lib/dates';
 import { parseDateInput } from '@/lib/lastDone';
 
 function formatRemindDay(iso?: string | null): string | undefined {
@@ -35,17 +35,31 @@ function habitAppliedReply(
   days: number,
   streak: number | null | undefined
 ): string {
-  const name = title.trim();
+  const name = title.trim().toLowerCase();
   if (days > 1) {
-    if (streak && streak >= days) {
-      return `Nice, ${name} for the last ${days} days. You’re on a ${streak}-day streak.`;
-    }
-    return `Nice, ${name} for the last ${days} days.`;
+    const base = `Logged ${name} for the last ${days} days.`;
+    return streak && streak >= days ? `${base} ${streak} days in a row.` : base;
   }
-  if (streak && streak > 1) {
-    return `Nice, ${name} today. You’re on a ${streak}-day streak.`;
+  const base = `Logged ${name} for today.`;
+  return streak && streak > 1 ? `${base} ${streak} days in a row.` : base;
+}
+
+function classWhenPhrase(days?: string[] | null, endsOn?: string | null): string {
+  const labels = (days ?? [])
+    .map((d) => d.trim().toLowerCase())
+    .filter(Boolean)
+    .map((d) => d.charAt(0).toUpperCase() + d.slice(1) + 's');
+  let when = '';
+  if (labels.length === 1) when = labels[0];
+  else if (labels.length === 2) when = `${labels[0]} and ${labels[1]}`;
+  else if (labels.length > 2) {
+    when = `${labels.slice(0, -1).join(', ')}, and ${labels[labels.length - 1]}`;
   }
-  return `Nice, ${name} today.`;
+  const end = endsOn ? formatDisplayDate(endsOn) : undefined;
+  if (when && end) return `${when} until ${end}`;
+  if (when) return when;
+  if (end) return `until ${end}`;
+  return '';
 }
 
 /**
@@ -86,6 +100,8 @@ export function composeAppliedReply(params: {
   classPackTitle?: string | null;
   classPackRemaining?: number | null;
   classPackTotal?: number | null;
+  classPackScheduleDays?: string[] | null;
+  classPackEndsOn?: string | null;
   classPackScheduleTimeInferred?: boolean | null;
   classLoggedTitle?: string | null;
   classLogAttemptFor?: string | null;
@@ -299,13 +315,17 @@ export function composeAppliedReply(params: {
     const who = params.assignedTo ? ` for ${params.assignedTo}` : '';
     const total = params.classPackTotal;
     const verb = params.updatedClassPack ? 'Updated' : 'Added';
-    const countStr = total && total > 0 ? ` · ${total} classes.` : '.';
-    if (!params.updatedClassPack && params.classPackScheduleTimeInferred) {
-      return `${verb} ${params.classPackTitle}${who}${countStr} I've assumed 9:00 AM since you didn't specify a time.`;
-    }
-    return total && total > 0
-      ? `${verb} ${params.classPackTitle}${who} · ${total} classes.`
-      : `${verb} ${params.classPackTitle}${who}.`;
+    const when = classWhenPhrase(params.classPackScheduleDays, params.classPackEndsOn);
+    const bits = [
+      total && total > 0 ? `${total} classes` : '',
+      when,
+    ].filter(Boolean);
+    const detail = bits.length ? ` · ${bits.join(', ')}` : '';
+    const assumed =
+      !params.updatedClassPack && params.classPackScheduleTimeInferred
+        ? ` I assumed 9:00 AM, since you didn't give a time.`
+        : '';
+    return `${verb} ${params.classPackTitle}${who}${detail}.${assumed}`;
   }
   if (actions.some((a) => a?.type === 'add_class_pack' || a?.type === 'update_class_pack')) {
     return params.updatedClassPack

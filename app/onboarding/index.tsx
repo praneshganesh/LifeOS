@@ -86,13 +86,13 @@ export default function OnboardingWelcome() {
       </View>
 
       <View style={styles.copy}>
-        <Animated.View entering={enter(5)} style={styles.brandRow}>
+        <Animated.View entering={enter(5)} style={styles.wordmarkPlate}>
           <Image
-            source={require('@/assets/images/splash-icon.png')}
-            style={styles.mark}
+            source={require('@/assets/images/saavi-wordmark.png')}
+            style={styles.wordmark}
             resizeMode="contain"
+            accessibilityLabel="Saavi"
           />
-          <Text style={styles.brand}>Saavi</Text>
         </Animated.View>
         <Animated.Text entering={enter(6)} style={styles.headline} accessibilityRole="header">
           Life at home, all in one calm place.
@@ -178,23 +178,17 @@ function makeStyles(colors: ThemeColors) {
       gap: 10,
       marginBottom: spacing.xl,
     },
-    brandRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      marginBottom: 4,
+    wordmarkPlate: {
+      alignSelf: 'flex-start',
+      backgroundColor: '#0C0D11',
+      borderRadius: 14,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      marginBottom: 8,
     },
-    mark: {
-      width: 26,
-      height: 26,
-      borderRadius: 7,
-      overflow: 'hidden',
-    },
-    brand: {
-      fontFamily: fonts.sansSemi,
-      fontSize: 17,
-      letterSpacing: -0.3,
-      color: colors.ink,
+    wordmark: {
+      width: 148,
+      height: 48,
     },
     headline: {
       fontFamily: fonts.sansSemi,

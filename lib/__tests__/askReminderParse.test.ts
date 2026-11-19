@@ -311,8 +311,14 @@ describe('Ask/Talk reminder parse (clock Wed 4 Nov 2026 Asia/Dubai)', () => {
   it('date phrases: next week=Monday, this weekend=Saturday, end of month, by Friday', () => {
     // next week → next Monday (documented). Wed 4 Nov → Mon 9 Nov.
     assert.equal(remindAtFromUtterance('next week', FROM), '2026-11-09');
+    assert.equal(remindAtFromUtterance('end of next week', FROM), '2026-11-15');
+    assert.equal(remindAtFromUtterance('by the end of next week', FROM), '2026-11-15');
+    assert.equal(remindAtFromUtterance('end of the week', FROM), '2026-11-08');
     assert.equal(remindAtFromUtterance('this weekend', FROM), '2026-11-07');
     assert.equal(remindAtFromUtterance('end of the month', FROM), '2026-11-30');
+    assert.equal(remindAtFromUtterance('end of December', FROM), '2026-12-31');
+    assert.equal(remindAtFromUtterance('by the end of December', FROM), '2026-12-31');
+    assert.equal(remindAtFromUtterance('end of next December', FROM), '2027-12-31');
     assert.equal(remindAtFromUtterance('by Friday', FROM), '2026-11-06');
     assert.equal(remindAtFromUtterance('in a week', FROM), '2026-11-11');
     assert.equal(remindAtFromUtterance('next month', FROM), '2026-12-04');

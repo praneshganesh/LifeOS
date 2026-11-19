@@ -490,6 +490,8 @@ export type ApplyActionsResult = {
   classPackTitle: string | null;
   classPackRemaining: number | null;
   classPackTotal: number | null;
+  classPackScheduleDays: string[] | null;
+  classPackEndsOn: string | null;
   classPackScheduleTimeInferred?: boolean;
   classLoggedTitle: string | null;
   classLogAttemptFor: string | null;
@@ -602,6 +604,8 @@ export async function applyChatActions(
   let classPackTitle: string | null = null;
   let classPackRemaining: number | null = null;
   let classPackTotal: number | null = null;
+  let classPackScheduleDays: string[] | null = null;
+  let classPackEndsOn: string | null = null;
   let classPackScheduleTimeInferred = false;
   let classLoggedTitle: string | null = null;
   let classLogAttemptFor: string | null = null;
@@ -1812,16 +1816,14 @@ export async function applyChatActions(
     if (action.type === 'add_class_pack' && action.title?.trim() && options?.classes) {
       const spoken = classPackFromUtterance(lastUserText);
       const title = titleCase(action.title.trim());
-      const totalRaw = spoken.total ?? action.total;
+      const totalRaw = spoken.weeklyCadence ? undefined : (spoken.total ?? action.total);
       const totalN = Math.round(Number(totalRaw));
       const total = Number.isFinite(totalN) && totalN > 0 ? totalN : 0;
       const monthsRaw = spoken.months ?? action.months;
       const months = monthsRaw != null ? Math.round(Number(monthsRaw)) : undefined;
-      const scheduleDays =
-        normalizeScheduleDays(action.scheduleDays) ||
-        classScheduleDaysFromUtterance(lastUserText);
-      const scheduleTime =
-        action.scheduleTime?.trim() || classScheduleTimeFromUtterance(lastUserText);
+      const spokenDays = classScheduleDaysFromUtterance(lastUserText);
+      const scheduleDays = spokenDays || normalizeScheduleDays(action.scheduleDays);
+      const scheduleTime = classScheduleTimeFromUtterance(lastUserText);
       const completedRaw = action.completed ?? classCompletedCountFromUtterance(lastUserText);
       const completed =
         completedRaw != null && Number.isFinite(Number(completedRaw))
@@ -1847,7 +1849,7 @@ export async function applyChatActions(
         ? normalizeDateField(String(action.startsOn))
         : undefined;
       let endsOn =
-        classDeadlineFromUtterance(lastUserText) ||
+        classDeadlineFromUtterance(lastUserText, fromDay) ||
         (action.endsOn ? normalizeDateField(String(action.endsOn)) : undefined);
       if (endsOn && endsOn <= today) endsOn = undefined;
       if (startsOn && (startsOn < yearAgo || (endsOn && startsOn > endsOn))) {
@@ -1868,6 +1870,8 @@ export async function applyChatActions(
       classPackTitle = pack.title;
       classPackRemaining = remainingCount(pack);
       classPackTotal = pack.total;
+      classPackScheduleDays = pack.scheduleDays ?? null;
+      classPackEndsOn = pack.endsOn ?? null;
       classPackScheduleTimeInferred = Boolean(pack.scheduleTimeInferred);
       lastAssignedTo = pack.assignedTo ?? lastAssignedTo;
       remember('class', pack.id);
@@ -2146,6 +2150,8 @@ export async function applyChatActions(
     classPackTitle,
     classPackRemaining,
     classPackTotal,
+    classPackScheduleDays,
+    classPackEndsOn,
     classPackScheduleTimeInferred,
     classLoggedTitle,
     classLogAttemptFor,
@@ -2227,13 +2233,9 @@ function idFromLabelList(
 }
 
 function classTotalFromUtterance(text?: string): number | undefined {
-  if (!text?.trim()) return undefined;
-  const m = text.match(
-    /(\d+)\s*(classes|sessions|lessons|class|session|lesson)\b/i
-  );
-  if (!m) return undefined;
-  const n = Number(m[1]);
-  return Number.isFinite(n) && n > 0 ? n : undefined;
+  const spoken = classPackFromUtterance(text);
+  if (spoken.weeklyCadence) return undefined;
+  return spoken.total;
 }
 
 function expenseIdFromUtterance(
@@ -2568,7 +2570,7 @@ function ensureTalkActions(
     list.push({
       type: 'add_class_pack',
       title,
-      total: spoken.total,
+      total: spoken.weeklyCadence ? undefined : spoken.total,
       months: spoken.months,
     });
   }

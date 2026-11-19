@@ -1,4 +1,5 @@
 import { Linking, Platform } from 'react-native';
+import { deleteAccountConfirm } from '@/lib/billing/storeCopy';
 import { ModuleScreen } from '@/components/ui/ModuleScreen';
 import { Text } from '@/components/ui/Text';
 import { DETAIL_DOCK_PAD } from '@/components/ui/DetailKit';
@@ -12,10 +13,7 @@ const HOW_WE_COLLECT =
     ? 'You type it, use the camera, or choose a photo or PDF. Sign in with Apple can include an email if you allow it. Camera, photos, and the microphone are used only when you capture or talk. You can turn them off in iOS Settings. Speech recognition, Face ID, and on-device text reading stay on the phone. Reminders are scheduled on the device. We use this to keep your record, sync it, answer Talk, Ask, and Identify, and apply your subscription.'
     : 'You type it, use the camera, or choose a photo or PDF. Sign in with Google can include the email on that Google account. Camera, photos, and the microphone are used only when you capture or talk. You can turn them off in system Settings. Speech recognition, biometrics, and on-device text reading stay on the phone. Reminders are scheduled on the device. We use this to keep your record, sync it, answer Talk, Ask, and Identify, and apply your subscription.';
 
-const DELETE_ACCOUNT_BODY =
-  Platform.OS === 'ios'
-    ? 'Settings → Account → Delete account erases the login, the home record that belongs only to you, attached files, and the copy on this phone. Deleting the account does not cancel an Apple subscription. Cancel that in iOS Settings → Apple ID → Subscriptions.'
-    : 'Settings → Account → Delete account erases the login, the home record that belongs only to you, attached files, and the copy on this phone. Deleting the account does not cancel a store subscription. Cancel that in Google Play or the store where you subscribed.';
+const DELETE_ACCOUNT_BODY = `Settings → Account → Delete account. ${deleteAccountConfirm()}`;
 
 function Block({ title, body }: { title: string; body: string }) {
   const { colors } = useTheme();
@@ -56,7 +54,7 @@ export default function PrivacyPolicyScreen() {
       bottomExtra={DETAIL_DOCK_PAD}
     >
       <Text style={{ fontFamily: fonts.sans, fontSize: 14, color: colors.mute }}>
-        Last updated 9 October 2026
+        Last updated 18 November 2026
       </Text>
       <Block
         title="Who publishes Saavi"

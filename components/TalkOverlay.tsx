@@ -550,6 +550,8 @@ export function TalkOrb() {
 
       setHeard(text);
       setError('');
+      // Drop the previous answer. Leaving it up makes the next sentence look answered.
+      setReply('');
       setPhase('thinking');
 
       const newestId = inventoryRef.current[0]?.id ?? null;
@@ -776,6 +778,8 @@ export function TalkOrb() {
           classPackTitle: applied.classPackTitle,
           classPackRemaining: applied.classPackRemaining,
           classPackTotal: applied.classPackTotal,
+          classPackScheduleDays: applied.classPackScheduleDays,
+          classPackEndsOn: applied.classPackEndsOn,
           classPackScheduleTimeInferred: applied.classPackScheduleTimeInferred,
           classLoggedTitle: applied.classLoggedTitle,
           classLogAttemptFor: applied.classLogAttemptFor,
@@ -1204,7 +1208,7 @@ export function TalkOrb() {
             </View>
 
             <View style={styles.replySlot}>
-              {reply && phase !== 'listening' ? <TalkReply text={reply} /> : null}
+              {reply && phase === 'reply' ? <TalkReply text={reply} /> : null}
               {error ? <Text style={styles.error}>{error}</Text> : null}
             </View>
           </View>

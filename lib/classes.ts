@@ -1,4 +1,4 @@
-import { addCalendarMonths, localDayKey } from '@/lib/dates';
+import { addCalendarMonths, localDayKey, spokenEndDateFromUtterance } from '@/lib/dates';
 import { daysUntil } from '@/lib/lastDone';
 
 export type ScheduleDay =
@@ -378,9 +378,21 @@ export function pickAttendancePack(
   return undefined;
 }
 
+/**
+ * "2 classes every Friday" is how often it happens, not a pack of 2.
+ * "24 classes within 3 months" is a purchased count.
+ */
+function classCountIsCadence(text: string, match: RegExpMatchArray): boolean {
+  const after = text.slice((match.index ?? 0) + match[0].length);
+  return /^\s*,?\s*(?:every|each|a|per)\b/i.test(after)
+    || /^\s*,?\s*on\s+(?:mon|tue|wed|thu|fri|sat|sun)/i.test(after);
+}
+
 export function classPackFromUtterance(text?: string): {
   total?: number;
   months?: number;
+  /** Spoken count is a weekly rhythm, so a model pack size must be ignored. */
+  weeklyCadence?: boolean;
 } {
   if (!text?.trim()) return {};
   const totalM = text.match(
@@ -403,14 +415,16 @@ export function classPackFromUtterance(text?: string): {
     eleven: 11,
     twelve: 12,
   };
-  const total = totalM ? Number(totalM[1]) : undefined;
+  const weeklyCadence = Boolean(totalM && classCountIsCadence(text, totalM));
+  const total = !weeklyCadence && totalM ? Number(totalM[1]) : undefined;
   let months: number | undefined;
   if (monthsM) {
     months = MONTH_WORDS[monthsM[1].toLowerCase()] ?? Number(monthsM[1]);
   }
   return {
-    total: total && total > 0 ? total : undefined,
-    months: months && months > 0 ? months : undefined,
+    ...(total && total > 0 ? { total } : {}),
+    ...(months && months > 0 ? { months } : {}),
+    ...(weeklyCadence ? { weeklyCadence: true } : {}),
   };
 }
 
@@ -439,6 +453,8 @@ export function classDeadlineFromUtterance(
   from = new Date()
 ): string | undefined {
   if (!text?.trim()) return undefined;
+  const endBound = spokenEndDateFromUtterance(text, from);
+  if (endBound) return endBound;
   const m = text.match(
     /\b(?:before|by|until|till|through)\s+(the\s+)?(end\s+of\s+)?(january|february|march|april|may|june|july|august|september|october|november|december)\b/i
   );

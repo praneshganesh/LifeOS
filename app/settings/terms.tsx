@@ -49,7 +49,7 @@ export default function TermsScreen() {
       bottomExtra={DETAIL_DOCK_PAD}
     >
       <Text style={{ fontFamily: fonts.sans, fontSize: 14, color: colors.mute }}>
-        Last updated 9 October 2026
+        Last updated 18 November 2026
       </Text>
       <Block
         title="The service"
@@ -59,8 +59,8 @@ export default function TermsScreen() {
         title="Subscriptions"
         body={
           Platform.OS === 'ios'
-            ? 'Pro is billed by Apple to your Apple ID. The price and length are shown on the paywall before you confirm. A subscription renews until you cancel it in iOS Settings → Apple ID → Subscriptions, at least 24 hours before the period ends. Cancel stops the next renewal. It does not refund the period already paid. Deleting your Saavi account does not cancel that Apple subscription. Restore purchases puts an existing subscription back on this phone. Refunds are handled by Apple.'
-            : 'Pro is billed through Google Play (or the store where you installed Saavi). The price and length are shown on the paywall before you confirm. A subscription renews until you cancel it in the store’s subscription settings, at least 24 hours before the period ends. Cancel stops the next renewal. It does not refund the period already paid. Deleting your Saavi account does not cancel that store subscription. Restore purchases puts an existing subscription back on this phone. Refunds are handled by the store.'
+            ? 'Pro is billed by Apple to your Apple ID. The price and length are shown on the paywall before you confirm. A subscription renews until you cancel it in iOS Settings → Apple ID → Subscriptions, at least 24 hours before the period ends. Cancel stops the next renewal. It does not refund the period already paid. Deleting your Saavi account deletes the login, the home record and files saved to your account, and the copy on this phone. It does not cancel that Apple subscription. Restore purchases puts an existing subscription back on this phone. Refunds are handled by Apple.'
+            : 'Pro is billed through Google Play. The price and length are shown on the paywall before you confirm. A subscription renews until you cancel it in Google Play, at least 24 hours before the period ends. Cancel stops the next renewal. It does not refund the period already paid. Deleting your Saavi account deletes the login, the home record and files saved to your account, and the copy on this phone. It does not cancel that Google Play subscription. Restore purchases puts an existing subscription back on this phone. Refunds are handled by Google Play.'
         }
       />
       <Block

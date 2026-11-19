@@ -1374,6 +1374,70 @@ describe('talk focus across modules', () => {
     assert.match(reply, /assumed 9:00 AM/i);
   });
 
+  it('does not turn a weekly class rhythm into a 2-session pack', async () => {
+    const { api, packs } = memoryClasses();
+    const utterance =
+      'I enrolled Ishaan for Chess classes and he has 2 classes every friday and saturday until end of March';
+    const applied = await applyChatActions(
+      [
+        {
+          type: 'add_class_pack',
+          title: 'Chess',
+          total: 2,
+          scheduleDays: ['friday'],
+          scheduleTime: '6:30 PM',
+          assignedTo: 'Ishaan',
+        },
+      ] as ChatAction[],
+      unusedInv,
+      'talk',
+      {
+        lastUserText: utterance,
+        localDate: '2026-11-19',
+        classes: api,
+        household: [
+          {
+            id: 'fm-ishaan',
+            name: 'Ishaan',
+            role: 'child',
+            relation: 'Son',
+            avatarLetter: 'I',
+            icon: 'school',
+            permission: 'viewer',
+            createdAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      }
+    );
+    assert.equal(packs.length, 1);
+    assert.equal(packs[0].total, 0);
+    assert.deepEqual(packs[0].scheduleDays, ['friday', 'saturday']);
+    assert.equal(packs[0].scheduleTime, '9:00 AM');
+    assert.equal(packs[0].endsOn, '2027-03-31');
+    const reply = composeAppliedReply({
+      actions: [{ type: 'add_class_pack', title: 'Chess' }],
+      modelReply: 'Added Chess with 2 sessions.',
+      assignedTo: applied.lastAssignedTo,
+      classPackTitle: applied.classPackTitle,
+      classPackTotal: applied.classPackTotal,
+      classPackScheduleDays: applied.classPackScheduleDays,
+      classPackEndsOn: applied.classPackEndsOn,
+      classPackScheduleTimeInferred: applied.classPackScheduleTimeInferred,
+    });
+    assert.match(reply, /Fridays and Saturdays until Mar 31, 2027/);
+    assert.doesNotMatch(reply, /2 classes/);
+  });
+
+  it('logs a habit without pasting the title as a sentence', () => {
+    const reply = composeAppliedReply({
+      actions: [{ type: 'habit_check_in', title: 'Walk' }],
+      modelReply: 'Nice, Walk today.',
+      habitCheckInTitle: 'Walk',
+      habitCheckInDays: 1,
+    });
+    assert.equal(reply, 'Logged walk for today.');
+  });
+
   it('updates class pack completed count from Talk', async () => {
     const { api, packs } = memoryClasses();
     const created = await api.addPack({

@@ -15,6 +15,19 @@ describe('chat-api class pack repair', () => {
     assert.equal(next[0]?.total, undefined);
   });
 
+  it('does not keep a weekly rhythm as a pack of 2', () => {
+    const utterance =
+      'I enrolled Ishaan for Chess classes and he has 2 classes every friday and saturday until end of March';
+    assert.deepEqual(classPackFromUtterance(utterance), { weeklyCadence: true });
+    const next = ensureClassActions(
+      [{ type: 'add_class_pack', title: 'Chess', total: 2, scheduleDays: ['friday'] }],
+      utterance,
+      []
+    );
+    assert.equal(next[0].total, undefined);
+    assert.deepEqual(next[0].scheduleDays, ['friday', 'saturday']);
+  });
+
   it('reads 12th classes and two months from ASR', () => {
     assert.deepEqual(
       classPackFromUtterance(

@@ -421,6 +421,74 @@ function startOfLocalDay(d: Date) {
 }
 
 /**
+ * Monday-start week (same convention as "next week" = next Monday).
+ * The end of that week is Sunday. Today being Sunday is the end of this week.
+ */
+function endOfWeekKey(which: 'this' | 'next', from: Date): string {
+  const d = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  const toSunday = (7 - d.getDay()) % 7;
+  d.setDate(d.getDate() + toSunday + (which === 'next' ? 7 : 0));
+  return localDayKey(d);
+}
+
+function endOfNamedMonthKey(
+  month: number,
+  from: Date,
+  opts?: { next?: boolean; year?: number }
+): string {
+  let year = opts?.year ?? from.getFullYear();
+  if (opts?.year == null && opts?.next) year += 1;
+  let last = new Date(year, month + 1, 0);
+  if (opts?.year == null && !opts?.next && last < startOfLocalDay(from)) {
+    year += 1;
+    last = new Date(year, month + 1, 0);
+  }
+  return localDayKey(last);
+}
+
+/**
+ * Last day the speaker named: "end of next week", "end of December",
+ * "end of the year". Bare "next week" stays next Monday and is not handled here.
+ */
+export function spokenEndDateFromUtterance(
+  text?: string,
+  from = new Date()
+): string | undefined {
+  if (!text?.trim()) return undefined;
+  if (/\bend\s+of\s+(?:the\s+)?next\s+week\b/i.test(text)) {
+    return endOfWeekKey('next', from);
+  }
+  if (/\bend\s+of\s+(?:the\s+)?(?:this\s+)?week\b/i.test(text)) {
+    return endOfWeekKey('this', from);
+  }
+  if (/\bend\s+of\s+(?:the\s+)?next\s+year\b/i.test(text)) {
+    return `${from.getFullYear() + 1}-12-31`;
+  }
+  if (/\bend\s+of\s+(?:the\s+)?(?:this\s+)?year\b/i.test(text)) {
+    const year = from.getFullYear();
+    const last = new Date(year, 12, 0);
+    if (last < startOfLocalDay(from)) return `${year + 1}-12-31`;
+    return `${year}-12-31`;
+  }
+  if (/\bend\s+of\s+(?:the\s+)?month\b/i.test(text)) {
+    return localDayKey(new Date(from.getFullYear(), from.getMonth() + 1, 0));
+  }
+  const named = text.match(
+    new RegExp(
+      `\\bend\\s+of\\s+(?:the\\s+)?(?:(next)\\s+)?(${MONTHS})(?:\\s+(\\d{4})|\\s+(next\\s+year))?\\b`,
+      'i'
+    )
+  );
+  if (!named) return undefined;
+  const month = monthIndex(named[2]);
+  if (month == null) return undefined;
+  return endOfNamedMonthKey(month, from, {
+    next: Boolean(named[1] || named[4]),
+    year: named[3] ? Number(named[3]) : undefined,
+  });
+}
+
+/**
  * True when the utterance appears to name a due day (so model remindAt may be
  * consulted). Requires a day with a month — bare "may" (modal verb) does not count.
  */
@@ -431,6 +499,15 @@ export function utteranceNamesRemindDate(text?: string): boolean {
   if (/\bday\s+after\s+tomorrow\b/i.test(t)) return true;
   if (/\bthis\s+weekend\b/i.test(t)) return true;
   if (/\bend\s+of\s+(?:the\s+)?month\b/i.test(t)) return true;
+  if (/\bend\s+of\s+(?:the\s+)?(?:next\s+|this\s+)?week\b/i.test(t)) return true;
+  if (
+    new RegExp(
+      `\\bend\\s+of\\s+(?:the\\s+)?(?:next\\s+)?(?:${MONTHS}|year)\\b`,
+      'i'
+    ).test(t)
+  ) {
+    return true;
+  }
   if (
     /\bnext\s+(week|month|year|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/i.test(
       t
@@ -528,10 +605,10 @@ export function remindAtFromUtterance(
   if (/\bthis\s+weekend\b/i.test(text)) {
     return nextWeekdayKey('saturday', from);
   }
-  if (/\bend\s+of\s+(?:the\s+)?month\b/i.test(text)) {
-    return localDayKey(new Date(from.getFullYear(), from.getMonth() + 1, 0));
-  }
-  // next week → next Monday (documented)
+  // "end of next week" / "end of December" before bare "next week" (Monday).
+  const endBound = spokenEndDateFromUtterance(text, from);
+  if (endBound) return endBound;
+  // next week → next Monday (documented). Not "end of next week".
   if (/\bnext\s+week\b/i.test(text)) {
     return nextWeekdayKey('monday', from);
   }
@@ -894,6 +971,23 @@ export function parseReminderEndsAtFromUtterance(
       if (candidate.getMonth() === month && candidate.getDate() === day) {
         return localDayKey(candidate);
       }
+    }
+  }
+
+  // "until end of December" / "through the end of March 2027"
+  const untilEndMonth = text.match(
+    new RegExp(
+      `\\b(?:until|till|through)\\s+(?:the\\s+)?end\\s+of\\s+(?:(next)\\s+)?(${MONTHS})(?:\\s+(\\d{4})|\\s+(next\\s+year))?\\b`,
+      'i'
+    )
+  );
+  if (untilEndMonth) {
+    const month = monthIndex(untilEndMonth[2]);
+    if (month != null) {
+      return endOfNamedMonthKey(month, from, {
+        next: Boolean(untilEndMonth[1] || untilEndMonth[4]),
+        year: untilEndMonth[3] ? Number(untilEndMonth[3]) : undefined,
+      });
     }
   }
 
@@ -1311,7 +1405,7 @@ export function parseReminderFromUtterance(
   let s = text.trim();
   // Allow lead-in words: "Can you set a reminder for…"
   s = s.replace(
-    /^[\s\S]*?\b(?:please\s+)?(?:log|set|add|create)\s+(?:a\s+)?reminder\s+(?:to\s+|for\s+)?/i,
+    /^[\s\S]*?\b(?:please\s+)?(?:log|add|create|set(?:\s*up)?)\s+(?:a\s+|an\s+)?reminder\s+(?:to\s+|for\s+)?/i,
     ''
   );
   s = s.replace(
@@ -1360,7 +1454,10 @@ export function parseReminderFromUtterance(
  */
 export function finalizeReminderLabel(raw: string): string {
   let s = raw.trim().replace(/\s+/g, ' ');
-  s = s.replace(/^(?:please\s+)?(?:remind\s+me(?:\s+to)?|set\s+(?:a\s+)?reminder(?:\s+to)?|reminder)\s*/i, '');
+  s = s.replace(
+    /^(?:please\s+)?(?:remind\s+me(?:\s+to)?|(?:log|add|create|set(?:\s*up)?)\s+(?:a\s+|an\s+)?reminder(?:\s+to|\s+for)?|reminder)\s*/i,
+    ''
+  );
   s = stripReminderFillers(s);
   s = stripReminderDatePhrases(s);
   s = s.replace(/^[:\s,.-]+/, '');

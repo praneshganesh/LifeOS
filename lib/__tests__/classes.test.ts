@@ -47,6 +47,14 @@ describe('classDeadlineFromUtterance', () => {
     assert.equal(d, '2026-11-30');
   });
 
+  it('maps "end of December" to the last day, not the 1st', () => {
+    const d = classDeadlineFromUtterance(
+      'I have 12 classes to take before the end of December',
+      new Date(2026, 10, 4)
+    );
+    assert.equal(d, '2026-12-31');
+  });
+
   it('returns undefined without a deadline phrase', () => {
     assert.equal(classDeadlineFromUtterance('I enrolled for skating'), undefined);
   });
@@ -85,6 +93,21 @@ describe('class packs', () => {
         'I enrolled my son for skating class. He has 24 classes within 3 months.'
       ),
       { total: 24, months: 3 }
+    );
+  });
+
+  it('treats "2 classes every Friday and Saturday" as a rhythm, not a pack of 2', () => {
+    assert.deepEqual(
+      classPackFromUtterance(
+        'I enrolled Ishaan for Chess classes and he has 2 classes every friday and saturday until end of March'
+      ),
+      { weeklyCadence: true }
+    );
+    assert.deepEqual(
+      classScheduleDaysFromUtterance(
+        'I enrolled Ishaan for Chess classes and he has 2 classes every friday and saturday until end of March'
+      ),
+      ['friday', 'saturday']
     );
   });
 

@@ -347,6 +347,56 @@ function remindDateIsAmbiguous(text) {
 function startOfLocalDay(d) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
+function endOfWeekKey(which, from) {
+  const d = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  const toSunday = (7 - d.getDay()) % 7;
+  d.setDate(d.getDate() + toSunday + (which === "next" ? 7 : 0));
+  return localDayKey(d);
+}
+function endOfNamedMonthKey(month, from, opts) {
+  let year = opts?.year ?? from.getFullYear();
+  if (opts?.year == null && opts?.next) year += 1;
+  let last = new Date(year, month + 1, 0);
+  if (opts?.year == null && !opts?.next && last < startOfLocalDay(from)) {
+    year += 1;
+    last = new Date(year, month + 1, 0);
+  }
+  return localDayKey(last);
+}
+function spokenEndDateFromUtterance(text, from = /* @__PURE__ */ new Date()) {
+  if (!text?.trim()) return void 0;
+  if (/\bend\s+of\s+(?:the\s+)?next\s+week\b/i.test(text)) {
+    return endOfWeekKey("next", from);
+  }
+  if (/\bend\s+of\s+(?:the\s+)?(?:this\s+)?week\b/i.test(text)) {
+    return endOfWeekKey("this", from);
+  }
+  if (/\bend\s+of\s+(?:the\s+)?next\s+year\b/i.test(text)) {
+    return `${from.getFullYear() + 1}-12-31`;
+  }
+  if (/\bend\s+of\s+(?:the\s+)?(?:this\s+)?year\b/i.test(text)) {
+    const year = from.getFullYear();
+    const last = new Date(year, 12, 0);
+    if (last < startOfLocalDay(from)) return `${year + 1}-12-31`;
+    return `${year}-12-31`;
+  }
+  if (/\bend\s+of\s+(?:the\s+)?month\b/i.test(text)) {
+    return localDayKey(new Date(from.getFullYear(), from.getMonth() + 1, 0));
+  }
+  const named = text.match(
+    new RegExp(
+      `\\bend\\s+of\\s+(?:the\\s+)?(?:(next)\\s+)?(${MONTHS})(?:\\s+(\\d{4})|\\s+(next\\s+year))?\\b`,
+      "i"
+    )
+  );
+  if (!named) return void 0;
+  const month = monthIndex(named[2]);
+  if (month == null) return void 0;
+  return endOfNamedMonthKey(month, from, {
+    next: Boolean(named[1] || named[4]),
+    year: named[3] ? Number(named[3]) : void 0
+  });
+}
 function utteranceNamesRemindDate(text) {
   if (!text?.trim()) return false;
   const t = text;
@@ -354,6 +404,13 @@ function utteranceNamesRemindDate(text) {
   if (/\bday\s+after\s+tomorrow\b/i.test(t)) return true;
   if (/\bthis\s+weekend\b/i.test(t)) return true;
   if (/\bend\s+of\s+(?:the\s+)?month\b/i.test(t)) return true;
+  if (/\bend\s+of\s+(?:the\s+)?(?:next\s+|this\s+)?week\b/i.test(t)) return true;
+  if (new RegExp(
+    `\\bend\\s+of\\s+(?:the\\s+)?(?:next\\s+)?(?:${MONTHS}|year)\\b`,
+    "i"
+  ).test(t)) {
+    return true;
+  }
   if (/\bnext\s+(week|month|year|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/i.test(
     t
   )) {
@@ -419,9 +476,8 @@ function remindAtFromUtterance(text, from = /* @__PURE__ */ new Date(), now) {
   if (/\bthis\s+weekend\b/i.test(text)) {
     return nextWeekdayKey("saturday", from);
   }
-  if (/\bend\s+of\s+(?:the\s+)?month\b/i.test(text)) {
-    return localDayKey(new Date(from.getFullYear(), from.getMonth() + 1, 0));
-  }
+  const endBound = spokenEndDateFromUtterance(text, from);
+  if (endBound) return endBound;
   if (/\bnext\s+week\b/i.test(text)) {
     return nextWeekdayKey("monday", from);
   }
@@ -694,6 +750,21 @@ function parseReminderEndsAtFromUtterance(text, from = /* @__PURE__ */ new Date(
       }
     }
   }
+  const untilEndMonth = text.match(
+    new RegExp(
+      `\\b(?:until|till|through)\\s+(?:the\\s+)?end\\s+of\\s+(?:(next)\\s+)?(${MONTHS})(?:\\s+(\\d{4})|\\s+(next\\s+year))?\\b`,
+      "i"
+    )
+  );
+  if (untilEndMonth) {
+    const month = monthIndex(untilEndMonth[2]);
+    if (month != null) {
+      return endOfNamedMonthKey(month, from, {
+        next: Boolean(untilEndMonth[1] || untilEndMonth[4]),
+        year: untilEndMonth[3] ? Number(untilEndMonth[3]) : void 0
+      });
+    }
+  }
   const untilMonth = text.match(
     new RegExp(
       `\\b(?:until|till|through)\\s+(?:(next)\\s+)?(${MONTHS})(?:\\s+(\\d{4})|\\s+(next\\s+year))?\\b`,
@@ -934,7 +1005,7 @@ function parseReminderFromUtterance(text) {
   if (!text?.trim()) return void 0;
   let s = text.trim();
   s = s.replace(
-    /^[\s\S]*?\b(?:please\s+)?(?:log|set|add|create)\s+(?:a\s+)?reminder\s+(?:to\s+|for\s+)?/i,
+    /^[\s\S]*?\b(?:please\s+)?(?:log|add|create|set(?:\s*up)?)\s+(?:a\s+|an\s+)?reminder\s+(?:to\s+|for\s+)?/i,
     ""
   );
   s = s.replace(
@@ -974,7 +1045,10 @@ function parseReminderFromUtterance(text) {
 }
 function finalizeReminderLabel(raw) {
   let s = raw.trim().replace(/\s+/g, " ");
-  s = s.replace(/^(?:please\s+)?(?:remind\s+me(?:\s+to)?|set\s+(?:a\s+)?reminder(?:\s+to)?|reminder)\s*/i, "");
+  s = s.replace(
+    /^(?:please\s+)?(?:remind\s+me(?:\s+to)?|(?:log|add|create|set(?:\s*up)?)\s+(?:a\s+|an\s+)?reminder(?:\s+to|\s+for)?|reminder)\s*/i,
+    ""
+  );
   s = stripReminderFillers(s);
   s = stripReminderDatePhrases(s);
   s = s.replace(/^[:\s,.-]+/, "");
@@ -1029,6 +1103,7 @@ export {
   reminderClarifyFromUtterance,
   reminderLabelFromUtterance,
   splitDualRemindersFromUtterance,
+  spokenEndDateFromUtterance,
   utteranceNamesRemindDate,
   warrantyExpiryFromUtterance
 };

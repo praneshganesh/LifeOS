@@ -2,19 +2,35 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   handleRevenueCatEvent,
+  serviceRoleHeaders,
   billingFromEvent,
   cadenceFromProductId,
   planFromEntitlementIds,
   planFromEvent,
   planFromSubscriber,
+  billingFromSubscriber,
   targetUserIds,
   transferredFromUserIds,
+  transferredToUserIds,
   webhookAuthorized,
 } from '../revenuecat.mjs';
 
 const UID = '11111111-2222-4333-8444-555555555555';
 const UID2 = '66666666-7777-4888-9999-aaaaaaaaaaaa';
 const NOW = Date.parse('2026-09-28T12:00:00Z');
+
+describe('service role headers', () => {
+  it('sends a new secret key only as apikey', () => {
+    const headers = serviceRoleHeaders('sb_secret_example');
+    assert.equal(headers.apikey, 'sb_secret_example');
+    assert.equal(headers.Authorization, undefined);
+  });
+  it('sends a legacy JWT on both headers', () => {
+    const headers = serviceRoleHeaders('eyJ.legacy.jwt');
+    assert.equal(headers.apikey, 'eyJ.legacy.jwt');
+    assert.equal(headers.Authorization, 'Bearer eyJ.legacy.jwt');
+  });
+});
 
 describe('webhook auth', () => {
   it('accepts the exact secret with or without Bearer', () => {
@@ -42,6 +58,13 @@ describe('target users', () => {
     assert.deepEqual(
       transferredFromUserIds({ type: 'TRANSFER', transferred_from: [UID, '$RCAnonymousID:x'] }),
       [UID]
+    );
+  });
+  it('extracts transferred_to only for TRANSFER events', () => {
+    assert.deepEqual(transferredToUserIds({ type: 'RENEWAL', transferred_to: [UID] }), []);
+    assert.deepEqual(
+      transferredToUserIds({ type: 'TRANSFER', transferred_to: [UID2, '$RCAnonymousID:x'] }),
+      [UID2]
     );
   });
 });
@@ -122,6 +145,29 @@ describe('plan derivation', () => {
     );
     assert.equal(planFromSubscriber({ subscriber: { entitlements: { pro: { expires_date: null } } } }, NOW), 'pro');
   });
+
+  it('reads the active Pro product and renewal time from a subscriber', () => {
+    const billing = billingFromSubscriber(
+      {
+        subscriber: {
+          entitlements: {
+            family: {
+              expires_date: '2026-10-27T00:00:00Z',
+              product_identifier: 'saavi_family_yearly',
+            },
+            pro: {
+              expires_date: '2026-11-19T00:00:00Z',
+              product_identifier: 'saavi_pro_monthly',
+            },
+          },
+        },
+      },
+      NOW
+    );
+    assert.equal(billing.productId, 'saavi_pro_monthly');
+    assert.equal(billing.cadence, 'monthly');
+    assert.equal(billing.renewsAt, '2026-11-19T00:00:00.000Z');
+  });
 });
 
 describe('handleRevenueCatEvent', () => {
@@ -155,6 +201,7 @@ describe('handleRevenueCatEvent', () => {
     assert.equal(calls.length, 1);
     assert.equal(calls[0].url, `${sb.url}/rest/v1/rpc/admin_set_plan_id`);
     assert.equal(calls[0].init.headers.apikey, 'service');
+    assert.equal(calls[0].init.headers.Authorization, 'Bearer service');
     assert.deepEqual(JSON.parse(calls[0].init.body), {
       p_user: UID,
       p_plan: 'pro',
@@ -209,6 +256,81 @@ describe('handleRevenueCatEvent', () => {
     );
     assert.equal(anon.status, 200);
     assert.equal(anon.body.ignored, true);
+  });
+
+  it('writes Pro onto the account that received a transfer', async () => {
+    const calls = [];
+    const renews = new Date(Date.now() + 3 * 86_400_000).toISOString();
+    const expired = new Date(Date.now() - 86_400_000).toISOString();
+    await withFetch(
+      async (url, init) => {
+        calls.push({ url, init });
+        if (String(url).includes('api.revenuecat.com')) {
+          const id = decodeURIComponent(String(url).split('/').pop());
+          const pro = id === UID2;
+          return {
+            ok: true,
+            json: async () => ({
+              subscriber: {
+                entitlements: {
+                  pro: {
+                    expires_date: pro ? renews : expired,
+                    product_identifier: 'saavi_pro_monthly',
+                  },
+                },
+              },
+            }),
+          };
+        }
+        return { ok: true, json: async () => null };
+      },
+      async () => {
+        const out = await handleRevenueCatEvent(
+          {
+            event: {
+              type: 'TRANSFER',
+              transferred_from: [UID, '$RCAnonymousID:x'],
+              transferred_to: [UID2],
+            },
+          },
+          { sb, cfg: { ...cfg, restKey: 'sk_test' } }
+        );
+        assert.equal(out.status, 200);
+        assert.equal(out.body.updated, 2);
+      }
+    );
+    const writes = calls.filter((c) => String(c.url).includes('admin_set_plan_id'));
+    const from = JSON.parse(writes.find((c) => JSON.parse(c.init.body).p_user === UID).init.body);
+    const to = JSON.parse(writes.find((c) => JSON.parse(c.init.body).p_user === UID2).init.body);
+    assert.equal(from.p_plan, 'lapsed');
+    assert.equal(to.p_plan, 'pro');
+    assert.equal(to.p_product_id, 'saavi_pro_monthly');
+    assert.equal(to.p_cadence, 'monthly');
+    assert.equal(to.p_renews_at, renews);
+  });
+
+  it('grants Pro to the receiver when RevenueCat has no REST key', async () => {
+    const calls = [];
+    await withFetch(
+      async (url, init) => {
+        calls.push(JSON.parse(init.body));
+        return { ok: true, json: async () => null };
+      },
+      async () => {
+        const out = await handleRevenueCatEvent(
+          { event: { type: 'TRANSFER', transferred_from: [UID], transferred_to: [UID2] } },
+          { sb, cfg }
+        );
+        assert.equal(out.status, 200);
+      }
+    );
+    assert.deepEqual(
+      calls.map((b) => [b.p_user, b.p_plan]),
+      [
+        [UID, 'trial'],
+        [UID2, 'pro'],
+      ]
+    );
   });
 
   it('signals failure so RevenueCat retries when Supabase rejects the write', async () => {

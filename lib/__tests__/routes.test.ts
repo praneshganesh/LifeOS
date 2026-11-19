@@ -225,6 +225,16 @@ describe('reminder speech', () => {
       reminderLabelFromUtterance('Can you set a reminder for school bag'),
       'School bag'
     );
+    assert.equal(
+      reminderLabelFromUtterance('Set up a reminder to speak to Balaji today'),
+      'Speak to Balaji'
+    );
+    assert.equal(
+      reminderLabelFromUtterance(
+        'Set up a reminder to confirm with Balaji on the pick up'
+      ),
+      'Confirm with Balaji on the pick up'
+    );
   });
 
   it('treats what-reminders questions as queries, not creates', () => {
