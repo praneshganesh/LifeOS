@@ -1117,31 +1117,39 @@ export function reminderClarifyFromUtterance(
 }
 
 /**
- * "Pay DEWA on 10 Nov and Salik on 15 Nov" → two one-off reminders.
- * Returns undefined when not a clear dual-date split.
+ * Two reminders in one sentence.
+ * "Pay DEWA on 10 Nov and Salik on 15 Nov" keeps each date.
+ * "Pay DEWA and Salik next week" shares the one spoken date.
+ * Returns undefined when there aren't two distinct subjects, or no date at all.
  */
 export function splitDualRemindersFromUtterance(
   text?: string,
   from = new Date()
 ): { label: string; remindAt: string; remindTime?: string }[] | undefined {
-  if (!text?.trim()) return undefined;
+  if (!text?.trim() || !looksLikeReminder(text)) return undefined;
   const cleaned = text
     .replace(/^[\s\S]*?\bremind\s+me\s+(?:to\s+)?/i, '')
     .trim();
   const parts = cleaned.split(/\s+\band\s+/i);
   if (parts.length !== 2) return undefined;
+  const sharedAt = remindAtFromUtterance(text, from);
+  const sharedTime = remindTimeFromUtterance(text);
   const out: { label: string; remindAt: string; remindTime?: string }[] = [];
   for (const part of parts) {
-    const remindAt = remindAtFromUtterance(part, from);
+    const ownAt = remindAtFromUtterance(part, from);
+    const remindAt = ownAt || sharedAt;
     if (!remindAt) return undefined;
     const parsed = parseReminderFromUtterance(`Remind me to ${part}`);
     const label = parsed?.label;
     if (!label || /^reminder$/i.test(label)) return undefined;
-    const remindTime = remindTimeFromUtterance(part);
+    const ownTime = remindTimeFromUtterance(part);
+    // A clock that belongs to the other half must not land on this one.
+    const remindTime = ownTime || (!ownAt ? sharedTime : undefined);
     out.push({ label, remindAt, ...(remindTime ? { remindTime } : {}) });
   }
-  // Need two distinct due dates to treat as dual create
-  if (out[0]!.remindAt === out[1]!.remindAt) return undefined;
+  if (out[0]!.label.trim().toLowerCase() === out[1]!.label.trim().toLowerCase()) {
+    return undefined;
+  }
   return out;
 }
 

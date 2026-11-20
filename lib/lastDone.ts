@@ -191,6 +191,26 @@ export function hasActivityHistory(item: LastDoneItem): boolean {
 }
 
 /**
+ * Drop one completion. A reminder with no logs left stays (and is open again).
+ * A plain activity with no logs left is removed.
+ */
+export function dropCompletionLog(
+  item: LastDoneItem,
+  logId: string
+): LastDoneItem | null {
+  const logs = item.logs ?? [];
+  if (!logs.some((log) => log.id === logId)) return item;
+  const nextLogs = logs.filter((log) => log.id !== logId);
+  if (nextLogs.length) return { ...item, logs: nextLogs };
+  if (item.remindAt || item.remindInterval) {
+    const next: LastDoneItem = { ...item, logs: [] };
+    delete next.onceDone;
+    return next;
+  }
+  return null;
+}
+
+/**
  * Year heatmap is for recurring habits, not one-shot reminders.
  * Marking a Once reminder done clears `remindAt`, so we also require either a
  * recurring interval or multiple logs (real history) before showing the grid.

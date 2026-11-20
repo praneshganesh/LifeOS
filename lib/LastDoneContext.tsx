@@ -13,6 +13,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   appendLog,
   createLastDoneItem,
+  dropCompletionLog,
   getLastDoneAt,
   labelsMatch,
   normalizeItem,
@@ -590,24 +591,27 @@ export function LastDoneProvider({ children }: { children: ReactNode }) {
       const next = itemsRef.current
         .map((item) => {
           if (item.id !== itemId) return item;
-          const logs = (item.logs ?? []).filter((l) => l.id !== logId);
-          if (!logs.length) {
+          const updated = dropCompletionLog(item, logId);
+          if (!updated) {
             removedActivity = true;
             return null;
           }
-          changedItem = touch({ ...item, logs });
+          if (updated === item) return item;
+          changedItem = touch(updated);
           return changedItem;
         })
         .filter((i): i is LastDoneItem => i != null);
       await persist(sortByMostRecent(next));
       if (removedActivity) {
         void cancelLastDoneReminder(itemId);
+        resyncReminders();
         void queueReminderDelete(itemId);
       } else if (changedItem) {
+        resyncReminders();
         void queueReminderUpsert(changedItem);
       }
     },
-    [persist]
+    [persist, resyncReminders]
   );
 
   const value = useMemo(

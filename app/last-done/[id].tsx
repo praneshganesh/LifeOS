@@ -16,8 +16,8 @@ import { ChevronLeft, Trash2, Bell } from 'lucide-react-native';
 import { Screen } from '@/components/ui/Screen';
 import { Text } from '@/components/ui/Text';
 import {
-  DETAIL_DOCK_PAD,
   DetailPrimaryButton,
+  DetailSecondaryButton,
   DetailStickyActions,
   DetailTrashButton,
 } from '@/components/ui/DetailKit';
@@ -172,6 +172,7 @@ export default function LastDoneDetailScreen() {
   /** Only remeasure height after the user changes the text (not idle layout passes). */
   const notesRemeasureRef = useRef(false);
   const [calendarYear, setCalendarYear] = useState(() => new Date().getFullYear());
+  const [saving, setSaving] = useState(false);
   const [pickingSpecificDate, setPickingSpecificDate] = useState(false);
   /** Remember last custom days so switching away from Weekdays isn’t a one-way trip. */
   const lastWeekdaysRef = useRef<number[]>(DEFAULT_WEEKDAYS);
@@ -252,6 +253,52 @@ export default function LastDoneDetailScreen() {
     }
     return new Set(lastWeekdaysRef.current);
   }, [item?.remindInterval]);
+
+  async function flushDrafts(): Promise<boolean> {
+    if (!item) return false;
+    const nextLabel = labelDraft.trim();
+    if (!nextLabel) {
+      setLabelDraft(item.label);
+      showError('Add a name');
+      return false;
+    }
+    try {
+      if (nextLabel !== item.label) {
+        await updateActivity(item.id, { label: nextLabel });
+      }
+      const nextNotes = notesDraft.trim();
+      if (nextNotes !== (item.notes || '')) {
+        await updateActivity(item.id, { notes: nextNotes || null });
+      }
+      return true;
+    } catch {
+      showError('Couldn’t save. Try again.');
+      return false;
+    }
+  }
+
+  async function onSave() {
+    if (saving) return;
+    setSaving(true);
+    const ok = await flushDrafts();
+    setSaving(false);
+    if (!ok) return;
+    showToast('Saved');
+    blurActiveElement();
+    if (router.canGoBack()) router.back();
+    else router.replace('/(tabs)/done' as Href);
+  }
+
+  async function onMarkDone() {
+    if (!item) return;
+    const ok = await flushDrafts();
+    if (!ok) return;
+    try {
+      await logDone({ id: item.id });
+    } catch {
+      showError('Couldn’t mark this done. Try again.');
+    }
+  }
 
   async function commitRename() {
     if (!item) return;
@@ -466,20 +513,28 @@ export default function LastDoneDetailScreen() {
   const showHeatmap = item ? shouldShowActivityHeatmap(item) : false;
   // One-shot reminder (Once), never "again". Recurring / plain activities keep it.
   const onceReminder = Boolean(item?.remindAt) && !item?.remindInterval;
+  const isReminder = Boolean(item?.remindAt || item?.remindInterval);
   const finishedOnce = Boolean(item?.onceDone) && !item?.remindInterval;
   const doneLabel =
     showHistory && !onceReminder ? 'Mark done again' : 'Mark done';
 
   async function onDeleteLog(logId: string) {
     if (!item) return;
-    const ok = await confirmDelete('Remove this log entry?');
+    const keepReminder = Boolean(item.remindAt || item.remindInterval);
+    const ok = await confirmDelete(
+      keepReminder
+        ? 'Remove this completion? The reminder stays.'
+        : 'Remove this log entry?'
+    );
     if (!ok) return;
     blurActiveElement();
     const wasLast = logs.length <= 1;
     await removeLog(item.id, logId);
-    if (wasLast) {
-      if (router.canGoBack()) router.back();
+    if (keepReminder) {
+      showToast('Completion removed');
+      return;
     }
+    if (wasLast && router.canGoBack()) router.back();
   }
 
   async function onDeleteAll() {
@@ -541,11 +596,10 @@ export default function LastDoneDetailScreen() {
           {
             paddingTop: Math.max(insets.top, 12) + spacing.xs,
             // Sticky Mark done includes its own safe-area pad; clear the bar + gap.
-            paddingBottom: finishedOnce
-              ? DETAIL_DOCK_PAD + insets.bottom
-              : STICKY_MARK_DONE_CLEARANCE +
-                Math.max(insets.bottom, 12) +
-                spacing.lg,
+            paddingBottom:
+              STICKY_MARK_DONE_CLEARANCE +
+              Math.max(insets.bottom, 12) +
+              spacing.lg,
           },
         ]}
         showsVerticalScrollIndicator={false}
@@ -885,6 +939,16 @@ export default function LastDoneDetailScreen() {
           />
         ) : null}
 
+        {isReminder && !finishedOnce ? (
+          <View style={styles.markDoneWrap}>
+            <DetailSecondaryButton
+              label={doneLabel}
+              accent={colors.ink}
+              onPress={() => void onMarkDone()}
+            />
+          </View>
+        ) : null}
+
         {showHistory ? (
           <View style={styles.logsBlock}>
             <Text style={[styles.whenLabel, { color: colors.ink }]}>
@@ -927,15 +991,21 @@ export default function LastDoneDetailScreen() {
         ) : null}
       </ScrollView>
 
-      {finishedOnce ? null : (
-        <DetailStickyActions>
+      <DetailStickyActions>
+        {isReminder ? (
+          <DetailPrimaryButton
+            label={saving ? 'Saving…' : 'Save'}
+            disabled={saving || !labelDraft.trim()}
+            onPress={() => void onSave()}
+          />
+        ) : (
           <DetailPrimaryButton
             label={doneLabel}
             accent={colors.accent}
-            onPress={() => void logDone({ id: item.id })}
+            onPress={() => void onMarkDone()}
           />
-        </DetailStickyActions>
-      )}
+        )}
+      </DetailStickyActions>
     </Screen>
   );
 }
@@ -1506,6 +1576,9 @@ function makeStyles(colors: ThemeColors) {
     logsBlock: {
       marginBottom: spacing.md,
       gap: 10,
+    },
+    markDoneWrap: {
+      marginBottom: spacing.md,
     },
     logList: {
       gap: 2,

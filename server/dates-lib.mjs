@@ -836,21 +836,27 @@ function reminderClarifyFromUtterance(text, from = /* @__PURE__ */ new Date()) {
   return void 0;
 }
 function splitDualRemindersFromUtterance(text, from = /* @__PURE__ */ new Date()) {
-  if (!text?.trim()) return void 0;
+  if (!text?.trim() || !looksLikeReminder(text)) return void 0;
   const cleaned = text.replace(/^[\s\S]*?\bremind\s+me\s+(?:to\s+)?/i, "").trim();
   const parts = cleaned.split(/\s+\band\s+/i);
   if (parts.length !== 2) return void 0;
+  const sharedAt = remindAtFromUtterance(text, from);
+  const sharedTime = remindTimeFromUtterance(text);
   const out = [];
   for (const part of parts) {
-    const remindAt = remindAtFromUtterance(part, from);
+    const ownAt = remindAtFromUtterance(part, from);
+    const remindAt = ownAt || sharedAt;
     if (!remindAt) return void 0;
     const parsed = parseReminderFromUtterance(`Remind me to ${part}`);
     const label = parsed?.label;
     if (!label || /^reminder$/i.test(label)) return void 0;
-    const remindTime = remindTimeFromUtterance(part);
+    const ownTime = remindTimeFromUtterance(part);
+    const remindTime = ownTime || (!ownAt ? sharedTime : void 0);
     out.push({ label, remindAt, ...remindTime ? { remindTime } : {} });
   }
-  if (out[0].remindAt === out[1].remindAt) return void 0;
+  if (out[0].label.trim().toLowerCase() === out[1].label.trim().toLowerCase()) {
+    return void 0;
+  }
   return out;
 }
 function stripReminderDatePhrases(s) {

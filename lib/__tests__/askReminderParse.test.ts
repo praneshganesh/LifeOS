@@ -270,6 +270,25 @@ describe('Ask/Talk reminder parse (clock Wed 4 Nov 2026 Asia/Dubai)', () => {
     assert.equal(saved[1]!.remindAt, '2026-11-15');
   });
 
+  it('Remind me to pay DEWA and Salik next week — two reminders on the same day', async () => {
+    const u = 'Remind me to Pay DEWA and Salik next week';
+    const dual = splitDualRemindersFromUtterance(u, FROM);
+    assert.ok(dual);
+    assert.equal(dual!.length, 2);
+    assert.equal(dual![0]!.label, 'Pay DEWA');
+    assert.equal(dual![1]!.label, 'Salik');
+    assert.equal(dual![0]!.remindAt, '2026-11-09');
+    assert.equal(dual![1]!.remindAt, '2026-11-09');
+    const { saved } = await applyWithWrongModel(u, [
+      { type: 'set_reminder', label: 'Pay DEWA and Salik', remindAt: '2026-11-09' },
+    ]);
+    assert.equal(saved.length, 2);
+    assert.equal(saved[0]!.label, 'Pay DEWA');
+    assert.equal(saved[1]!.label, 'Salik');
+    assert.equal(saved[0]!.remindAt, '2026-11-09');
+    assert.equal(saved[1]!.remindAt, '2026-11-09');
+  });
+
   it('Remind me on 31st Nov to pay rent — clarify invalid date', async () => {
     const u = 'Remind me on 31st Nov to pay rent';
     assert.equal(remindAtFromUtterance(u, FROM), undefined);
